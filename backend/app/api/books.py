@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from app.models import Book, Chapter
 from app.schemas.schemas import BookCreate, BookResponse, BookListResponse, ChapterResponse
 from app.core.security import get_current_user_id
 from app.core.config import get_settings
+from app.core.exceptions import NotFoundError, PermissionError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/books", tags=["书籍"])
@@ -25,7 +26,7 @@ DATA_DIR = Path(settings.DATA_DIR).resolve()
 def _validate_path(file_path: Path) -> Path:
     resolved = file_path.resolve()
     if not str(resolved).startswith(str(DATA_DIR)):
-        raise HTTPException(status_code=403, detail="访问路径被拒绝")
+        raise PermissionError("访问路径被拒绝")
     return resolved
 
 
@@ -65,7 +66,7 @@ async def get_book(book_id: int, db: AsyncSession = Depends(get_db_no_commit)):
     result = await db.execute(select(Book).where(Book.id == book_id))
     book = result.scalar_one_or_none()
     if not book:
-        raise HTTPException(status_code=404, detail="书籍不存在")
+        raise NotFoundError("书籍", str(book_id))
     return book
 
 
@@ -102,7 +103,7 @@ async def delete_book(
     result = await db.execute(select(Book).where(Book.id == book_id))
     book = result.scalar_one_or_none()
     if not book:
-        raise HTTPException(status_code=404, detail="书籍不存在")
+        raise NotFoundError("书籍", str(book_id))
 
     folder_path = _validate_path(Path(book.folder_path))
     if folder_path.exists():

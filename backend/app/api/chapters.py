@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from app.models import Book, Chapter
 from app.schemas.schemas import ChapterContentResponse
 from app.core.security import get_current_user_id
 from app.core.config import get_settings
+from app.core.exceptions import NotFoundError, PermissionError, DatabaseError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chapters", tags=["章节"])
@@ -23,7 +24,7 @@ DATA_DIR = Path(settings.DATA_DIR).resolve()
 def _validate_path(file_path: Path) -> Path:
     resolved = file_path.resolve()
     if not str(resolved).startswith(str(DATA_DIR)):
-        raise HTTPException(status_code=403, detail="访问路径被拒绝")
+        raise PermissionError("访问路径被拒绝")
     return resolved
 
 
@@ -35,7 +36,7 @@ async def get_chapter(
     result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
     chapter = result.scalar_one_or_none()
     if not chapter:
-        raise HTTPException(status_code=404, detail="章节不存在")
+        raise NotFoundError("章节", str(chapter_id))
 
     content = ""
     file_path = _validate_path(Path(chapter.file_path))
@@ -45,7 +46,7 @@ async def get_chapter(
                 content = f.read()
         except Exception as e:
             logger.error(f"读取章节文件失败: {file_path} - {e}")
-            raise HTTPException(status_code=500, detail="章节内容读取失败")
+            raise DatabaseError("章节内容读取失败")
 
     if len(content) > settings.MAX_CHAPTER_CONTENT_SIZE:
         content = content[:settings.MAX_CHAPTER_CONTENT_SIZE]
@@ -68,11 +69,11 @@ async def get_chapter_file(
     result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
     chapter = result.scalar_one_or_none()
     if not chapter:
-        raise HTTPException(status_code=404, detail="章节不存在")
+        raise NotFoundError("章节", str(chapter_id))
 
     file_path = _validate_path(Path(chapter.file_path))
     if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(status_code=404, detail="章节文件不存在")
+        raise NotFoundError("章节文件")
 
     return FileResponse(
         path=file_path,

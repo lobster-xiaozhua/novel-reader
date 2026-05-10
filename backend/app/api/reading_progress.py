@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +9,7 @@ from app.database import get_db_no_commit
 from app.models import ReadingProgress, Book, Chapter
 from app.schemas.schemas import ReadingProgressUpdate, ReadingProgressResponse
 from app.core.security import get_current_user_id
+from app.core.exceptions import NotFoundError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/reading-progress", tags=["阅读进度"])

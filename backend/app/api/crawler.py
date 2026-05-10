@@ -5,7 +5,7 @@ from typing import Optional
 
 import aiohttp
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+from fastapi import APIRouter, Depends, BackgroundTasks, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -15,6 +15,7 @@ from app.models import CrawlerTask
 from app.schemas.schemas import CrawlerTaskCreate, CrawlerTaskResponse
 from app.core.security import get_current_user_id
 from app.core.config import get_settings
+from app.core.exceptions import NotFoundError, CrawlerError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/crawler", tags=["爬虫"])
@@ -47,7 +48,7 @@ async def get_task(
     )
     task = result.scalar_one_or_none()
     if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+        raise NotFoundError("任务", str(task_id))
     return task
 
 
@@ -109,5 +110,5 @@ async def crawl_url(url: str):
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.get(url) as response:
             if response.status != 200:
-                raise Exception(f"HTTP {response.status}")
+                raise CrawlerError(f"HTTP {response.status}")
             await response.text()

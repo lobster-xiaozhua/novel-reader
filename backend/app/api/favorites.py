@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +8,7 @@ from app.database import get_db_no_commit
 from app.models import Favorite, FavoriteFolder, User
 from app.schemas.schemas import FavoriteCreate, FavoriteResponse, FavoriteFolderCreate, FavoriteFolderResponse
 from app.core.security import get_current_user_id
+from app.core.exceptions import NotFoundError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/favorites", tags=["收藏"])
@@ -96,7 +97,7 @@ async def delete_favorite(
     )
     favorite = result.scalar_one_or_none()
     if not favorite:
-        raise HTTPException(status_code=404, detail="收藏不存在")
+        raise NotFoundError("收藏", str(favorite_id))
 
     await db.delete(favorite)
     await db.commit()

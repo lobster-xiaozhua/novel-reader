@@ -4,7 +4,9 @@ import uuid
 from typing import Callable
 
 from fastapi import Request, Response, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.safe_logger import get_safe_logger
@@ -153,6 +155,33 @@ def register_exception_handlers(app):
             status_code=429,
             message=exc.message,
             path=request.url.path,
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, exc: RequestValidationError):
+        errors = exc.errors()
+        details = []
+        for error in errors:
+            field = ".".join(str(x) for x in error.get("loc", []))
+            msg = error.get("msg", "")
+            details.append({"field": field, "message": msg})
+        logger.warning(f"请求验证失败 {request.method} {request.url.path}: {details}")
+        return _build_error_response(
+            status_code=422,
+            message="请求参数验证失败",
+            path=request.url.path,
+            details={"errors": details},
+        )
+
+    @app.exception_handler(SQLAlchemyError)
+    async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError):
+        error_id = str(uuid.uuid4())[:8]
+        logger.error(f"数据库异常 [{error_id}] {request.method} {request.url.path}: {exc}")
+        return _build_error_response(
+            status_code=503,
+            message="数据库服务暂时不可用，请稍后重试",
+            path=request.url.path,
+            error_id=error_id,
         )
 
     @app.exception_handler(Exception)
