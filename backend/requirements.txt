@@ -12,5 +12,7 @@ aiohttp>=3.9.0
 beautifulsoup4>=4.12.0
 tenacity>=8.2.0
 python-magic>=0.4.27
-psutil>=5.9.0
 rich>=13.0.0
+
+# Optional - 系统监控 (Linux/Windows/Mac)
+# psutil>=5.9.0
