@@ -9,7 +9,7 @@ from app.core.exceptions import register_exception_handlers, ErrorHandlingMiddle
 from app.core.startup_check import startup_check
 from app.core.safe_logger import get_safe_logger
 from app.database import init_database
-from app.api import auth, books, chapters, favorites, crawler, search, health
+from app.api import auth, books, chapters, favorites, crawler, search, health, update
 from app.services.cache_service import cache_service
 from app.services.search_service import search_service
 
@@ -86,6 +86,7 @@ app.include_router(favorites.router, prefix="/api")
 app.include_router(crawler.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
 app.include_router(health.router, prefix="/api")
+app.include_router(update.router, prefix="/api")
 
 
 @app.get("/")
