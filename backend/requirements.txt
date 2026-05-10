@@ -13,3 +13,4 @@ beautifulsoup4>=4.12.0
 tenacity>=8.2.0
 python-magic>=0.4.27
 psutil>=5.9.0
+rich>=13.0.0

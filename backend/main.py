@@ -7,19 +7,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers, ErrorHandlingMiddleware
 from app.core.startup_check import startup_check
-from app.core.safe_logger import get_safe_logger
+from app.core.logging_config import setup_logging, get_logger
 from app.database import init_database
-from app.api import auth, books, chapters, favorites, crawler, search, health, reading_progress
+from app.api import auth, books, chapters, favorites, crawler, search, health, update, version
 from app.services.cache_service import cache_service
 from app.services.search_service import search_service
 
 settings = get_settings()
 
-logging.basicConfig(
-    level=logging.INFO if not settings.DEBUG else logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = get_safe_logger(__name__)
+setup_logging()
+logger = get_logger(__name__)
 
 startup_report = None
 
@@ -28,7 +25,7 @@ startup_report = None
 async def lifespan(app: FastAPI):
     global startup_report
 
-    logger.info(f"正在启动 {settings.APP_NAME} v{settings.APP_VERSION}")
+    logger.success(f"正在启动 {settings.APP_NAME} v{settings.APP_VERSION}")
 
     startup_report = await startup_check.run_all()
 
@@ -37,27 +34,35 @@ async def lifespan(app: FastAPI):
         if startup_report.errors > 0:
             for check in startup_report.checks:
                 if not check.passed and not check.skipped and check.severity == "error":
-                    logger.error(f"  - {check.name}: {check.message}")
+                    logger.error(f"  ├─ {check.name}: {check.message}")
+    else:
+        logger.success("启动自检通过")
 
     from app.api.health import set_startup_report
     set_startup_report(startup_report)
 
     await init_database()
-    logger.info("数据库初始化完成")
+    logger.success("数据库初始化完成")
 
     await cache_service.connect()
-    logger.info("缓存服务初始化完成")
+    logger.success("缓存服务初始化完成")
 
     try:
         await search_service.ensure_fts_table()
-        logger.info("FTS5 索引表已就绪")
+        logger.success("FTS5 索引表已就绪")
     except Exception as e:
         logger.warning(f"FTS5 索引表初始化失败（非致命）: {e}")
 
+    logger.success("=" * 50)
+    logger.success(f"  {settings.APP_NAME} 已启动!")
+    logger.success(f"  API 文档: http://localhost:8000/docs")
+    logger.success("=" * 50)
+
     yield
 
+    logger.info("应用正在关闭...")
     await cache_service.disconnect()
-    logger.info("应用正在关闭")
+    logger.success("应用已关闭")
 
 
 app = FastAPI(
@@ -86,7 +91,8 @@ app.include_router(favorites.router, prefix="/api")
 app.include_router(crawler.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
 app.include_router(health.router, prefix="/api")
-app.include_router(reading_progress.router, prefix="/api")
+app.include_router(update.router, prefix="/api")
+app.include_router(version.router, prefix="/api")
 
 
 @app.get("/")
