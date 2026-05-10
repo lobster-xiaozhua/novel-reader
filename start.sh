@@ -128,7 +128,7 @@ install_deps_termux() {
     print_info "更新包管理器..."
     pkg update -y 2>/dev/null && pkg upgrade -y 2>/dev/null || true
 
-    local pkgs="python nodejs build-essential libpython-dev ca-certificates clang make cmake"
+    local pkgs="python python-dev nodejs build-essential ca-certificates clang make cmake"
     local need_install=""
 
     for pkg_name in $pkgs; do
@@ -392,12 +392,37 @@ setup_python_env() {
     print_info "安装 Python 依赖..."
     if [ "$IS_TERMUX" -eq 1 ]; then
         pip install --upgrade pip 2>/dev/null || true
-        pip install -r requirements.txt 2>/dev/null || {
-            print_warning "部分依赖安装失败，尝试跳过可选依赖..."
-            local core_pkgs="fastapi uvicorn sqlalchemy aiosqlite redis pydantic pydantic-settings python-jose passlib python-multipart aiohttp beautifulsoup4 tenacity"
-            pip install $core_pkgs 2>/dev/null || true
-            pip install psutil 2>/dev/null || print_warning "psutil 安装失败（非致命）"
-            pip install python-magic 2>/dev/null || print_warning "python-magic 安装失败（非致命，Termux 下常见）"
+
+        print_info "Termux 策略: 优先安装预编译 wheel..."
+        local pure_pkgs="fastapi uvicorn sqlalchemy aiosqlite redis pydantic pydantic-settings python-jose passlib python-multipart beautifulsoup4 tenacity pydantic-core starlette typing-extensions annotated-types anyio idna sniffio"
+        pip install --only-binary :all: $pure_pkgs 2>/dev/null || {
+            print_info "部分纯 Python 包无预编译 wheel，使用源码安装..."
+            pip install $pure_pkgs 2>/dev/null || true
+        }
+
+        print_info "安装 C 扩展包 (可能需要编译)..."
+        pip install --only-binary :all: aiohttp 2>/dev/null || {
+            print_warning "aiohttp 无预编译 wheel，从源码编译 (较慢)..."
+            pip install aiohttp 2>/dev/null || {
+                print_warning "aiohttp 安装失败，使用 httpx 替代"
+                pip install httpx 2>/dev/null || true
+            }
+        }
+
+        pip install --only-binary :all: psutil 2>/dev/null || {
+            print_warning "psutil 无预编译 wheel，尝试编译..."
+            pip install psutil 2>/dev/null || print_warning "psutil 安装失败（非致命，功能降级）"
+        }
+
+        pip install --only-binary :all: python-magic 2>/dev/null || {
+            print_warning "python-magic 无预编译 wheel，尝试编译..."
+            pip install python-magic 2>/dev/null || print_warning "python-magic 安装失败（非致命，文件类型检测降级）"
+        }
+
+        pip install bcrypt cryptography 2>/dev/null || {
+            print_warning "bcrypt/cryptography 安装失败，尝试降级版本..."
+            pip install "cryptography<43" 2>/dev/null || true
+            pip install "bcrypt<4.1" 2>/dev/null || true
         }
     else
         pip install -q -r requirements.txt
