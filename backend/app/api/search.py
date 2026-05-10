@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import get_db_no_commit
 from app.models import Book
 from app.schemas.schemas import SearchResult, SearchSuggestion
 from app.core.security import get_current_user_id
@@ -20,7 +20,7 @@ async def search_books(
     q: str = Query(..., min_length=1, max_length=100),
     limit: int = Query(50, ge=1, le=100),
     current_user_id: int = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_no_commit),
 ):
     try:
         results = await search_service.search_books(q, limit)

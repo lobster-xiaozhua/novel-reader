@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime
 
-from app.database import get_db
+from app.database import get_db_no_commit
 from app.models import User
 from app.core.security import (
     hash_password, verify_password, validate_password_strength,
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/auth", tags=["认证"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db_no_commit)):
     result = await db.execute(select(User).where(User.username == user_data.username))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="用户名已存在")
@@ -44,7 +44,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_no_commit),
 ):
     if not await auth_service.check_login_attempts(form_data.username):
         remaining = await auth_service.get_lockout_remaining(form_data.username)
@@ -99,7 +99,7 @@ async def logout(
 @router.get("/me", response_model=UserResponse)
 async def get_me(
     current_user_id: int = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_no_commit),
 ):
     result = await db.execute(select(User).where(User.id == current_user_id))
     user = result.scalar_one_or_none()

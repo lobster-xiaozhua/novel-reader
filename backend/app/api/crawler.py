@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.database import get_db
+from app.database import get_db_no_commit
 from app.models import CrawlerTask
 from app.schemas.schemas import CrawlerTaskCreate, CrawlerTaskResponse
 from app.core.security import get_current_user_id
@@ -24,10 +24,10 @@ settings = get_settings()
 @router.get("/tasks", response_model=list[CrawlerTaskResponse])
 async def list_tasks(
     status_filter: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_no_commit),
     current_user_id: int = Depends(get_current_user_id),
 ):
-    query = select(CrawlerTask).order_by(CrawlerTask.created_at.desc())
+    query = select(CrawlerTask).where(CrawlerTask.user_id == current_user_id).order_by(CrawlerTask.created_at.desc())
     if status_filter:
         query = query.where(CrawlerTask.status == status_filter)
 
@@ -39,10 +39,12 @@ async def list_tasks(
 @router.get("/tasks/{task_id}", response_model=CrawlerTaskResponse)
 async def get_task(
     task_id: int,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_no_commit),
     current_user_id: int = Depends(get_current_user_id),
 ):
-    result = await db.execute(select(CrawlerTask).where(CrawlerTask.id == task_id))
+    result = await db.execute(
+        select(CrawlerTask).where(CrawlerTask.id == task_id, CrawlerTask.user_id == current_user_id)
+    )
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -53,7 +55,7 @@ async def get_task(
 async def create_task(
     task_data: CrawlerTaskCreate,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_no_commit),
     current_user_id: int = Depends(get_current_user_id),
 ):
     task = CrawlerTask(
@@ -75,40 +77,37 @@ async def execute_crawl(task_id: int):
     from app.database import AsyncSessionLocal
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(CrawlerTask).where(CrawlerTask.id == task_id))
-        task = result.scalar_one_or_none()
-        if not task:
-            return
-
-        task.status = "running"
-        await db.commit()
-
         try:
-            await crawl_url(db, task)
-            task.status = "completed"
-        except Exception as e:
-            logger.error(f"爬虫任务失败: {task_id} - {e}")
-            task.status = "failed"
-            task.error_message = str(e)
-        finally:
+            result = await db.execute(select(CrawlerTask).where(CrawlerTask.id == task_id))
+            task = result.scalar_one_or_none()
+            if not task:
+                return
+
+            task.status = "running"
+            await db.commit()
+
+            try:
+                await crawl_url(task.url)
+                task.status = "completed"
+                task.downloaded_chapters = 1
+                task.total_chapters = 1
+            except Exception as e:
+                logger.error(f"爬虫任务失败: {task_id} - {e}")
+                task.status = "failed"
+                task.error_message = str(e)
+
             task.updated_at = datetime.utcnow()
             await db.commit()
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"爬虫任务执行异常: {task_id} - {e}")
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
-async def crawl_url(db: AsyncSession, task: CrawlerTask):
+async def crawl_url(url: str):
     timeout = aiohttp.ClientTimeout(total=settings.CRAWLER_TIMEOUT)
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(task.url) as response:
+        async with session.get(url) as response:
             if response.status != 200:
                 raise Exception(f"HTTP {response.status}")
-
-            html = await response.text()
-            soup = BeautifulSoup(html, "html.parser")
-
-            title = soup.find("title")
-            if title:
-                task.total_chapters = 1
-
-            task.downloaded_chapters = 1
-            await db.commit()
+            await response.text()

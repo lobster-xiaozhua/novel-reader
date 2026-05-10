@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from typing import Optional
 
-from app.database import get_db
+from app.database import get_db_no_commit
 from app.core.config import get_settings
 from app.services.cache_service import cache_service
 
@@ -19,7 +19,7 @@ def set_startup_report(report):
 
 
 @router.get("")
-async def health_check(db: AsyncSession = Depends(get_db)):
+async def health_check(db: AsyncSession = Depends(get_db_no_commit)):
     checks = {
         "database": False,
         "redis": False,
@@ -58,7 +58,7 @@ async def startup_report():
 
 
 @router.get("/detailed")
-async def detailed_health(db: AsyncSession = Depends(get_db)):
+async def detailed_health(db: AsyncSession = Depends(get_db_no_commit)):
     import platform
     import psutil
 
