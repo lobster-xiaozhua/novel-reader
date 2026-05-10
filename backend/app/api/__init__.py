@@ -5,6 +5,7 @@ from . import favorites
 from . import crawler
 from . import search
 from . import health
+from . import reading_progress
 
 __all__ = [
     "auth",
@@ -14,4 +15,5 @@ __all__ = [
     "crawler",
     "search",
     "health",
+    "reading_progress",
 ]
