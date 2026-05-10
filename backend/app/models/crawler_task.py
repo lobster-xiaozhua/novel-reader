@@ -7,6 +7,7 @@ class CrawlerTask(Base):
     __tablename__ = "crawler_tasks"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     url = Column(String(500), nullable=False)
     status = Column(String(20), default="pending")
     book_id = Column(Integer, ForeignKey("books.id"), nullable=True)
