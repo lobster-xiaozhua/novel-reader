@@ -8,6 +8,7 @@
 #   ./update.sh --check  - 仅检查更新
 #   ./update.sh --force  - 强制更新（忽略本地修改）
 #   ./update.sh --backup - 更新前创建备份
+#   ./update.sh --docker - 使用 Docker 模式重启服务
 
 set -e
 
@@ -29,6 +30,7 @@ BACKUP_ENABLED=true
 AUTO_CONFIRM=false
 CHECK_ONLY=false
 FORCE_UPDATE=false
+RUN_MODE="${READWEB_MODE:-local}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -36,6 +38,7 @@ while [[ $# -gt 0 ]]; do
         --check) CHECK_ONLY=true; shift ;;
         --force) FORCE_UPDATE=true; shift ;;
         --no-backup) BACKUP_ENABLED=false; shift ;;
+        --docker) RUN_MODE="docker"; shift ;;
         -h|--help)
             echo "用法: ./update.sh [options]"
             echo ""
@@ -44,6 +47,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --check         仅检查更新"
             echo "  --force         强制更新（忽略本地修改）"
             echo "  --no-backup     跳过备份"
+            echo "  --docker        使用 Docker 模式重启"
             echo "  -h, --help      显示帮助"
             exit 0
             ;;
@@ -70,7 +74,7 @@ check_git() {
 
 check_git_status() {
     log_info "检查 git 状态..."
-    
+
     if ! git diff-index --quiet HEAD -- 2>/dev/null; then
         log_warning "存在未提交的修改"
         if [ "$FORCE_UPDATE" = true ]; then
@@ -81,7 +85,7 @@ check_git_status() {
             return 1
         fi
     fi
-    
+
     return 0
 }
 
@@ -93,22 +97,22 @@ fetch_remote() {
 
 check_updates() {
     log_info "检查更新..."
-    
+
     local local_rev=$(git rev-parse HEAD)
     local remote_rev=$(git rev-parse origin/main)
     local behind=0
     local ahead=0
-    
+
     if [ "$local_rev" != "$remote_rev" ]; then
         behind=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "0")
         ahead=$(git rev-list --count origin/main..HEAD 2>/dev/null || echo "0")
     fi
-    
+
     echo ""
     echo -e "当前版本: ${CYAN}$local_rev${NC}"
     echo -e "最新版本: ${CYAN}$remote_rev${NC}"
     echo ""
-    
+
     if [ "$behind" -gt 0 ]; then
         echo -e "${YELLOW}发现 $behind 个更新可用${NC}"
         echo ""
@@ -129,15 +133,15 @@ create_backup() {
     if [ "$BACKUP_ENABLED" = false ]; then
         return 0
     fi
-    
+
     log_info "创建备份..."
-    
+
     local backup_dir="data/backups"
     mkdir -p "$backup_dir"
-    
+
     local timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="$backup_dir/pre_update_$timestamp.tar.gz"
-    
+
     tar -czf "$backup_file" \
         -C data \
         books db.json settings.json \
@@ -145,13 +149,13 @@ create_backup() {
         --exclude='books/tmp' \
         --exclude='*.pyc' \
         2>/dev/null || true
-    
+
     log_success "备份已保存: $backup_file"
 }
 
 do_update() {
     log_info "开始更新..."
-    
+
     if [ "$FORCE_UPDATE" = true ]; then
         log_info "强制模式: 使用 git reset --hard"
         git fetch origin
@@ -159,13 +163,13 @@ do_update() {
     else
         git pull origin main
     fi
-    
+
     log_success "代码更新完成"
 }
 
 update_dependencies() {
     log_info "更新依赖..."
-    
+
     if [ -f "backend/requirements.txt" ]; then
         log_info "更新 Python 依赖..."
         cd backend
@@ -176,7 +180,7 @@ update_dependencies() {
         fi
         cd ..
     fi
-    
+
     if [ -f "frontend/package.json" ]; then
         log_info "更新 Node.js 依赖..."
         cd frontend
@@ -185,7 +189,7 @@ update_dependencies() {
         fi
         cd ..
     fi
-    
+
     log_success "依赖更新完成"
 }
 
@@ -193,28 +197,70 @@ rebuild_frontend() {
     if [ ! -f "frontend/package.json" ]; then
         return 0
     fi
-    
+
     log_info "重建前端..."
     cd frontend
-    
+
     if [ ! -d "node_modules" ]; then
         npm install
     fi
-    
+
     npm run build
     cd ..
-    
+
     log_success "前端重建完成"
+}
+
+stop_local_services() {
+    log_info "停止本地服务..."
+
+    if [ -f "backend/uvicorn.pid" ]; then
+        kill $(cat backend/uvicorn.pid) 2>/dev/null || true
+        rm -f backend/uvicorn.pid
+        log_success "后端已停止"
+    fi
+
+    if [ -f "frontend/vite.pid" ]; then
+        kill $(cat frontend/vite.pid) 2>/dev/null || true
+        rm -f frontend/vite.pid
+        log_success "前端已停止"
+    fi
+}
+
+start_local_services() {
+    log_info "启动本地服务..."
+
+    cd backend
+    if [ -d "venv" ]; then
+        source venv/bin/activate
+        nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
+        echo $! > uvicorn.pid
+        deactivate
+    fi
+    cd ..
+
+    cd frontend
+    npm run dev > ../data/logs/frontend.log 2>&1 &
+    echo $! > vite.pid
+    cd ..
+
+    log_success "本地服务已启动"
 }
 
 restart_services() {
     log_info "重启服务..."
-    
-    if docker-compose ps | grep -q "Up"; then
-        docker-compose up -d --force-recreate backend frontend
-        log_success "服务已重启"
+
+    if [ "$RUN_MODE" = "docker" ]; then
+        if docker-compose ps 2>/dev/null | grep -q "Up"; then
+            docker-compose up -d --force-recreate backend frontend
+            log_success "Docker 服务已重启"
+        else
+            log_info "Docker 服务未运行，跳过重启"
+        fi
     else
-        log_info "服务未运行，跳过重启"
+        stop_local_services
+        sleep 1
+        start_local_services
     fi
 }
 
@@ -228,21 +274,21 @@ show_changelog() {
 
 main() {
     print_header
-    
+
     if ! command -v git &> /dev/null; then
         log_error "Git 未安装"
         exit 1
     fi
-    
+
     check_git
     check_git_status || exit 1
     fetch_remote
-    
+
     if ! check_updates; then
         if [ "$CHECK_ONLY" = true ]; then
             exit 1
         fi
-        
+
         echo ""
         if [ "$AUTO_CONFIRM" = false ]; then
             read -p "是否更新? (y/N): " confirm
@@ -251,14 +297,14 @@ main() {
                 exit 0
             fi
         fi
-        
+
         create_backup
         do_update
         show_changelog
         update_dependencies
         rebuild_frontend
         restart_services
-        
+
         echo ""
         echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
         echo -e "${GREEN}  更新完成!${NC}"
@@ -267,7 +313,7 @@ main() {
         echo -e "  ${GREEN}📖${NC} 前端: http://localhost"
         echo -e "  ${GREEN}🔧${NC} API:  http://localhost:8000/docs"
         echo ""
-        
+
     else
         log_success "无需更新"
     fi
