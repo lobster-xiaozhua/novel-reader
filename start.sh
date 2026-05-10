@@ -13,6 +13,7 @@ PROJECT_NAME="novel-reader"
 FRONTEND_DIR="frontend"
 BACKEND_DIR="backend"
 DATA_DIR="data"
+SCRIPTS_DIR="scripts"
 MODE=""
 ACTION=""
 SYS_TYPE=""
@@ -20,6 +21,7 @@ IS_TERMUX=0
 TERMUX_HOME=""
 ORIGINAL_DIR=""
 RUN_DIR=""
+MIRROR_CONFIGURED=0
 
 print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
@@ -224,6 +226,25 @@ install_system_deps() {
         linux)  install_deps_linux ;;
         macos)  install_deps_macos ;;
     esac
+}
+
+configure_mirrors() {
+    if [ "$MIRROR_CONFIGURED" -eq 1 ]; then
+        return 0
+    fi
+
+    local mirror_script="$RUN_DIR/$SCRIPTS_DIR/mirror-selector.sh"
+    if [ ! -f "$mirror_script" ]; then
+        mirror_script="$(cd "$(dirname "$0")" && pwd)/$SCRIPTS_DIR/mirror-selector.sh"
+    fi
+
+    if [ -f "$mirror_script" ]; then
+        source "$mirror_script"
+        configure_all_mirrors "$SYS_TYPE"
+        MIRROR_CONFIGURED=1
+    else
+        print_warning "镜像选择脚本不存在，使用默认源"
+    fi
 }
 
 check_python() {
@@ -700,6 +721,8 @@ start_all_docker() {
     check_command docker-compose || check_command docker || { print_error "Docker Compose 未安装"; return 1; }
     check_node || print_warning "Node.js 未安装，前端可能无法构建"
 
+    configure_mirrors
+
     create_directories
     check_env_docker
 
@@ -721,11 +744,6 @@ start_all_docker() {
 start_all_local() {
     print_header "启动 Novel Reader (本地模式 | $SYS_TYPE)"
 
-    install_system_deps
-
-    check_python || { print_error "Python 不可用，请安装后重试"; return 1; }
-    check_node || print_warning "Node.js 未安装，前端将不可用"
-
     if [ "$IS_TERMUX" -eq 1 ]; then
         ensure_storage_permission
         if is_on_shared_storage; then
@@ -739,6 +757,12 @@ start_all_local() {
     else
         RUN_DIR="$(pwd)"
     fi
+
+    install_system_deps
+    configure_mirrors
+
+    check_python || { print_error "Python 不可用，请安装后重试"; return 1; }
+    check_node || print_warning "Node.js 未安装，前端将不可用"
 
     create_directories
     check_env_local
