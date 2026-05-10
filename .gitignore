@@ -31,6 +31,7 @@ yarn-error.log*
 .vite/
 dist-ssr/
 *.local
+!conf/*.local
 
 # IDE
 .vscode/
@@ -62,3 +63,5 @@ logs/
 *.bak
 *.tmp
 .cache/
+.backend.pid
+.frontend.pid
