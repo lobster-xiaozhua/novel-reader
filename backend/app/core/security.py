@@ -5,8 +5,12 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 import bcrypt
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from .config import get_settings
+from app.database import get_db
+from app.models import User
 
 settings = get_settings()
 security = HTTPBearer()
@@ -63,8 +67,19 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
-async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int:
+async def get_current_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> int:
     token = credentials.credentials
+
+    from app.services.auth_service import auth_service
+    if await auth_service.is_token_blacklisted(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="令牌已失效",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     payload = decode_token(token)
 
     if not payload or payload.get("type") != "access":
@@ -92,3 +107,61 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
 
 async def get_current_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     return credentials.credentials
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    token = credentials.credentials
+
+    from app.services.auth_service import auth_service
+    if await auth_service.is_token_blacklisted(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="令牌已失效",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    payload = decode_token(token)
+
+    if not payload or payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证令牌",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_id_raw = payload.get("sub")
+    if user_id_raw is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证令牌",
+        )
+
+    try:
+        user_id = int(user_id_raw)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证令牌",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户不存在",
+        )
+
+    return user
+
+
+def require_admin(user: User) -> User:
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限",
+        )
+    return user
