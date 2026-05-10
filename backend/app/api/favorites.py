@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/favorites", tags=["收藏"])
 
 @router.get("", response_model=list[FavoriteResponse])
 async def list_favorites(
-    folder_id: int = None,
+    folder_id: int = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user_id: int = Depends(get_current_user_id),
 ):

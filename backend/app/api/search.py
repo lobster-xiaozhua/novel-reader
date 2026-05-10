@@ -20,16 +20,18 @@ async def search_books(
     q: str = Query(..., min_length=1, max_length=100),
     limit: int = Query(50, ge=1, le=100),
     current_user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
     try:
         results = await search_service.search_books(q, limit)
         search_results = []
         for book_id, relevance in results:
-            book_result = await get_db().__anext__()
+            book_result = await db.execute(select(Book).where(Book.id == book_id))
+            book = book_result.scalar_one_or_none()
             search_results.append(SearchResult(
                 id=book_id,
-                title="",
-                author=None,
+                title=book.title if book else "",
+                author=book.author if book else None,
                 relevance=relevance,
             ))
         return search_results

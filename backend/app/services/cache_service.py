@@ -32,7 +32,12 @@ class CacheService:
 
     async def disconnect(self):
         if self._client:
-            await self._client.close()
+            try:
+                await self._client.close()
+            except Exception:
+                pass
+            finally:
+                self._client = None
 
     @property
     def available(self) -> bool:
