@@ -383,12 +383,20 @@ class StartupCheck:
 
     def _check_secret_key(self):
         key = settings.SECRET_KEY
-        if key == "your-secret-key-here-change-in-production":
+        insecure_defaults = {
+            "your-secret-key-here-change-in-production",
+            "change-me-in-production",
+            "",
+        }
+        if key in insecure_defaults:
+            import secrets
+            new_key = secrets.token_urlsafe(32)
+            settings.SECRET_KEY = new_key
             self.report.add(CheckResult(
                 name="安全密钥",
-                passed=True,
-                message="SECRET_KEY 使用默认值，生产环境请修改",
-                severity="warning",
+                passed=False,
+                message="SECRET_KEY 未配置或使用默认值，已自动生成安全密钥（建议通过环境变量显式设置）",
+                severity="error",
             ))
         elif len(key) < 32:
             self.report.add(CheckResult(

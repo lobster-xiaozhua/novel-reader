@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -88,9 +88,13 @@ async def login(
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     current_user_id: int = Depends(get_current_user_id),
 ):
-    await auth_service.blacklist_token(str(current_user_id))
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
+    if token:
+        await auth_service.blacklist_token(token)
     logger.info(f"用户 {current_user_id} 登出")
     return {"message": "登出成功"}
 

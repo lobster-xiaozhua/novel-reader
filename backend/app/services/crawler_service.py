@@ -1,8 +1,10 @@
 import asyncio
+import ipaddress
 import json
 import logging
 import os
 import re
+import socket
 import time
 from pathlib import Path
 from typing import List, Dict, Optional, Set
@@ -322,6 +324,46 @@ class DynamicConcurrencyController:
             logger.info(f"提升并发数至 {self._current_concurrent}")
 
 
+SSRF_BLOCKED_HOSTS = {
+    "169.254.169.254",
+    "metadata.google.internal",
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "::1",
+}
+
+
+def validate_crawl_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+
+    if parsed.scheme not in ("http", "https"):
+        return False
+
+    hostname = parsed.hostname
+    if not hostname:
+        return False
+
+    if hostname in SSRF_BLOCKED_HOSTS:
+        return False
+
+    try:
+        resolved_ips = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for family, _, _, _, sockaddr in resolved_ips:
+            ip = sockaddr[0]
+            if ipaddress.ip_address(ip).is_private:
+                return False
+            if ip in SSRF_BLOCKED_HOSTS:
+                return False
+    except socket.gaierror:
+        return False
+
+    return True
+
+
 class CrawlerService:
     def __init__(self):
         self.parser = IntelligentParser()
@@ -369,6 +411,13 @@ class CrawlerService:
                 self._active_tasks.pop(task_id, None)
 
     async def _execute_crawl(self, db, task: CrawlerTask):
+        if not validate_crawl_url(task.url):
+            task.status = "failed"
+            task.error_message = "目标 URL 不合法或指向内网/元数据地址，禁止访问"
+            await self._append_log(db, task, f"URL 校验失败: {task.url}")
+            await db.commit()
+            return
+
         timeout = aiohttp.ClientTimeout(total=settings.CRAWLER_TIMEOUT)
         connector = aiohttp.TCPConnector(limit=settings.CRAWLER_MAX_CONCURRENT, ssl=False)
 

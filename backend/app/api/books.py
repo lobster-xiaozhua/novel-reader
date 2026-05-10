@@ -1,4 +1,5 @@
 import logging
+import re
 import shutil
 from pathlib import Path
 
@@ -82,15 +83,23 @@ async def upload_book(
     if len(content) == 0:
         raise HTTPException(status_code=400, detail="文件为空")
 
-    book_name = Path(file.filename).stem
-    book_dir = Path(settings.BOOKS_DIR) / book_name
+    safe_name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', '_', Path(file.filename).stem)
+    if not safe_name or safe_name.startswith('.'):
+        safe_name = "unnamed"
+    safe_name = safe_name[:100]
+
+    book_dir = Path(settings.BOOKS_DIR) / safe_name
     book_dir.mkdir(parents=True, exist_ok=True)
 
-    dest = book_dir / file.filename
+    dest = (book_dir / f"{safe_name}.txt").resolve()
+    books_dir_resolved = Path(settings.BOOKS_DIR).resolve()
+    if not str(dest).startswith(str(books_dir_resolved)):
+        raise HTTPException(status_code=400, detail="非法文件名")
+
     dest.write_bytes(content)
 
     book = Book(
-        title=book_name,
+        title=safe_name,
         folder_path=str(book_dir),
         total_chapters=1,
     )
@@ -101,15 +110,15 @@ async def upload_book(
     chapter = Chapter(
         book_id=book.id,
         chapter_number=1,
-        title=book_name,
+        title=safe_name,
         file_path=str(dest),
         word_count=len(content),
     )
     db.add(chapter)
     await db.commit()
 
-    logger.info(f"用户 {current_user_id} 上传书籍: {book_name}")
-    return {"message": "文件上传成功", "filename": file.filename, "book_id": book.id}
+    logger.info(f"用户 {current_user_id} 上传书籍: {safe_name}")
+    return {"message": "文件上传成功", "filename": f"{safe_name}.txt", "book_id": book.id}
 
 
 @router.get("/{book_id}/chapters", response_model=List[ChapterResponse])

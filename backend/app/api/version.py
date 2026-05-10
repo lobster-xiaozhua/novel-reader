@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from typing import Dict, List, Optional
 
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_admin
 from app.services.version_service import version_manager
 
 router = APIRouter(prefix="/version", tags=["版本管理"])
@@ -12,20 +12,9 @@ async def save_version(
     name: str = Body(...),
     description: str = Body(""),
     tags: List[str] = Body(None),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    """
-    保存当前项目状态为新版本
-
-    示例:
-    ```json
-    {
-        "name": "v1.0.0 初始版本",
-        "description": "项目初始稳定版本",
-        "tags": ["stable", "release"]
-    }
-    ```
-    """
+    require_admin(current_user)
     try:
         snapshot = version_manager.create_version(
             name=name,
@@ -44,9 +33,9 @@ async def save_version(
 
 @router.post("/auto-save")
 async def auto_save_version(
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    """自动保存当前版本"""
+    require_admin(current_user)
     try:
         snapshot = version_manager.auto_save_version()
         return {
@@ -61,9 +50,9 @@ async def auto_save_version(
 @router.post("/switch/{version_id}")
 async def switch_to_version(
     version_id: str,
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    """切换到指定版本"""
+    require_admin(current_user)
     success = version_manager.switch_version(version_id)
     if not success:
         raise HTTPException(status_code=404, detail="版本不存在或切换失败")
@@ -77,9 +66,8 @@ async def switch_to_version(
 
 @router.get("/list")
 async def list_versions(
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    """列出所有版本"""
     versions = version_manager.list_versions()
     current = version_manager.get_current_version()
     return {
@@ -91,9 +79,8 @@ async def list_versions(
 
 @router.get("/current")
 async def get_current_version(
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    """获取当前版本信息"""
     current = version_manager.get_current_version()
     if not current:
         return {
@@ -109,9 +96,8 @@ async def get_current_version(
 @router.get("/detail/{version_id}")
 async def get_version_detail(
     version_id: str,
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    """获取版本详情"""
     detail = version_manager.get_version_detail(version_id)
     if not detail:
         raise HTTPException(status_code=404, detail="版本不存在")
@@ -124,9 +110,9 @@ async def get_version_detail(
 @router.delete("/delete/{version_id}")
 async def delete_version(
     version_id: str,
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    """删除指定版本"""
+    require_admin(current_user)
     success = version_manager.delete_version(version_id)
     if not success:
         raise HTTPException(status_code=404, detail="版本不存在")
@@ -141,19 +127,8 @@ async def delete_version(
 async def compare_versions(
     version_a: str = Body(...),
     version_b: str = Body(...),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    """
-    比较两个版本的差异
-
-    示例:
-    ```json
-    {
-        "version_a": "v1_20240101_120000",
-        "version_b": "v2_20240101_130000"
-    }
-    ```
-    """
     try:
         result = version_manager.compare_versions(version_a, version_b)
         return {
@@ -170,9 +145,8 @@ async def compare_versions(
 async def tag_version(
     version_id: str,
     tag: str = Body(..., embed=True),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    """为版本添加标签"""
     success = version_manager.tag_version(version_id, tag)
     if not success:
         raise HTTPException(status_code=404, detail="版本不存在")
@@ -187,9 +161,8 @@ async def tag_version(
 async def untag_version(
     version_id: str,
     tag: str = Body(..., embed=True),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    """移除版本标签"""
     success = version_manager.untag_version(version_id, tag)
     if not success:
         raise HTTPException(status_code=404, detail="版本不存在")
@@ -203,9 +176,8 @@ async def untag_version(
 @router.get("/find-by-tag")
 async def find_versions_by_tag(
     tag: str = Query(..., description="标签名称"),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    """根据标签查找版本"""
     versions = version_manager.find_versions_by_tag(tag)
     return {
         "success": True,
