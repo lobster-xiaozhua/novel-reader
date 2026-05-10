@@ -29,7 +29,7 @@ services:
     environment:
       - DATABASE_URL=sqlite+aiosqlite:///data/novel.db
       - REDIS_URL=redis://redis:6379
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set in .env}
       - DEBUG=${DEBUG:-false}
       - DATA_DIR=/app/data
       - BOOKS_DIR=/app/data/books
