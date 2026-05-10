@@ -440,21 +440,28 @@ start_backend_local() {
     cd "$BACKEND_DIR"
     source venv/bin/activate
 
-    local extra_args=""
+    local uvicorn_args="main:app --host 0.0.0.0 --port 8000"
     if [ "$IS_TERMUX" -eq 1 ]; then
-        extra_args="--workers 1 --limit-concurrency 50"
-        print_info "Termux 优化: 单 worker + 限制并发"
+        uvicorn_args="$uvicorn_args --limit-concurrency 50"
+        print_info "Termux 优化: 限制并发50, 不使用 --reload (避免文件系统兼容问题)"
+    else
+        uvicorn_args="$uvicorn_args --reload"
     fi
 
     print_info "启动后端服务..."
-    uvicorn main:app --host 0.0.0.0 --port 8000 --reload $extra_args &
+    uvicorn $uvicorn_args > "$RUN_DIR/$DATA_DIR/logs/uvicorn.log" 2>&1 &
     BACKEND_PID=$!
     echo "$BACKEND_PID" > "$RUN_DIR/.backend.pid"
 
     cd "$RUN_DIR"
 
-    print_info "等待后端服务就绪..."
+    print_info "等待后端服务就绪 (PID: $BACKEND_PID)..."
     for i in $(seq 1 30); do
+        if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+            print_error "后端进程已退出！查看日志:"
+            cat "$RUN_DIR/$DATA_DIR/logs/uvicorn.log" 2>/dev/null | tail -20
+            return 1
+        fi
         if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
             print_success "后端服务已就绪 (PID: $BACKEND_PID)"
             return 0
@@ -462,7 +469,8 @@ start_backend_local() {
         sleep 1
     done
 
-    print_warning "后端服务启动较慢，请稍后检查"
+    print_warning "后端服务启动较慢，查看日志:"
+    tail -5 "$RUN_DIR/$DATA_DIR/logs/uvicorn.log" 2>/dev/null || true
     return 0
 }
 
