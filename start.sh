@@ -145,37 +145,49 @@ install_node_deps() {
 setup_global() {
     print_step "配置全局命令..."
 
-    local bin_dir="/usr/local/bin"
     local installed=false
 
-    if [ -w "$bin_dir" ] || sudo ls "$bin_dir" &>/dev/null; then
-        if [ -f "$SCRIPT_DIR/readweb" ]; then
-            sudo ln -sf "$SCRIPT_DIR/readweb" "$bin_dir/readweb" 2>/dev/null || \
-            ln -sf "$SCRIPT_DIR/readweb" "$bin_dir/readweb" 2>/dev/null || true
-            print_success "readweb 已安装到 PATH"
-            installed=true
+    local bin_dir="$HOME/.local/bin"
+    mkdir -p "$bin_dir"
+
+    if [ -f "$SCRIPT_DIR/readweb" ]; then
+        ln -sf "$SCRIPT_DIR/readweb" "$bin_dir/readweb"
+        print_success "readweb → $bin_dir/readweb"
+        installed=true
+    fi
+
+    if [ -f "$SCRIPT_DIR/update.sh" ]; then
+        ln -sf "$SCRIPT_DIR/update.sh" "$bin_dir/update.sh"
+        print_success "update.sh → $bin_dir/update.sh"
+        installed=true
+    fi
+
+    if [ "$installed" = true ]; then
+        local shell_rc=""
+        if [ -n "$BASH_VERSION" ]; then
+            shell_rc="$HOME/.bashrc"
+        elif [ -n "$ZSH_VERSION" ]; then
+            shell_rc="$HOME/.zshrc"
+        else
+            shell_rc="$HOME/.profile"
         fi
 
-        if [ -f "$SCRIPT_DIR/update.sh" ]; then
-            sudo ln -sf "$SCRIPT_DIR/update.sh" "$bin_dir/update.sh" 2>/dev/null || \
-            ln -sf "$SCRIPT_DIR/update.sh" "$bin_dir/update.sh" 2>/dev/null || true
-            print_success "update.sh 已安装到 PATH"
-            installed=true
+        if ! grep -q ".local/bin" "$shell_rc" 2>/dev/null; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$shell_rc"
+            print_success "已添加到 PATH ($shell_rc)"
         fi
 
-        if [ "$installed" = true ]; then
-            echo "$PROJECT_NAME" > "$INSTALLED_FILE"
-            echo ""
-            print_success "全局命令配置完成!"
-            echo -e "${YELLOW}以后可直接使用:${NC}"
-            echo "  readweb start    # 启动项目"
-            echo "  readweb update   # 更新项目"
-            echo "  readweb help     # 查看帮助"
-            echo ""
-        fi
-    else
-        print_warning "无法写入 $bin_dir，跳过全局安装"
-        print_info "可手动运行: sudo ln -s $SCRIPT_DIR/readweb $bin_dir/"
+        echo "$PROJECT_NAME" > "$INSTALLED_FILE"
+        echo ""
+        print_success "全局命令配置完成!"
+        echo -e "${YELLOW}请运行以下命令激活:${NC}"
+        echo "  source ~/.bashrc"
+        echo "  或重新打开终端"
+        echo ""
+        echo -e "${YELLOW}以后可直接使用:${NC}"
+        echo "  readweb start    # 启动项目"
+        echo "  readweb update   # 更新项目"
+        echo ""
     fi
 }
 
