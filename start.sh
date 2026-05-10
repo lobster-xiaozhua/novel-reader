@@ -128,7 +128,7 @@ install_deps_termux() {
     print_info "更新包管理器..."
     pkg update -y 2>/dev/null && pkg upgrade -y 2>/dev/null || true
 
-    local pkgs="python python-dev nodejs build-essential ca-certificates clang make cmake"
+    local pkgs="python python-dev nodejs build-essential ca-certificates clang make cmake rust"
     local need_install=""
 
     for pkg_name in $pkgs; do
@@ -393,37 +393,42 @@ setup_python_env() {
     if [ "$IS_TERMUX" -eq 1 ]; then
         pip install --upgrade pip 2>/dev/null || true
 
-        print_info "Termux 策略: 优先安装预编译 wheel..."
-        local pure_pkgs="fastapi uvicorn sqlalchemy aiosqlite redis pydantic pydantic-settings python-jose passlib python-multipart beautifulsoup4 tenacity pydantic-core starlette typing-extensions annotated-types anyio idna sniffio"
-        pip install --only-binary :all: $pure_pkgs 2>/dev/null || {
-            print_info "部分纯 Python 包无预编译 wheel，使用源码安装..."
-            pip install $pure_pkgs 2>/dev/null || true
-        }
+        local py_impl=$(python -c "import sys; print(f'cp{sys.version_info.major}{sys.version_info.minor}')")
+        print_info "Termux 策略: Python ABI=$py_impl, 尝试 manylinux wheel..."
 
-        print_info "安装 C 扩展包 (可能需要编译)..."
-        pip install --only-binary :all: aiohttp 2>/dev/null || {
-            print_warning "aiohttp 无预编译 wheel，从源码编译 (较慢)..."
-            pip install aiohttp 2>/dev/null || {
-                print_warning "aiohttp 安装失败，使用 httpx 替代"
-                pip install httpx 2>/dev/null || true
-            }
-        }
+        pip install --only-binary :all: \
+            --platform manylinux2014_aarch64 \
+            --python-version $(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')") \
+            --implementation cp \
+            --abi "$py_impl" \
+            -r requirements.txt 2>/dev/null
 
-        pip install --only-binary :all: psutil 2>/dev/null || {
-            print_warning "psutil 无预编译 wheel，尝试编译..."
-            pip install psutil 2>/dev/null || print_warning "psutil 安装失败（非致命，功能降级）"
-        }
+        if [ $? -eq 0 ]; then
+            print_success "所有依赖已通过 manylinux wheel 安装"
+        else
+            print_info "manylinux wheel 不可用，尝试本地 wheel..."
+            pip install --only-binary :all: -r requirements.txt 2>/dev/null
+            if [ $? -ne 0 ]; then
+                print_info "部分包需要源码编译，逐个安装..."
 
-        pip install --only-binary :all: python-magic 2>/dev/null || {
-            print_warning "python-magic 无预编译 wheel，尝试编译..."
-            pip install python-magic 2>/dev/null || print_warning "python-magic 安装失败（非致命，文件类型检测降级）"
-        }
+                local pkgs_binary="fastapi uvicorn sqlalchemy aiosqlite redis pydantic pydantic-settings python-jose passlib python-multipart beautifulsoup4 tenacity starlette typing-extensions annotated-types anyio idna sniffio"
+                pip install --only-binary :all: $pkgs_binary 2>/dev/null || pip install $pkgs_binary 2>/dev/null || true
 
-        pip install bcrypt cryptography 2>/dev/null || {
-            print_warning "bcrypt/cryptography 安装失败，尝试降级版本..."
-            pip install "cryptography<43" 2>/dev/null || true
-            pip install "bcrypt<4.1" 2>/dev/null || true
-        }
+                print_info "安装 C 扩展包 (需要 Rust/编译)..."
+                local c_pkgs="pydantic-core cryptography bcrypt aiohttp psutil python-magic"
+                for pkg in $c_pkgs; do
+                    pip install --only-binary :all: "$pkg" 2>/dev/null && continue
+                    print_info "  $pkg: 编译中 (可能较慢)..."
+                    pip install "$pkg" 2>/dev/null || print_warning "  $pkg 安装失败（非致命）"
+                done
+
+                pip install --only-binary :all: cryptography 2>/dev/null || pip install "cryptography<43" 2>/dev/null || true
+                pip install --only-binary :all: bcrypt 2>/dev/null || pip install "bcrypt<4.1" 2>/dev/null || true
+                pip install --only-binary :all: aiohttp 2>/dev/null || pip install aiohttp 2>/dev/null || pip install httpx 2>/dev/null || true
+            fi
+        fi
+
+        pip check 2>/dev/null || print_warning "部分依赖可能缺失，服务可能需要降级运行"
     else
         pip install -q -r requirements.txt
     fi
