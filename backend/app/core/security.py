@@ -1,90 +1,84 @@
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Tuple
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
+from jwt import PyJWTError as JWTError, encode, decode
 import bcrypt
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from app.core.config import get_settings
-from app.database import get_db
-from app.models import User
+from .config import get_settings
 
 settings = get_settings()
 security = HTTPBearer()
 
-def hash_password(password: str):
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=settings.BCRYPT_ROUNDS)).decode('utf-8')
 
-def verify_password(plain: str, hashed: str):
+def hash_password(password: str) -> str:
+    password_bytes = password.encode("utf-8")
+    salt = bcrypt.gensalt(rounds=settings.BCRYPT_ROUNDS)
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode("utf-8")
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
-        return bcrypt.checkpw(plain.encode('utf-8'), hashed.encode('utf-8'))
-    except Exception:
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"),
+            hashed_password.encode("utf-8"),
+        )
+    except (ValueError, TypeError):
         return False
 
-def validate_password_strength(password):
+
+def validate_password_strength(password: str) -> Tuple[bool, str]:
     if len(password) < settings.PASSWORD_MIN_LENGTH:
-        return False, f"Need at least {settings.PASSWORD_MIN_LENGTH} chars"
+        return False, f"密码至少 {settings.PASSWORD_MIN_LENGTH} 位"
     if not any(c.isupper() for c in password):
-        return False, "Need uppercase letter"
+        return False, "需要包含大写字母"
     if not any(c.islower() for c in password):
-        return False, "Need lowercase letter"
+        return False, "需要包含小写字母"
     if not any(c.isdigit() for c in password):
-        return False, "Need digit"
-    return True, "OK"
+        return False, "需要包含数字"
+    return True, "密码强度合格"
 
-def create_access_token(data: dict, exp_delta: Optional[timedelta] = None):
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    exp = datetime.utcnow() + (exp_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({'exp': exp, 'type': 'access'})
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm='HS256')
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire, "type": "access"})
+    return encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
 
-def create_refresh_token(data: dict):
+
+def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
-    exp = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode.update({'exp': exp, 'type': 'refresh'})
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm='HS256')
+    expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "type": "refresh"})
+    return encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
 
-def decode_token(token):
+
+def decode_token(token: str) -> Optional[dict]:
     try:
-        return jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+        payload = decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        return payload
     except JWTError:
         return None
 
-async def _validate_get_payload(credentials):
+
+async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int:
     token = credentials.credentials
-    from app.services.auth_service import auth_service
-    if await auth_service.is_token_blacklisted(token):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
     payload = decode_token(token)
-    if not payload or payload.get('type') != 'access':
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
-    return payload
 
-async def get_current_user_id(credentials=Depends(security)):
-    payload = await _validate_get_payload(credentials)
-    user_id = payload.get('sub')
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    try:
-        return int(user_id)
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    if not payload or payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证令牌",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-async def get_current_token(credentials=Depends(security)):
-    return credentials.credentials
+    user_id: int = payload.get("sub")
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证令牌",
+        )
 
-async def get_current_user(credentials=Depends(security), db=Depends(get_db)):
-    user_id = await get_current_user_id(credentials)
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
-
-def require_admin(user):
-    if not user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin required")
-    return user
+    return int(user_id)
