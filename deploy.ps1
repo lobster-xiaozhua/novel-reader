@@ -1,114 +1,183 @@
-# Novel Reader 统一部署入口 (Windows)
-# 自动检测平台并选择合适的部署方式
-# 支持: Windows PowerShell, WSL2, Termux
+# Novel Reader - Windows Deployment Script
+# Support: Docker Desktop or WSL2
 
 param(
-    [string]$Command = "help"
+    [switch]$UseDocker,
+    [switch]$UseWSL,
+    [switch]$SkipInstall,
+    [switch]$SkipDocker,
+    [string]$PythonVersion = "3.11"
 )
 
-$SCRIPT_DIR = $PWD.Path
+$ErrorActionPreference = "Stop"
+$ProjectRoot = $PSScriptRoot
 
-function Detect-Platform {
-    # 检测 Termux
-    if (Test-Path "/data/data/com.termux/files/usr") {
-        return "termux"
-    }
-    
-    # 检测 WSL
-    if ($env:WSL_DISTRO_NAME) {
-        return "wsl"
-    }
-    
-    # 检测 Windows
-    if ($env:OS -eq "Windows_NT") {
-        return "windows"
-    }
-    
-    return "unknown"
+function Write-Step {
+    param([string]$Message)
+    Write-Host "`n=== $Message ===" -ForegroundColor Cyan
 }
 
-function Show-Help {
-    Write-Host ""
-    Write-Host "═══════════════════════════════════════════════════" -ForegroundColor Cyan
-    Write-Host "  Novel Reader - 统一部署入口" -ForegroundColor Green
-    Write-Host "═══════════════════════════════════════════════════" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "用法: .\deploy.ps1 [command]"
-    Write-Host ""
-    Write-Host "命令:"
-    Write-Host "  install    安装并配置环境（自动检测平台）"
-    Write-Host "  start      启动服务"
-    Write-Host "  stop       停止服务"
-    Write-Host "  restart    重启服务"
-    Write-Host "  status     查看状态"
-    Write-Host "  deps       安装依赖"
-    Write-Host "  mirror     配置镜像源"
-    Write-Host "  help       显示此帮助"
-    Write-Host ""
-    Write-Host "支持平台:"
-    Write-Host "  • Windows 10/11 (PowerShell + Docker)"
-    Write-Host "  • Windows Subsystem for Linux (WSL2)"
-    Write-Host "  • Android (Termux)"
-    Write-Host ""
-    Write-Host "示例:"
-    Write-Host "  .\deploy.ps1 install    # 首次安装"
-    Write-Host "  .\deploy.ps1 start      # 启动服务"
-    Write-Host "  .\deploy.ps1 status     # 查看状态"
+function Write-Success {
+    param([string]$Message)
+    Write-Host "[OK] $Message" -ForegroundColor Green
 }
 
-function Main {
-    $platform = Detect-Platform
-    
-    Write-Host ""
-    Write-Host "═══════════════════════════════════════════════════" -ForegroundColor Cyan
-    Write-Host "  Novel Reader - 统一部署入口" -ForegroundColor Green
-    Write-Host "═══════════════════════════════════════════════════" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "[INFO] 检测到平台: $platform" -ForegroundColor Blue
+function Write-Warning {
+    param([string]$Message)
+    Write-Host "[WARN] $Message" -ForegroundColor Yellow
+}
 
-    switch ($platform) {
-        "wsl" {
-            Write-Host "[INFO] 使用 WSL2 模式..." -ForegroundColor Blue
-            if (Test-Path "start.sh") {
-                & bash -c "./start.sh $Command"
-            } else {
-                Write-Host "[ERROR] start.sh 脚本不存在" -ForegroundColor Red
-                exit 1
-            }
+function Write-Error-Message {
+    param([string]$Message)
+    Write-Host "[ERROR] $Message" -ForegroundColor Red
+}
+
+function Test-Command {
+    param([string]$Command)
+    $null = Get-Command $Command -ErrorAction SilentlyContinue
+    return $?
+}
+
+Write-Host @"
+╔══════════════════════════════════════════════════════════════╗
+║         Novel Reader - Windows Deployment Script v1.0       ║
+║  Support: Docker Desktop / WSL2 / Native Python            ║
+╚══════════════════════════════════════════════════════════════╝
+"@ -ForegroundColor Magenta
+
+$isWSL = $false
+if (Test-Path "/proc/version") {
+    $wslCheck = Get-Content "/proc/version" -ErrorAction SilentlyContinue
+    if ($wslCheck -match "microsoft|WSL") {
+        $isWSL = $true
+    }
+}
+
+if ($isWSL) {
+    Write-Host "Detected WSL2 environment, using Linux deployment" -ForegroundColor Green
+    Write-Step "Calling Linux deployment script"
+    bash "$ProjectRoot/deploy.sh"
+    exit $LASTEXITCODE
+}
+
+$useDocker = $UseDocker
+$skipDocker = $SkipDocker
+
+if (-not $useDocker -and -not $skipDocker) {
+    Write-Step "Detecting runtime environment"
+    $dockerAvailable = Test-Command "docker"
+    if ($dockerAvailable) {
+        Write-Host "Docker Desktop detected. Use Docker? [Y/n]" -ForegroundColor Yellow
+        $response = Read-Host " "
+        if ($response -ne "n" -and $response -ne "N") {
+            $useDocker = $true
         }
-        "termux" {
-            Write-Host "[INFO] 使用 Termux 模式..." -ForegroundColor Blue
-            if (Test-Path "install-termux.sh") {
-                & bash -c "./install-termux.sh $Command"
-            } else {
-                Write-Host "[ERROR] install-termux.sh 脚本不存在" -ForegroundColor Red
-                exit 1
-            }
-        }
-        "windows" {
-            Write-Host "[INFO] 使用 Windows PowerShell 模式..." -ForegroundColor Blue
-            if (Test-Path "start.ps1") {
-                & .\start.ps1 $Command
-            } else {
-                Write-Host "[ERROR] start.ps1 脚本不存在" -ForegroundColor Red
-                exit 1
-            }
-        }
-        default {
-            Write-Host "[ERROR] 无法识别的平台: $platform" -ForegroundColor Red
-            Show-Help
+    }
+}
+
+if ($useDocker) {
+    Write-Step "Using Docker Desktop deployment"
+    if (-not (Test-Command "docker")) {
+        Write-Error-Message "Docker Desktop not installed"
+        exit 1
+    }
+    if (-not (Test-Command "docker-compose") -and -not (Test-Command "docker")) {
+        Write-Error-Message "Docker Compose not installed"
+        exit 1
+    }
+
+    Write-Host "Building Docker image..."
+    docker-compose build
+
+    Write-Host "`nStarting services..."
+    docker-compose up -d
+
+    Write-Host "`nWaiting for services..."
+    Start-Sleep -Seconds 10
+
+    Write-Host "`nService status:"
+    docker-compose ps
+
+    Write-Success "Deployment complete!"
+    Write-Host "`nAccess URLs:"
+    Write-Host "  Frontend: http://localhost:80" -ForegroundColor Cyan
+    Write-Host "  Backend: http://localhost:8000" -ForegroundColor Cyan
+    Write-Host "  API Docs: http://localhost:8000/docs" -ForegroundColor Cyan
+} else {
+    Write-Step "Native Python deployment"
+
+    if (-not $SkipInstall) {
+        Write-Host "Checking Python version..."
+        if (Test-Command "python") {
+            $pythonVersion = python --version 2>&1
+            Write-Host "Current Python: $pythonVersion" -ForegroundColor Green
+        } elseif (Test-Command "python3") {
+            $pythonVersion = python3 --version 2>&1
+            Write-Host "Current Python: $pythonVersion" -ForegroundColor Green
+        } else {
+            Write-Error-Message "Python not installed"
             exit 1
         }
+
+        Write-Host "`nCreating virtual environment..."
+        if (Test-Path "$ProjectRoot\venv") {
+            Write-Warning "Virtual environment exists, skipping"
+        } else {
+            python -m venv "$ProjectRoot\venv"
+            Write-Success "Virtual environment created"
+        }
+
+        Write-Host "`nActivating virtual environment..."
+        & "$ProjectRoot\venv\Scripts\Activate.ps1"
+
+        Write-Host "`nInstalling dependencies (using pre-built wheels)..."
+        $env:PYTHONPATH = "$ProjectRoot\backend"
+        pip install --upgrade pip
+        pip install wheel
+        pip install -r "$ProjectRoot\requirements.txt" --only-binary=:all:
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Pre-built package installation failed, trying mixed install..."
+            pip install -r "$ProjectRoot\requirements.txt"
+        }
+
+        Write-Success "Dependencies installed"
     }
+
+    Write-Step "Initializing data directories"
+    $dataDirs = @("data", "data\books", "data\index", "data\static", "data\logs", "data\cache")
+    foreach ($dir in $dataDirs) {
+        $dirPath = Join-Path $ProjectRoot $dir
+        if (-not (Test-Path $dirPath)) {
+            New-Item -ItemType Directory -Path $dirPath -Force | Out-Null
+        }
+    }
+    Write-Success "Data directories initialized"
+
+    Write-Step "Configuring environment variables"
+    $envFile = Join-Path $ProjectRoot ".env"
+    if (-not (Test-Path $envFile)) {
+        Copy-Item (Join-Path $ProjectRoot ".env.example") $envFile
+        Write-Success ".env file created, please set SECRET_KEY"
+    } else {
+        Write-Host ".env file exists"
+    }
+
+    Write-Step "Starting backend service"
+    $backendDir = Join-Path $ProjectRoot "backend"
+    Set-Location $backendDir
+
+    $env:PYTHONPATH = $backendDir
+    $env:DATA_DIR = Join-Path $ProjectRoot "data"
+    $env:BOOKS_DIR = Join-Path $ProjectRoot "data\books"
+    $env:LOG_LEVEL = "INFO"
+
+    Write-Host "`nStart command: python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000" -ForegroundColor Cyan
+    Write-Host "Press Ctrl+C to stop`n" -ForegroundColor Yellow
+
+    python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+    Write-Success "Service stopped"
 }
 
-if ($args.Count -gt 0) {
-    $Command = $args[0]
-}
-
-if ($Command -eq "help" -or $Command -eq "--help" -or $Command -eq "-h") {
-    Show-Help
-    exit 0
-}
-
-Main
+Write-Host "`nDeployment script completed!" -ForegroundColor Green
