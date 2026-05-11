@@ -11,22 +11,17 @@ beautifulsoup4>=4.12.0
 tenacity>=8.2.0
 rich>=13.0.0
 
-# JWT认证 - 使用pycryptodome替代cryptography（纯Python实现）
+# JWT认证
 python-jose[cryptography]>=3.3.0
 pycryptodome>=3.20.0
 
-# 密码哈希 - 使用bcrypt预编译版本
+# 密码哈希
 passlib[bcrypt]>=1.7.4
 bcrypt>=4.0.1
 
-# HTTP客户端 - aiohttp有预编译wheel，httpx作为备选
-aiohttp>=3.9.0
+# HTTP客户端
+ciohttp>=3.9.0
 httpx>=0.26.0
 
-# 可选依赖（需要系统库）
-# python-magic>=0.4.27
-
-# 开发依赖
-# pytest>=7.0.0
-# pytest-asyncio>=0.21.0
-# httpx>=0.26.0
+# 异步文件操作
+files>=23.0.0
