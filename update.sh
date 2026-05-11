@@ -1,14 +1,14 @@
 #!/bin/bash
 # update.sh - Novel Reader 项目更新脚本
-# 用法: ./update.sh [options]
+# 用法: bash update.sh [options]  或  ./update.sh [options]（需执行权限）
 #
 # 选项:
-#   ./update.sh          - 交互式更新
-#   ./update.sh -y       - 自动确认更新
-#   ./update.sh --check  - 仅检查更新
-#   ./update.sh --force  - 强制更新（忽略本地修改）
-#   ./update.sh --backup - 更新前创建备份
-#   ./update.sh --docker - 使用 Docker 模式重启服务
+#   bash update.sh          - 交互式更新
+#   bash update.sh -y       - 自动确认更新
+#   bash update.sh --check  - 仅检查更新
+#   bash update.sh --force  - 强制更新（忽略本地修改）
+#   bash update.sh --backup - 更新前创建备份
+#   bash update.sh --docker - 使用 Docker 模式重启服务
 
 set -e
 
@@ -40,7 +40,7 @@ while [[ $# -gt 0 ]]; do
         --no-backup) BACKUP_ENABLED=false; shift ;;
         --docker) RUN_MODE="docker"; shift ;;
         -h|--help)
-            echo "用法: ./update.sh [options]"
+            echo "用法: bash update.sh [options]"
             echo ""
             echo "选项:"
             echo "  -y, --yes       自动确认更新"
@@ -49,6 +49,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-backup     跳过备份"
             echo "  --docker        使用 Docker 模式重启"
             echo "  -h, --help      显示帮助"
+            echo ""
+            echo "快捷方式（需执行权限）:"
+            echo "  ./update.sh --check"
             exit 0
             ;;
         *) log_error "未知选项: $1"; exit 1 ;;

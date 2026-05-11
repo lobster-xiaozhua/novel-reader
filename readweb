@@ -1,22 +1,22 @@
 #!/bin/bash
 # readweb - Novel Reader 项目管理命令行工具
-# 用法: readweb <command> [options]
+# 用法: bash readweb <command> [options]  或  ./readweb <command>（需执行权限）
 #
 # 命令:
-#   readweb start [--docker]  - 启动项目（默认 local 模式）
-#   readweb stop              - 停止服务
-#   readweb restart          - 重启服务
-#   readweb update           - 更新项目
-#   readweb status           - 查看服务状态
-#   readweb logs             - 查看日志
-#   readweb deps             - 安装/更新依赖
-#   readweb mirror           - 配置镜像源
-#   readweb clean            - 清理环境
-#   readweb doctor           - 环境检查
-#   readweb backup           - 备份数据
-#   readweb restore          - 恢复数据
-#   readweb version          - 显示版本信息
-#   readweb help             - 显示帮助
+#   bash readweb start [--docker]  - 启动项目（默认 local 模式）
+#   bash readweb stop              - 停止服务
+#   bash readweb restart          - 重启服务
+#   bash readweb update           - 更新项目
+#   bash readweb status           - 查看服务状态
+#   bash readweb logs             - 查看日志
+#   bash readweb deps             - 安装/更新依赖
+#   bash readweb mirror           - 配置镜像源
+#   bash readweb clean            - 清理环境
+#   bash readweb doctor           - 环境检查
+#   bash readweb backup           - 备份数据
+#   bash readweb restore          - 恢复数据
+#   bash readweb version          - 显示版本信息
+#   bash readweb help             - 显示帮助
 
 set -e
 
@@ -52,7 +52,7 @@ print_banner() {
 show_help() {
     print_banner
     cat << EOF
-用法: readweb <command> [options]
+用法: bash readweb <command> [options]
 
 命令:
   ${GREEN}start${NC} [--docker]    启动项目（默认 local 模式）
@@ -75,11 +75,15 @@ show_help() {
   ${GREEN}docker${NC}         使用 Docker Compose 启动服务
 
 示例:
-  readweb start          # 本地模式启动
-  readweb start --docker # Docker 模式启动
-  readweb update         # 更新项目
-  readweb logs backend   # 查看后端日志
-  readweb doctor         # 检查环境
+  bash readweb start          # 本地模式启动（推荐）
+  bash readweb start --docker # Docker 模式启动
+  bash readweb update         # 更新项目
+  bash readweb logs backend   # 查看后端日志
+  bash readweb doctor         # 检查环境
+
+快捷方式（需执行权限）:
+  ./readweb start             # 启动项目
+  ./readweb update            # 更新项目
 
 环境变量:
   READWEB_MODE=local|docker    设置默认模式
@@ -568,15 +572,24 @@ cmd_logs() {
             docker-compose logs -f
         fi
     else
-        if [ "$service" = "backend" ] || [ -z "$service" ]; then
-            log_info "查看后端日志"
+        if [ "$service" = "backend" ]; then
+            log_info "查看后端日志 (Ctrl+C 退出)"
             tail -f data/logs/backend.log 2>/dev/null || echo "日志文件不存在"
         elif [ "$service" = "frontend" ]; then
-            log_info "查看前端日志"
+            log_info "查看前端日志 (Ctrl+C 退出)"
             tail -f data/logs/frontend.log 2>/dev/null || echo "日志文件不存在"
         else
-            log_info "查看所有日志"
-            tail -f data/logs/*.log 2>/dev/null || echo "日志文件不存在"
+            if [ -f "data/logs/backend.log" ] && [ -f "data/logs/frontend.log" ]; then
+                log_info "同时显示前后端日志 (Ctrl+C 退出)"
+                echo ""
+                tail -f data/logs/backend.log data/logs/frontend.log
+            elif [ -f "data/logs/backend.log" ]; then
+                tail -f data/logs/backend.log
+            elif [ -f "data/logs/frontend.log" ]; then
+                tail -f data/logs/frontend.log
+            else
+                log_warning "日志文件不存在"
+            fi
         fi
     fi
 }

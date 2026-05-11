@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Novel Reader 一键启动脚本
-# 支持 Linux / macOS / WSL
-# 用法: ./start.sh [command]
+# 支持 Linux / macOS / WSL / Termux
+# 用法: bash start.sh [command]  或  ./start.sh [command]（需执行权限）
 
 set -e
 
@@ -147,42 +147,62 @@ setup_global() {
 
     local installed=false
 
-    local bin_dir="$HOME/.local/bin"
-    mkdir -p "$bin_dir"
+    # 检测 Termux (Android)
+    if [ -d "$PREFIX" ] && [ -w "$PREFIX/bin" ]; then
+        local bin_dir="$PREFIX/bin"
+        print_info "检测到 Termux 环境"
 
-    if [ -f "$SCRIPT_DIR/readweb" ]; then
-        ln -sf "$SCRIPT_DIR/readweb" "$bin_dir/readweb"
-        print_success "readweb → $bin_dir/readweb"
-        installed=true
-    fi
+        if [ -f "$SCRIPT_DIR/readweb" ]; then
+            ln -sf "$SCRIPT_DIR/readweb" "$bin_dir/readweb"
+            print_success "readweb → $bin_dir/readweb"
+            installed=true
+        fi
 
-    if [ -f "$SCRIPT_DIR/update.sh" ]; then
-        ln -sf "$SCRIPT_DIR/update.sh" "$bin_dir/update.sh"
-        print_success "update.sh → $bin_dir/update.sh"
-        installed=true
+        if [ -f "$SCRIPT_DIR/update.sh" ]; then
+            ln -sf "$SCRIPT_DIR/update.sh" "$bin_dir/update.sh"
+            print_success "update.sh → $bin_dir/update.sh"
+            installed=true
+        fi
+    else
+        # 标准 Linux/Mac
+        local bin_dir="$HOME/.local/bin"
+        mkdir -p "$bin_dir"
+
+        if [ -f "$SCRIPT_DIR/readweb" ]; then
+            ln -sf "$SCRIPT_DIR/readweb" "$bin_dir/readweb"
+            print_success "readweb → $bin_dir/readweb"
+            installed=true
+        fi
+
+        if [ -f "$SCRIPT_DIR/update.sh" ]; then
+            ln -sf "$SCRIPT_DIR/update.sh" "$bin_dir/update.sh"
+            print_success "update.sh → $bin_dir/update.sh"
+            installed=true
+        fi
+
+        if [ "$installed" = true ]; then
+            local shell_rc=""
+            if [ -n "$BASH_VERSION" ]; then
+                shell_rc="$HOME/.bashrc"
+            elif [ -n "$ZSH_VERSION" ]; then
+                shell_rc="$HOME/.zshrc"
+            else
+                shell_rc="$HOME/.profile"
+            fi
+
+            if ! grep -q ".local/bin" "$shell_rc" 2>/dev/null; then
+                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$shell_rc"
+                print_success "已添加到 PATH"
+            fi
+        fi
     fi
 
     if [ "$installed" = true ]; then
-        local shell_rc=""
-        if [ -n "$BASH_VERSION" ]; then
-            shell_rc="$HOME/.bashrc"
-        elif [ -n "$ZSH_VERSION" ]; then
-            shell_rc="$HOME/.zshrc"
-        else
-            shell_rc="$HOME/.profile"
-        fi
-
-        if ! grep -q ".local/bin" "$shell_rc" 2>/dev/null; then
-            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$shell_rc"
-            print_success "已添加到 PATH ($shell_rc)"
-        fi
-
         echo "$PROJECT_NAME" > "$INSTALLED_FILE"
         echo ""
         print_success "全局命令配置完成!"
-        echo -e "${YELLOW}请运行以下命令激活:${NC}"
+        echo -e "${YELLOW}请重新打开终端或运行:${NC}"
         echo "  source ~/.bashrc"
-        echo "  或重新打开终端"
         echo ""
         echo -e "${YELLOW}以后可直接使用:${NC}"
         echo "  readweb start    # 启动项目"
@@ -221,8 +241,9 @@ first_run_setup() {
         echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
         echo ""
         echo -e "${YELLOW}下一步:${NC}"
-        echo "  ./start.sh          # 启动项目"
-        echo "  ./readweb start     # 或使用 readweb"
+        echo "  bash start.sh start    # 启动项目（推荐）"
+        echo "  ./start.sh start       # 需要执行权限"
+        echo "  readweb start          # 全局命令"
         echo ""
         return 0
     fi
@@ -318,7 +339,7 @@ show_status() {
 show_help() {
     print_banner
     cat << EOF
-用法: ./start.sh [command]
+用法: bash start.sh [command]
 
 命令:
   start      启动项目
@@ -332,14 +353,18 @@ show_help() {
   help       显示帮助
 
 示例:
-  ./start.sh          # 首次启动
-  ./start.sh deps     # 安装依赖
-  ./start.sh global   # 配置全局命令
+  bash start.sh start      # 启动项目（推荐）
+  bash start.sh deps       # 安装依赖
+  bash start.sh global     # 配置全局命令
+
+快捷方式（需执行权限）:
+  ./start.sh start         # 启动项目
+  ./start.sh deps          # 安装依赖
 
 全局命令 (配置后可用):
-  readweb start       # 启动项目
-  readweb update      # 更新项目
-  readweb status      # 查看状态
+  readweb start            # 启动项目
+  readweb update           # 更新项目
+  readweb status           # 查看状态
 EOF
 }
 
@@ -371,7 +396,21 @@ case "${1:-}" in
         show_status
         ;;
     logs)
-        tail -f data/logs/*.log 2>/dev/null || docker-compose logs -f
+        if command -v docker &> /dev/null && docker info &> /dev/null; then
+            docker-compose logs -f
+        else
+            if [ -f "data/logs/backend.log" ] && [ -f "data/logs/frontend.log" ]; then
+                print_info "同时显示前后端日志 (Ctrl+C 退出)"
+                echo ""
+                tail -f data/logs/backend.log data/logs/frontend.log
+            elif [ -f "data/logs/backend.log" ]; then
+                tail -f data/logs/backend.log
+            elif [ -f "data/logs/frontend.log" ]; then
+                tail -f data/logs/frontend.log
+            else
+                print_warning "日志文件不存在"
+            fi
+        fi
         ;;
     deps)
         setup_mirrors
