@@ -1,23 +1,32 @@
-# Core - 纯 Python 版本，避免编译依赖
+# 基础依赖
 fastapi>=0.104.0
-uvicorn>=0.24.0
+uvicorn[standard]>=0.24.0
 sqlalchemy[asyncio]>=2.0.0
 aiosqlite>=0.19.0
 redis>=5.0.0
-
-# Pydantic v1 纯 Python 版本（避免 Rust 编译）
-pydantic<2.0.0
-pydantic-settings<2.0.0
-
-# Auth - 使用纯 Python 版本
-python-jose>=3.3.0
-passlib>=1.7.4
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
 python-multipart>=0.0.6
-
-# HTTP & Parsing
-aiohttp>=3.9.0
 beautifulsoup4>=4.12.0
 tenacity>=8.2.0
-
-# Utils - 纯 Python
 rich>=13.0.0
+
+# JWT认证 - 使用pycryptodome替代cryptography（纯Python实现）
+python-jose[cryptography]>=3.3.0
+pycryptodome>=3.20.0
+
+# 密码哈希 - 使用bcrypt预编译版本
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.0.1
+
+# HTTP客户端 - aiohttp有预编译wheel，httpx作为备选
+aiohttp>=3.9.0
+httpx>=0.26.0
+
+# 可选依赖（需要系统库）
+# python-magic>=0.4.27
+
+# 开发依赖
+# pytest>=7.0.0
+# pytest-asyncio>=0.21.0
+# httpx>=0.26.0
