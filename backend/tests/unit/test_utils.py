@@ -55,9 +55,9 @@ class TestSafeLogger:
 
     def test_sanitize_bearer(self):
         logger = SafeLogger("test")
-        message = "Authorization: Bearer token123"
+        message = "Bearer abc123token"
         result = logger._sanitize(message)
-        assert "token123" not in result
+        assert "abc123token" not in result
 
     def test_sanitize_no_sensitive(self):
         logger = SafeLogger("test")
