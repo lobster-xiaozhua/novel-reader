@@ -1,441 +1,438 @@
 #!/bin/bash
 
-# Novel Reader 一键启动脚本
-# 支持 Linux / macOS / WSL / Termux
-# 用法: bash start.sh [command]  或  ./start.sh [command]（需执行权限）
-
 set -e
 
-PROJECT_NAME="novel-reader"
-FRONTEND_DIR="frontend"
-BACKEND_DIR="backend"
-DATA_DIR="data"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALLED_FILE="$SCRIPT_DIR/.installed"
+BACKEND_DIR="$SCRIPT_DIR/backend"
+FRONTEND_DIR="$SCRIPT_DIR/frontend"
+DATA_DIR="$SCRIPT_DIR/data"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
 NC='\033[0m'
 
 print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 print_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
 print_error() { echo -e "${RED}[✗]${NC} $1"; }
-print_step() { echo -e "${CYAN}[→]${NC} $1"; }
+print_header() { echo -e "\n${CYAN}════════════════════════════════════════════════${NC}"; echo -e "${CYAN}  $1${NC}"; echo -e "${CYAN}════════════════════════════════════════════════${NC}\n"; }
 
-print_banner() {
-    echo ""
-    echo -e "${MAGENTA}╔═══════════════════════════════════════════════════╗${NC}"
-    echo -e "${MAGENTA}║${NC}  ${CYAN}Novel Reader - 一键启动${NC}                        ${MAGENTA}║${NC}"
-    echo -e "${MAGENTA}╚═══════════════════════════════════════════════════╝${NC}"
-    echo ""
-}
-
-check_command() {
-    if ! command -v "$1" &> /dev/null; then
-        print_error "$1 未安装"
-        return 1
+detect_system() {
+    if [ -d "$PREFIX" ] && [ -f "$PREFIX/bin/bash" ]; then
+        echo "termux"
+        return
     fi
-    return 0
-}
-
-check_node() {
-    if ! command -v node &> /dev/null; then
-        print_error "Node.js 未安装"
-        print_info "请访问 https://nodejs.org/ 下载安装"
-        return 1
+    
+    if command -v docker &> /dev/null && docker info &> /dev/null 2>&1; then
+        echo "docker"
+        return
     fi
-    return 0
+    
+    if command -v apt-get &> /dev/null; then
+        echo "debian"
+        return
+    fi
+    if command -v yum &> /dev/null; then
+        echo "redhat"
+        return
+    fi
+    if command -v dnf &> /dev/null; then
+        echo "redhat"
+        return
+    fi
+    if command -v pacman &> /dev/null; then
+        echo "arch"
+        return
+    fi
+    if command -v apk &> /dev/null; then
+        echo "alpine"
+        return
+    fi
+    if command -v brew &> /dev/null; then
+        echo "macos"
+        return
+    fi
+    
+    echo "unknown"
 }
 
-detect_region() {
+detect_china() {
     if command -v curl &> /dev/null; then
         COUNTRY=$(curl -s --max-time 3 "https://ipinfo.io/country" 2>/dev/null || echo "unknown")
-        if [ "$COUNTRY" = "CN" ]; then
-            echo "china"
-            return
-        fi
+        [ "$COUNTRY" = "CN" ] && echo "china" || echo "global"
+    else
+        echo "global"
     fi
-    echo "global"
 }
 
 setup_mirrors() {
-    print_step "配置镜像源..."
-
-    REGION=$(detect_region)
-
+    REGION=$(detect_china)
     if [ "$REGION" = "china" ]; then
-        print_info "检测到中国地区，配置国内镜像..."
-
         mkdir -p ~/.pip
         cat > ~/.pip/pip.conf << 'EOF'
 [global]
 index-url = https://mirrors.aliyun.com/pypi/simple/
-timeout = 60
+timeout = 120
+
 [install]
 trusted-host = mirrors.aliyun.com
 EOF
-        print_success "pip: 阿里云镜像"
-
         npm config set registry https://registry.npmmirror.com 2>/dev/null || true
-        print_success "npm: npmmirror.com"
-
-        mkdir -p ~/.docker
-        cat > ~/.docker/daemon.json << 'EOF'
-{
-  "registry-mirrors": [
-    "https://docker.1ms.run",
-    "https://docker.xuanyuan.me"
-  ]
-}
-EOF
-        print_success "Docker: 镜像加速已配置"
-    else
-        print_info "使用官方源"
     fi
 }
 
 create_directories() {
-    mkdir -p "$DATA_DIR"/{books,index,static,logs,cache,backups,versions}
+    mkdir -p "$DATA_DIR"/{books,index,static,logs,cache,backups}
 }
 
 check_env() {
-    if [ ! -f ".env" ]; then
-        print_info "创建环境配置文件..."
-        cat > .env << EOF
-SECRET_KEY=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))")
+    if [ ! -f "$SCRIPT_DIR/.env" ]; then
+        SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null) || \
+                     SECRET_KEY=$(openssl rand -hex 32 2>/dev/null) || \
+                     SECRET_KEY="dev-secret-key-$(date +%s)"
+        cat > "$SCRIPT_DIR/.env" << EOF
+SECRET_KEY=$SECRET_KEY
 DEBUG=false
 DATABASE_URL=sqlite+aiosqlite:///data/novel.db
 REDIS_URL=redis://localhost:6379
+DATA_DIR=./data
+BOOKS_DIR=./data/books
+INDEX_DIR=./data/index
+STATIC_DIR=./data/static
+LOGS_DIR=./data/logs
+CACHE_DIR=./data/cache
 EOF
         print_success ".env 已创建"
     fi
 }
 
-install_python_deps() {
-    print_step "安装 Python 依赖..."
-
+install_termux_deps() {
+    print_header "安装 Termux 依赖"
+    
+    print_info "更新包列表..."
+    pkg update -y
+    
+    print_info "安装基础工具..."
+    pkg install -y python python-pip nodejs-lts npm git curl wget
+    
+    setup_mirrors
+    
+    create_directories
+    check_env
+    
     cd "$BACKEND_DIR"
+    
+    if [ ! -d "venv" ]; then
+        python -m venv venv
+    fi
+    
+    source venv/bin/activate
+    
+    print_info "安装 Python 依赖 (仅使用预编译包)..."
+    pip install --upgrade pip setuptools wheel
+    pip install --only-binary=:all: \
+        fastapi==0.110.0 \
+        uvicorn[standard]==0.27.1 \
+        sqlalchemy==2.0.27 \
+        aiosqlite==0.19.0 \
+        redis==5.0.1 \
+        "pydantic==2.6.1" \
+        pydantic-settings==2.1.0 \
+        python-multipart==0.0.9 \
+        beautifulsoup4==4.12.3 \
+        tenacity==8.2.3 \
+        rich==13.7.0 \
+        "python-jose[cryptography]==3.3.0" \
+        pycryptodome==3.20.0 \
+        passlib==1.7.4 \
+        bcrypt==4.1.2 \
+        aiohttp==3.9.3 \
+        httpx==0.27.0
+    
+    deactivate
+    cd "$SCRIPT_DIR"
+    
+    cd "$FRONTEND_DIR"
+    npm install
+    cd "$SCRIPT_DIR"
+    
+    print_success "依赖安装完成"
+}
 
+install_docker_deps() {
+    print_header "Docker 模式"
+    
+    if ! command -v docker &> /dev/null; then
+        print_error "Docker 未安装"
+        exit 1
+    fi
+    
+    if ! docker info &> /dev/null 2>&1; then
+        print_error "Docker 未运行"
+        exit 1
+    fi
+    
+    setup_mirrors
+    create_directories
+    check_env
+    
+    print_info "构建并启动服务..."
+    docker-compose up -d
+    
+    print_success "服务已启动"
+    print_info "前端: http://localhost"
+    print_info "API:  http://localhost:8000/docs"
+}
+
+install_native_deps() {
+    print_header "原生模式安装"
+    
+    SYSTEM=$(detect_system)
+    setup_mirrors
+    create_directories
+    check_env
+    
+    case "$SYSTEM" in
+        debian)
+            sudo apt-get update -qq
+            sudo apt-get install -y python3 python3-venv python3-pip nodejs npm redis-server curl git
+            ;;
+        redhat)
+            sudo yum install -y python3 python3-pip nodejs npm redis curl git
+            ;;
+        arch)
+            sudo pacman -Sy --noconfirm python python-pip nodejs npm redis curl git
+            ;;
+        alpine)
+            apk add --no-cache python3 py3-pip nodejs npm redis curl git
+            ;;
+        macos)
+            [ ! -f /usr/local/bin/brew ] && brew install python node redis
+            ;;
+    esac
+    
+    cd "$BACKEND_DIR"
+    
     if [ ! -d "venv" ]; then
         python3 -m venv venv
     fi
-
+    
     source venv/bin/activate
-    pip install --upgrade pip -q
-    pip install -r requirements.txt -q
+    
+    print_info "安装 Python 依赖..."
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    
     deactivate
-    cd ..
-    print_success "Python 依赖安装完成"
-}
-
-install_node_deps() {
-    print_step "安装 Node.js 依赖..."
-
+    cd "$SCRIPT_DIR"
+    
     cd "$FRONTEND_DIR"
     npm install
-    cd ..
-    print_success "Node.js 依赖安装完成"
+    cd "$SCRIPT_DIR"
+    
+    print_success "依赖安装完成"
 }
 
-setup_global() {
-    print_step "配置全局命令..."
-
-    local installed=false
-
-    # 检测 Termux (Android)
-    if [ -d "$PREFIX" ] && [ -w "$PREFIX/bin" ]; then
-        local bin_dir="$PREFIX/bin"
-        print_info "检测到 Termux 环境"
-
-        if [ -f "$SCRIPT_DIR/readweb" ]; then
-            ln -sf "$SCRIPT_DIR/readweb" "$bin_dir/readweb"
-            print_success "readweb → $bin_dir/readweb"
-            installed=true
-        fi
-
-        if [ -f "$SCRIPT_DIR/update.sh" ]; then
-            ln -sf "$SCRIPT_DIR/update.sh" "$bin_dir/update.sh"
-            print_success "update.sh → $bin_dir/update.sh"
-            installed=true
-        fi
-    else
-        # 标准 Linux/Mac
-        local bin_dir="$HOME/.local/bin"
-        mkdir -p "$bin_dir"
-
-        if [ -f "$SCRIPT_DIR/readweb" ]; then
-            ln -sf "$SCRIPT_DIR/readweb" "$bin_dir/readweb"
-            print_success "readweb → $bin_dir/readweb"
-            installed=true
-        fi
-
-        if [ -f "$SCRIPT_DIR/update.sh" ]; then
-            ln -sf "$SCRIPT_DIR/update.sh" "$bin_dir/update.sh"
-            print_success "update.sh → $bin_dir/update.sh"
-            installed=true
-        fi
-
-        if [ "$installed" = true ]; then
-            local shell_rc=""
-            if [ -n "$BASH_VERSION" ]; then
-                shell_rc="$HOME/.bashrc"
-            elif [ -n "$ZSH_VERSION" ]; then
-                shell_rc="$HOME/.zshrc"
-            else
-                shell_rc="$HOME/.profile"
-            fi
-
-            if ! grep -q ".local/bin" "$shell_rc" 2>/dev/null; then
-                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$shell_rc"
-                print_success "已添加到 PATH"
-            fi
+start_termux_services() {
+    print_header "启动 Termux 服务"
+    
+    if ! pgrep -x redis-server > /dev/null 2>&1; then
+        if command -v redis-server &> /dev/null; then
+            redis-server --daemonize yes --port 6379 --maxmemory 64mb --maxmemory-policy allkeys-lru 2>/dev/null || true
         fi
     fi
-
-    if [ "$installed" = true ]; then
-        echo "$PROJECT_NAME" > "$INSTALLED_FILE"
-        echo ""
-        print_success "全局命令配置完成!"
-        echo -e "${YELLOW}请重新打开终端或运行:${NC}"
-        echo "  source ~/.bashrc"
-        echo ""
-        echo -e "${YELLOW}以后可直接使用:${NC}"
-        echo "  readweb start    # 启动项目"
-        echo "  readweb update   # 更新项目"
-        echo ""
+    
+    cd "$BACKEND_DIR"
+    
+    if [ ! -d "venv" ]; then
+        python -m venv venv
     fi
-}
-
-first_run_setup() {
-    if [ ! -f "$INSTALLED_FILE" ]; then
-        print_banner
-        echo -e "${CYAN}首次运行检测到，自动配置环境...${NC}"
-        echo ""
-
-        setup_mirrors
-        create_directories
-        check_env
-
-        echo ""
-        print_step "安装依赖..."
-        install_python_deps
-        install_node_deps
-
-        echo ""
-
-        if command -v docker &> /dev/null && docker info &> /dev/null; then
-            print_info "检测到 Docker，可使用 ./start.sh 启动"
-        else
-            print_info "检测到本地模式，配置 readweb..."
-            setup_global
-        fi
-
-        echo ""
-        echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-        echo -e "${GREEN}  环境配置完成!${NC}"
-        echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-        echo ""
-        echo -e "${YELLOW}下一步:${NC}"
-        echo "  bash start.sh start    # 启动项目（推荐）"
-        echo "  ./start.sh start       # 需要执行权限"
-        echo "  readweb start          # 全局命令"
-        echo ""
-        return 0
-    fi
-    return 1
-}
-
-start_backend() {
-    if command -v docker &> /dev/null && docker info &> /dev/null; then
-        print_step "启动 Docker 服务..."
-        docker-compose up -d redis
-        sleep 2
-        docker-compose up -d backend
-    else
-        print_step "启动本地后端服务..."
-        cd "$BACKEND_DIR"
-        if [ ! -d "venv" ]; then
-            python3 -m venv venv
-        fi
-        source venv/bin/activate
-        pip install -r requirements.txt -q 2>/dev/null || pip install -r requirements.txt
-        nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
-        echo $! > uvicorn.pid
-        deactivate
-        cd ..
-    fi
-
-    print_step "等待服务就绪..."
+    
+    source venv/bin/activate
+    
+    export DATABASE_URL="sqlite+aiosqlite:///data/novel.db"
+    export REDIS_URL="redis://localhost:6379"
+    export PYTHONDONTWRITEBYTECODE=1
+    
+    nohup python -m uvicorn main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
+    echo $! > uvicorn.pid
+    
+    deactivate
+    cd "$SCRIPT_DIR"
+    
+    cd "$FRONTEND_DIR"
+    nohup npm run dev -- --host 0.0.0.0 --port 8080 > ../data/logs/frontend.log 2>&1 &
+    echo $! > vite.pid
+    cd "$SCRIPT_DIR"
+    
+    print_info "等待服务启动..."
     for i in {1..30}; do
-        if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
-            print_success "后端服务已就绪"
-            return 0
-        fi
+        curl -s http://localhost:8000/api/health > /dev/null 2>&1 && break
         sleep 1
     done
-    print_warning "后端启动较慢，请稍后检查"
+    
+    print_success "服务已启动"
+    print_info "前端: http://localhost:8080"
+    print_info "API:  http://localhost:8000/docs"
 }
 
-start_frontend() {
-    if command -v docker &> /dev/null && docker info &> /dev/null; then
-        if [ ! -d "$FRONTEND_DIR/dist" ]; then
-            print_step "构建前端..."
-            cd "$FRONTEND_DIR"
-            npm run build
-            cd ..
+start_native_services() {
+    print_header "启动原生服务"
+    
+    if ! pgrep -x redis-server > /dev/null 2>&1; then
+        if command -v redis-server &> /dev/null; then
+            redis-server --daemonize yes --port 6379 --maxmemory 64mb --maxmemory-policy allkeys-lru 2>/dev/null || true
         fi
-        docker-compose up -d frontend
-    else
-        print_step "启动前端服务..."
-        cd "$FRONTEND_DIR"
-        npm run dev > ../data/logs/frontend.log 2>&1 &
-        echo $! > vite.pid
-        cd ..
     fi
-    print_success "前端服务已启动"
+    
+    cd "$BACKEND_DIR"
+    
+    if [ ! -d "venv" ]; then
+        python3 -m venv venv
+    fi
+    
+    source venv/bin/activate
+    
+    export DATABASE_URL="sqlite+aiosqlite:///data/novel.db"
+    export REDIS_URL="redis://localhost:6379"
+    export PYTHONDONTWRITEBYTECODE=1
+    
+    nohup python -m uvicorn main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
+    echo $! > uvicorn.pid
+    
+    deactivate
+    cd "$SCRIPT_DIR"
+    
+    cd "$FRONTEND_DIR"
+    nohup npm run dev -- --host 0.0.0.0 --port 80 > ../data/logs/frontend.log 2>&1 &
+    echo $! > vite.pid
+    cd "$SCRIPT_DIR"
+    
+    print_info "等待服务启动..."
+    for i in {1..30}; do
+        curl -s http://localhost:8000/api/health > /dev/null 2>&1 && break
+        sleep 1
+    done
+    
+    print_success "服务已启动"
+    print_info "前端: http://localhost"
+    print_info "API:  http://localhost:8000/docs"
 }
 
 stop_services() {
-    print_step "停止服务..."
-
-    if command -v docker &> /dev/null && docker info &> /dev/null; then
-        docker-compose down 2>/dev/null || true
-    else
-        [ -f "$BACKEND_DIR/uvicorn.pid" ] && kill $(cat "$BACKEND_DIR/uvicorn.pid") 2>/dev/null || true
-        [ -f "$FRONTEND_DIR/vite.pid" ] && kill $(cat "$FRONTEND_DIR/vite.pid") 2>/dev/null || true
-        rm -f "$BACKEND_DIR/uvicorn.pid" "$FRONTEND_DIR/vite.pid"
+    print_header "停止服务"
+    
+    if [ -f "$BACKEND_DIR/uvicorn.pid" ]; then
+        kill $(cat "$BACKEND_DIR/uvicorn.pid") 2>/dev/null || true
+        rm -f "$BACKEND_DIR/uvicorn.pid"
     fi
-    print_success "服务已停止"
+    
+    if [ -f "$FRONTEND_DIR/vite.pid" ]; then
+        kill $(cat "$FRONTEND_DIR/vite.pid") 2>/dev/null || true
+        rm -f "$FRONTEND_DIR/vite.pid"
+    fi
+    
+    pkill -f "uvicorn" 2>/dev/null || true
+    pkill -f "vite" 2>/dev/null || true
+    
+    docker-compose down 2>/dev/null || true
+    
+    if command -v redis-cli &> /dev/null; then
+        redis-cli shutdown 2>/dev/null || true
+    fi
+    
+    print_success "所有服务已停止"
 }
 
 show_status() {
-    print_step "服务状态"
+    print_header "服务状态"
+    
+    SYSTEM=$(detect_system)
+    echo "系统: $SYSTEM"
+    
+    case "$SYSTEM" in
+        docker)
+            docker-compose ps 2>/dev/null || print_info "Docker 未运行"
+            ;;
+        termux)
+            pgrep -f "uvicorn" > /dev/null && print_success "后端: 运行中" || print_error "后端: 未运行"
+            pgrep -f "vite" > /dev/null && print_success "前端: 运行中" || print_error "前端: 未运行"
+            ;;
+        *)
+            pgrep -x uvicorn > /dev/null && print_success "后端: 运行中" || print_error "后端: 未运行"
+            pgrep -f "vite|npm" > /dev/null && print_success "前端: 运行中" || print_error "前端: 未运行"
+            ;;
+    esac
+    
     echo ""
-
-    if command -v docker &> /dev/null && docker info &> /dev/null; then
-        docker-compose ps
-    else
-        echo -e "${CYAN}[Local 模式]${NC}"
-
-        [ -f "$BACKEND_DIR/uvicorn.pid" ] && kill -0 $(cat "$BACKEND_DIR/uvicorn.pid") 2>/dev/null && \
-            print_success "后端: 运行中" || print_error "后端: 未运行"
-
-        [ -f "$FRONTEND_DIR/vite.pid" ] && kill -0 $(cat "$FRONTEND_DIR/vite.pid") 2>/dev/null && \
-            print_success "前端: 运行中" || print_error "前端: 未运行"
-    fi
-
-    echo ""
-    curl -s http://localhost:8000/api/health > /dev/null 2>&1 && \
-        print_success "API: 运行中" || print_error "API: 未响应"
-
-    curl -s -o /dev/null -w "%{http_code}" http://localhost 2>/dev/null | grep -q "200" && \
-        print_success "前端: 运行中" || print_error "前端: 未响应"
+    curl -s http://localhost:8000/api/health > /dev/null 2>&1 && print_success "API: 运行中" || print_error "API: 未响应"
 }
 
 show_help() {
-    print_banner
     cat << EOF
-用法: bash start.sh [command]
+Novel Reader 智能启动脚本
+
+用法: ./start.sh [command]
 
 命令:
-  start      启动项目
-  stop       停止服务
-  restart    重启服务
-  status     查看状态
-  logs       查看日志
-  deps       安装依赖
-  mirror     配置镜像
-  global     配置全局命令
-  help       显示帮助
+  install     自动检测系统并安装依赖
+  start       启动所有服务
+  stop        停止所有服务
+  status      查看服务状态
+
+自动检测支持:
+  - Termux (Android)
+  - Docker
+  - Linux (Debian/RHEL/Arch/Alpine)
+  - macOS
 
 示例:
-  bash start.sh start      # 启动项目（推荐）
-  bash start.sh deps       # 安装依赖
-  bash start.sh global     # 配置全局命令
-
-快捷方式（需执行权限）:
-  ./start.sh start         # 启动项目
-  ./start.sh deps          # 安装依赖
-
-全局命令 (配置后可用):
-  readweb start            # 启动项目
-  readweb update           # 更新项目
-  readweb status           # 查看状态
+  ./start.sh install   # 安装依赖
+  ./start.sh start    # 启动服务
+  ./start.sh status   # 查看状态
 EOF
 }
 
-case "${1:-}" in
-    start)
-        first_run_setup || true
-        create_directories
-        check_env
-        start_backend
-        start_frontend
-        echo ""
-        echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-        echo -e "${GREEN}  项目已启动!${NC}"
-        echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-        echo ""
-        echo -e "  ${GREEN}📖${NC} 前端:  http://localhost"
-        echo -e "  ${GREEN}🔧${NC} API:   http://localhost:8000/docs"
-        echo ""
-        ;;
-    stop)
-        stop_services
-        ;;
-    restart)
-        stop_services
-        sleep 1
-        ./start.sh start
-        ;;
-    status)
-        show_status
-        ;;
-    logs)
-        if command -v docker &> /dev/null && docker info &> /dev/null; then
-            docker-compose logs -f
-        else
-            # 使用智能日志整合器
-            if [ -f "scripts/log_unifier.py" ] && command -v python3 &> /dev/null; then
-                python3 scripts/log_unifier.py
-            else
-                # 降级到基础 tail
-                if [ -f "data/logs/backend.log" ] && [ -f "data/logs/frontend.log" ]; then
-                    print_info "同时显示前后端日志 (Ctrl+C 退出)"
-                    echo ""
-                    tail -f data/logs/backend.log data/logs/frontend.log
-                elif [ -f "data/logs/backend.log" ]; then
-                    tail -f data/logs/backend.log
-                elif [ -f "data/logs/frontend.log" ]; then
-                    tail -f data/logs/frontend.log
-                else
-                    print_warning "日志文件不存在"
-                fi
-            fi
-        fi
-        ;;
-    deps)
-        setup_mirrors
-        install_python_deps
-        install_node_deps
-        ;;
-    mirror)
-        setup_mirrors
-        ;;
-    global)
-        setup_global
-        ;;
-    help|--help|-h|"")
-        show_help
-        ;;
-    *)
-        print_error "未知命令: $1"
-        show_help
-        exit 1
-        ;;
-esac
+main() {
+    SYSTEM=$(detect_system)
+    print_info "检测到系统: $SYSTEM"
+    
+    case "${1:-}" in
+        install)
+            case "$SYSTEM" in
+                termux) install_termux_deps ;;
+                docker) install_docker_deps ;;
+                *) install_native_deps ;;
+            esac
+            ;;
+        start)
+            case "$SYSTEM" in
+                termux) start_termux_services ;;
+                docker)
+                    docker-compose up -d
+                    print_success "Docker 服务已启动"
+                    ;;
+                *) start_native_services ;;
+            esac
+            ;;
+        stop)
+            stop_services
+            ;;
+        status)
+            show_status
+            ;;
+        help|--help|-h|"")
+            show_help
+            ;;
+        *)
+            print_error "未知命令: $1"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
