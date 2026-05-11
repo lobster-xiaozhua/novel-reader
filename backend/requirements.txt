@@ -1,18 +1,24 @@
+# Core - 纯 Python 版本，避免编译依赖
 fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
+uvicorn>=0.24.0
 sqlalchemy[asyncio]>=2.0.0
 aiosqlite>=0.19.0
 redis>=5.0.0
-pydantic>=2.5.0
-pydantic-settings>=2.1.0
+
+# Pydantic v1 纯 Python 版本（避免 Rust 编译）
+pydantic<2.0.0
+pydantic-settings<2.0.0
+
+# Auth
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 python-multipart>=0.0.6
+
+# HTTP & Parsing
 aiohttp>=3.9.0
 beautifulsoup4>=4.12.0
 tenacity>=8.2.0
+
+# Utils
 python-magic>=0.4.27
 rich>=13.0.0
-
-# Optional - 系统监控 (Linux/Windows/Mac)
-# psutil>=5.9.0
