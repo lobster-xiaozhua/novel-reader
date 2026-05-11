@@ -9,9 +9,9 @@ redis>=5.0.0
 pydantic<2.0.0
 pydantic-settings<2.0.0
 
-# Auth
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
+# Auth - 使用纯 Python 版本
+python-jose>=3.3.0
+passlib>=1.7.4
 python-multipart>=0.0.6
 
 # HTTP & Parsing
@@ -19,6 +19,5 @@ aiohttp>=3.9.0
 beautifulsoup4>=4.12.0
 tenacity>=8.2.0
 
-# Utils
-python-magic>=0.4.27
+# Utils - 纯 Python
 rich>=13.0.0
