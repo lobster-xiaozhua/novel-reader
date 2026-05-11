@@ -1,408 +1,433 @@
-# Novel Reader 跨平台部署脚本 (Windows PowerShell)
-# 用法: .\deploy.ps1 [mode]
-#
-# 模式:
-#   local      本地模式 (Docker Desktop)
-#   wsl        WSL2 模式 (推荐中国用户)
-#   native     原生模式 (不使用 Docker)
+# Novel Reader 跨平台部署脚本 - Windows PowerShell
+# 支持 Docker Desktop / WSL2 / 本地安装
+# 用法:
+#   .\deploy.ps1              - 交互式菜单
+#   .\deploy.ps1 docker        - Docker 部署
+#   .\deploy.ps1 wsl          - WSL2 部署
+#   .\deploy.ps1 local        - 本地安装
+#   .\deploy.ps1 termux       - Termux 安装 (通过 WSL)
+#   .\deploy.ps1 status       - 查看状态
+#   .\deploy.ps1 uninstall    - 卸载
 
 param(
-    [string]$Mode = "local"
+    [string]$Command = ""
 )
 
+$ErrorActionPreference = "Continue"
 $PROJECT_NAME = "novel-reader"
-$BACKEND_DIR = "backend"
-$FRONTEND_DIR = "frontend"
-$DATA_DIR = "data"
+$PROJECT_DIR = $PSScriptRoot
+$BACKEND_DIR = Join-Path $PROJECT_DIR "backend"
+$FRONTEND_DIR = Join-Path $PROJECT_DIR "frontend"
+$DATA_DIR = Join-Path $PROJECT_DIR "data"
+$INSTALL_MARKER = Join-Path $PROJECT_DIR ".installed"
 
-$Red = "Red"
-$Green = "Green"
-$Yellow = "Yellow"
-$Blue = "Cyan"
+$ColRed = "Red"
+$ColGreen = "Green"
+$ColYellow = "Yellow"
+$ColBlue = "Cyan"
+$ColMagenta = "Magenta"
 
-function Print-Info { param($msg) Write-Host "[INFO] $msg" -ForegroundColor $Blue }
-function Print-Success { param($msg) Write-Host "[OK] $msg" -ForegroundColor $Green }
-function Print-Warning { param($msg) Write-Host "[WARN] $msg" -ForegroundColor $Yellow }
-function Print-Error { param($msg) Write-Host "[ERROR] $msg" -ForegroundColor $Red }
-function Print-Header { param($msg)
+function Write-Info { param($msg) Write-Host "[INFO] $msg" -ForegroundColor $ColBlue }
+function Write-Success { param($msg) Write-Host "[OK] $msg" -ForegroundColor $ColGreen }
+function Write-Warn { param($msg) Write-Host "[WARN] $msg" -ForegroundColor $ColYellow }
+function Write-Err { param($msg) Write-Host "[ERROR] $msg" -ForegroundColor $ColRed }
+function Write-Header { param($msg)
     Write-Host ""
-    Write-Host ("══════════════════════════════════════════════════════") -ForegroundColor Cyan
-    Write-Host ("  $msg") -ForegroundColor Cyan
-    Write-Host ("══════════════════════════════════════════════════════") -ForegroundColor Cyan
+    Write-Host ("══════ $msg ═════=") -ForegroundColor $ColMagenta
 }
 
-function Test-Command { param($cmd)
-    if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
-        return $false
-    }
-    return $true
+function Test-Command($cmd) {
+    try {
+        $null = Get-Command $cmd -ErrorAction Stop
+        return $true
+    } catch { return $false }
 }
 
 function Get-Region {
     try {
-        $response = Invoke-WebRequest -Uri "https://ipinfo.io/country" -UseBasicParsing -TimeoutSec 3
-        if ($response.Content -eq "CN") {
-            return "china"
-        }
+        $r = Invoke-WebRequest -Uri "https://ipinfo.io/country" -UseBasicParsing -TimeoutSec 3 -ErrorAction SilentlyContinue
+        if ($r.Content -trim -eq "CN") { return "china" }
     } catch {}
     return "global"
 }
 
-function Set-Mirrors {
+function Set-Mirrors-Windows {
+    Write-Header "配置镜像源"
     $region = Get-Region
 
     if ($region -eq "china") {
-        Print-Info "检测到中国地区，配置国内镜像源..."
+        Write-Info "检测到中国地区，配置镜像..."
 
         $pipDir = "$env:APPDATA\pip"
-        if (-not (Test-Path $pipDir)) {
-            New-Item -ItemType Directory -Force -Path $pipDir | Out-Null
-        }
+        if (-not (Test-Path $pipDir)) { New-Item -ItemType Directory -Force -Path $pipDir | Out-Null }
         @"
 [global]
 index-url = https://mirrors.aliyun.com/pypi/simple/
 timeout = 120
-retries = 5
 
 [install]
 trusted-host = mirrors.aliyun.com
              pypi.tuna.tsinghua.edu.cn
 "@ | Out-File -FilePath "$pipDir\pip.ini" -Encoding UTF8
-        Print-Success "pip 镜像: 阿里云"
+        Write-Success "pip: 阿里云"
 
-        npm config set registry https://registry.npmmirror.com
-        Print-Success "npm 镜像: npmmirror.com"
+        try {
+            npm config set registry https://registry.npmmirror.com
+            Write-Success "npm: npmmirror.com"
+        } catch { Write-Warn "npm 配置失败" }
 
         $dockerDir = "$env:USERPROFILE\.docker"
-        if (-not (Test-Path $dockerDir)) {
-            New-Item -ItemType Directory -Force -Path $dockerDir | Out-Null
-        }
+        if (-not (Test-Path $dockerDir)) { New-Item -ItemType Directory -Force -Path $dockerDir | Out-Null }
         @"
 {
   "registry-mirrors": [
     "https://docker.1ms.run",
-    "https://docker.xuanyuan.me",
-    "https://dockerproxy.cn"
+    "https://docker.xuanyuan.me"
   ]
 }
 "@ | Out-File -FilePath "$dockerDir\daemon.json" -Encoding UTF8
-        Print-Success "Docker 镜像加速已配置"
+        Write-Success "Docker 镜像加速已配置"
     } else {
-        Print-Info "使用官方源"
+        Write-Info "使用官方源"
     }
 }
 
-function New-DataDirectories {
-    Print-Info "创建数据目录..."
-    @("books", "index", "static", "logs", "cache", "backups") | ForEach-Object {
-        New-Item -ItemType Directory -Force -Path "$DATA_DIR\$_" | Out-Null
+function New-DataDirs {
+    Write-Info "创建数据目录..."
+    $dirs = @("books", "index", "static", "logs", "cache", "backups", "versions")
+    foreach ($d in $dirs) {
+        $path = Join-Path $DATA_DIR $d
+        if (-not (Test-Path $path)) { New-Item -ItemType Directory -Force -Path $path | Out-Null }
     }
-    Print-Success "目录创建完成"
+    Write-Success "目录创建完成"
 }
 
 function Test-EnvFile {
-    if (-not (Test-Path ".env")) {
-        Print-Info "创建 .env 配置文件..."
-        $secretKey = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | ForEach-Object { [char]$_ })
+    $envFile = Join-Path $PROJECT_DIR ".env"
+    if (-not (Test-Path $envFile)) {
+        Write-Info "创建 .env 配置文件..."
+        $secret = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | ForEach-Object { [char]$_ })
         @"
-SECRET_KEY=$secretKey
+SECRET_KEY=$secret
 DEBUG=false
-DATABASE_URL=sqlite+aiosqlite:///data/novel.db
-REDIS_URL=redis://redis:6379
-DATA_DIR=./data
-BOOKS_DIR=./data/books
-INDEX_DIR=./data/index
-STATIC_DIR=./data/static
-LOGS_DIR=./data/logs
-CACHE_DIR=./data/cache
-"@ | Out-File -FilePath ".env" -Encoding UTF8
-        Print-Success ".env 文件已创建"
+DATABASE_URL=sqlite+aiosqlite:///$($DATA_DIR.Replace('\','/'))/novel.db
+REDIS_URL=redis://localhost:6379
+DATA_DIR=$DATA_DIR
+BOOKS_DIR=$DATA_DIR\books
+INDEX_DIR=$DATA_DIR\index
+STATIC_DIR=$DATA_DIR\static
+LOGS_DIR=$DATA_DIR\logs
+CACHE_DIR=$DATA_DIR\cache
+"@ | Out-File -FilePath $envFile -Encoding UTF8
+        Write-Success ".env 已创建"
     }
 }
 
-function Install-PythonDeps-Local {
-    Print-Info "安装 Python 依赖 (本地模式)..."
+function Install-PythonDeps-Windows($venvPath) {
+    $python = if ($venvPath) { Join-Path $venvPath "Scripts\python.exe" } else { "python" }
+    $pip = if ($venvPath) { Join-Path $venvPath "Scripts\pip.exe" } else { "pip" }
 
-    Set-Location $BACKEND_DIR
+    Write-Info "升级 pip..."
+    & $pip install --upgrade pip --quiet
 
-    if (-not (Test-Path "venv")) {
-        Print-Info "创建 Python 虚拟环境..."
-        python -m venv venv
-    }
+    $reqFile = Join-Path $BACKEND_DIR "requirements-pure-python.txt"
+    if (-not (Test-Path $reqFile)) { $reqFile = Join-Path $BACKEND_DIR "requirements.txt" }
 
-    & .\venv\Scripts\Activate.ps1
+    Write-Info "安装 Python 依赖..."
+    & $pip install -r $reqFile --quiet
 
-    Print-Info "升级 pip..."
-    pip install --upgrade pip
-
-    Print-Info "安装依赖 (使用兼容版本)..."
-    if (Test-Path "requirements-compat.txt") {
-        pip install -r requirements-compat.txt
-    } else {
-        pip install -r requirements.txt
-    }
-
-    deactivate
-    Set-Location ..
-    Print-Success "Python 依赖安装完成"
+    Write-Success "Python 依赖安装完成"
 }
 
-function Install-NodeDeps-Local {
-    Print-Info "安装 Node.js 依赖 (本地模式)..."
-
+function Install-NodeDeps-Windows {
+    Write-Info "安装 Node.js 依赖..."
     Set-Location $FRONTEND_DIR
     npm install
-    Set-Location ..
-
-    Print-Success "Node.js 依赖安装完成"
+    Set-Location $PROJECT_DIR
+    Write-Success "Node.js 依赖安装完成"
 }
 
-function Start-Redis-Local {
-    Print-Info "检查 Redis..."
-    if (Test-Command "redis-server") {
-        Print-Info "启动 Redis..."
-        redis-server --daemonize yes --port 6379 --maxmemory 64mb --maxmemory-policy allkeys-lru
-    } else {
-        Print-Warning "Redis 未安装，尝试使用 Docker..."
-        if (Test-Command "docker") {
-            docker run -d --name novel-reader-redis -p 6379:6379 redis:7-alpine --maxmemory 64mb --maxmemory-policy allkeys-lru
-        } else {
-            Print-Warning "Redis 不可用，禁用缓存功能"
-        }
-    }
-}
-
-function Start-Backend-Local {
-    Print-Info "启动后端服务 (原生模式)..."
-
-    Set-Location $BACKEND_DIR
-
-    if (-not (Test-Path "venv")) {
-        python -m venv venv
-    }
-
-    & .\venv\Scripts\Activate.ps1
-
-    $env:DATABASE_URL = "sqlite+aiosqlite:///data/novel.db"
-    $env:REDIS_URL = "redis://localhost:6379"
-    $env:PYTHONDONTWRITEBYTECODE = "1"
-
-    Start-Process -FilePath "python" -ArgumentList "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000" -WindowStyle Hidden
-
-    deactivate
-    Set-Location ..
-
-    Print-Info "等待后端启动..."
-    for ($i = 1; $i -le 30; $i++) {
-        try {
-            $response = Invoke-WebRequest -Uri "http://localhost:8000/api/health" -UseBasicParsing -TimeoutSec 2
-            if ($response.StatusCode -eq 200) {
-                Print-Success "后端服务已就绪"
-                return
-            }
-        } catch {}
-        Start-Sleep -Seconds 1
-    }
-    Print-Warning "后端启动较慢，请稍后检查"
-}
-
-function Start-Frontend-Local {
-    Print-Info "启动前端服务 (原生模式)..."
-
-    Set-Location $FRONTEND_DIR
-
-    if (-not (Test-Path "node_modules")) {
-        Print-Info "安装前端依赖..."
-        npm install
-    }
-
-    Start-Process -FilePath "npm" -ArgumentList "run", "dev", "--", "--host", "0.0.0.0", "--port", "80" -WindowStyle Hidden
-
-    Set-Location ..
-    Print-Success "前端服务已启动"
-}
-
-function Test-Docker {
-    try {
-        $null = docker info 2>$null
+function Install-Python-Windows {
+    if (Test-Command "python") {
+        Write-Info "Python 已安装: $(python --version)"
         return $true
-    } catch {
-        return $false
     }
-}
 
-function Test-WSL {
-    if (Test-Command "wsl") {
-        try {
-            $null = wsl --list 2>$null
-            return $true
-        } catch {
-            return $false
-        }
-    }
+    Write-Warn "Python 未安装"
+    Write-Info "请选择安装方式:"
+    Write-Info "  1. 访问 https://python.org/downloads 下载 Python 3.11"
+    Write-Info "  2. 或使用 winget: winget install Python.Python.3.11"
+    Write-Info "  3. 或使用 Chocolatey: choco install python311"
     return $false
 }
 
-function Deploy-Local {
-    Print-Header "Docker Desktop 本地部署"
+function Deploy-Docker-Windows {
+    Write-Header "Docker 部署"
 
-    if (-not (Test-Docker)) {
-        Print-Error "Docker Desktop 未安装或未运行"
-        Print-Info "请访问 https://docker.com/download 下载安装"
-        return
+    if (-not (Test-Command "docker")) {
+        Write-Err "Docker 未安装"
+        Write-Info "请访问 https://docs.docker.com/desktop/install/windows-install/ 下载 Docker Desktop"
+        return $false
     }
 
-    Set-Mirrors
-    New-DataDirectories
+    try {
+        $null = docker info 2>$null
+    } catch {
+        Write-Err "Docker 未运行，请先启动 Docker Desktop"
+        return $false
+    }
+
+    if (-not (Test-Command "docker-compose")) {
+        Write-Info "安装 docker-compose..."
+        docker compose version | Out-Null
+    }
+
+    Set-Mirrors-Windows
+    New-DataDirs
     Test-EnvFile
 
-    Print-Info "启动 Docker 服务..."
+    Write-Info "构建并启动服务..."
+    Set-Location $PROJECT_DIR
+
     docker-compose up -d redis
     Start-Sleep -Seconds 3
     docker-compose up -d backend
-    docker-compose up -d frontend
 
-    Print-Info "等待服务启动..."
-    for ($i = 1; $i -le 60; $i++) {
+    if (Test-Path (Join-Path $FRONTEND_DIR "dist\index.html")) {
+        docker-compose up -d frontend
+    }
+
+    Write-Info "等待服务就绪..."
+    for ($i = 0; $i -lt 30; $i++) {
         try {
-            $response = Invoke-WebRequest -Uri "http://localhost:8000/api/health" -UseBasicParsing -TimeoutSec 2
-            if ($response.StatusCode -eq 200) {
-                Print-Success "服务已就绪"
+            $r = Invoke-WebRequest -Uri "http://localhost:8000/api/health" -UseBasicParsing -TimeoutSec 2
+            if ($r.StatusCode -eq 200) {
+                Write-Success "后端服务已就绪"
                 break
             }
         } catch {}
         Start-Sleep -Seconds 1
     }
 
-    Print-Success "部署完成!"
-    Write-Host ""
-    Write-Host "  前端页面: http://localhost" -ForegroundColor Green
-    Write-Host "  API 文档: http://localhost:8000/docs" -ForegroundColor Green
-    Write-Host ""
+    Write-Success "Docker 部署完成!"
+    Write-Host "  前端: http://localhost"
+    Write-Host "  API:  http://localhost:8000/docs"
+
+    return $true
 }
 
 function Deploy-WSL {
-    Print-Header "WSL2 部署模式"
+    Write-Header "WSL2 部署"
 
-    if (-not (Test-WSL)) {
-        Print-Error "WSL2 未安装"
-        Print-Info "请运行: wsl --install"
-        Print-Info "然后在 WSL 中运行: ./deploy.sh"
-        return
+    if (-not (Test-Command "wsl")) {
+        Write-Err "WSL2 未安装"
+        Write-Info "请在 PowerShell 中运行: wsl --install"
+        return $false
     }
 
-    Print-Info "检测到 WSL2，准备在 WSL 中部署..."
+    Write-Info "检测 WSL 发行版..."
+    $distros = wsl --list --quiet
+    if (-not $distros) {
+        Write-Err "没有找到 WSL 发行版"
+        Write-Info "请运行: wsl --install -d ubuntu"
+        return $false
+    }
 
-    wsl -- bash -c "cd /mnt/`$(wslpath '$PWD' | tr -d '\r') && chmod +x deploy.sh && ./deploy.sh"
+    Write-Info "将使用 WSL 进行部署，请确保 WSL 中已安装 Python 和 Node.js"
+    Write-Info "在 WSL 终端中运行: ./start.sh"
 
-    Print-Success "请在 WSL 终端中查看部署状态"
+    return $true
 }
 
-function Deploy-Native {
-    Print-Header "原生模式部署 (无 Docker)"
+function Deploy-Local-Windows {
+    Write-Header "本地部署 (Windows)"
 
-    Set-Mirrors
-    New-DataDirectories
+    if (-not (Install-Python-Windows)) { return $false }
+
+    if (-not (Test-Command "node")) {
+        Write-Err "Node.js 未安装"
+        Write-Info "请访问 https://nodejs.org/ 下载安装"
+        return $false
+    }
+
+    Set-Mirrors-Windows
+    New-DataDirs
     Test-EnvFile
 
-    Install-PythonDeps-Local
-    Install-NodeDeps-Local
+    $venvPath = Join-Path $BACKEND_DIR "venv"
+    if (-not (Test-Path $venvPath)) {
+        Write-Info "创建 Python 虚拟环境..."
+        python -m venv $venvPath
+    }
 
-    Start-Redis-Local
-    Start-Backend-Local
-    Start-Frontend-Local
+    Install-PythonDeps-Windows $venvPath
+    Install-NodeDeps-Windows
 
-    Print-Success "部署完成!"
+    Write-Success "本地部署完成!"
     Write-Host ""
-    Write-Host "  前端页面: http://localhost" -ForegroundColor Green
-    Write-Host "  API 文档: http://localhost:8000/docs" -ForegroundColor Green
+    Write-Host "启动服务:"
+    Write-Host "  后端: cd $BACKEND_DIR; .\venv\Scripts\Activate.ps1; uvicorn main:app --reload"
+    Write-Host "  前端: cd $FRONTEND_DIR; npm run dev"
     Write-Host ""
-    Print-Warning "注意: 原生模式需要手动启动服务"
+    Write-Host "或使用一键启动: .\start.ps1"
+
+    "windows-local" | Out-File -FilePath $INSTALL_MARKER -Encoding UTF8
+    return $true
 }
 
-function Show-Status {
-    Print-Header "服务状态"
+function Deploy-Termux-Windows {
+    Write-Header "Termux 部署说明 (通过 WSL)"
+    Write-Info "请在 Termux (Android) 中运行以下命令:"
+    Write-Host ""
+    Write-Host "  # 安装 Termux 后，在 Termux 中运行:"
+    Write-Host "  pkg update && pkg install proot-distro"
+    Write-Host "  proot-distro install ubuntu"
+    Write-Host "  proot-distro login ubuntu"
+    Write-Host "  # 然后在 Ubuntu 中克隆项目并运行 ./deploy.sh"
+    Write-Host ""
+    Write-Info "或者直接在 Termux 中使用项目根目录的 deploy-termux.sh"
+}
 
-    if (Test-Docker) {
-        Write-Host "Docker 容器:" -ForegroundColor Cyan
-        docker-compose ps
+function Show-Status-Windows {
+    Write-Header "服务状态"
+
+    if (Test-Command "docker") {
+        try {
+            $null = docker info 2>$null
+            Write-Host "Docker 容器:" -ForegroundColor $ColBlue
+            docker-compose ps 2>$null
+        } catch {}
     }
 
-    Write-Host "`n健康检查:" -ForegroundColor Cyan
+    Write-Host "`n健康检查:" -ForegroundColor $ColBlue
     try {
-        $response = Invoke-WebRequest -Uri "http://localhost:8000/api/health" -UseBasicParsing -TimeoutSec 2
-        if ($response.StatusCode -eq 200) {
-            Print-Success "后端 API: 运行中"
-        }
-    } catch {
-        Print-Error "后端 API: 未响应"
-    }
+        $r = Invoke-WebRequest -Uri "http://localhost:8000/api/health" -UseBasicParsing -TimeoutSec 3
+        if ($r.StatusCode -eq 200) { Write-Success "后端 API: 运行中" }
+    } catch { Write-Err "后端 API: 未响应" }
 
     try {
-        $code = Invoke-WebRequest -Uri "http://localhost" -UseBasicParsing -TimeoutSec 2 | Select-Object -ExpandProperty StatusCode
-        if ($code -in @(200, 301, 302)) {
-            Print-Success "前端页面: 运行中"
+        $r = Invoke-WebRequest -Uri "http://localhost" -UseBasicParsing -TimeoutSec 3
+        if ($r.StatusCode -in @(200, 301, 302)) { Write-Success "前端页面: 运行中" }
+    } catch { Write-Err "前端页面: 未响应" }
+}
+
+function Stop-Services-Windows {
+    Write-Header "停止服务"
+    if (Test-Command "docker") {
+        try {
+            $null = docker info 2>$null
+            Set-Location $PROJECT_DIR
+            docker-compose down
+            Write-Success "Docker 服务已停止"
+        } catch {
+            Write-Info "Docker 未运行或服务未启动"
         }
-    } catch {
-        Print-Error "前端页面: 未响应"
     }
+
+    Get-Process uvicorn -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Get-Process node -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*vite*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+    Write-Success "本地服务已停止"
 }
 
-function Stop-All {
-    Print-Header "停止服务"
+function Uninstall-Windows {
+    Write-Header "卸载"
+    Write-Warn "此操作将删除虚拟环境和安装标记!"
 
-    if (Test-Docker) {
-        Print-Info "停止 Docker 容器..."
-        docker-compose down
+    Stop-Services-Windows
+
+    $venvPath = Join-Path $BACKEND_DIR "venv"
+    if (Test-Path $venvPath) {
+        Remove-Item -Recurse -Force $venvPath
+        Write-Success "已删除虚拟环境"
     }
 
-    Get-Process | Where-Object { $_.Name -match "uvicorn|python.*main|vite|npm.*dev" } | Stop-Process -Force -ErrorAction SilentlyContinue
-
-    if (Test-Command "redis-cli") {
-        redis-cli shutdown 2>$null
+    if (Test-Path $INSTALL_MARKER) {
+        Remove-Item -Force $INSTALL_MARKER
+        Write-Success "已删除安装标记"
     }
 
-    Print-Success "所有服务已停止"
+    Write-Success "卸载完成"
 }
 
-function Show-Help {
+function Show-Menu {
+    Write-Host ""
+    Write-Host ("═══════════════════════════════════════════") -ForegroundColor $ColMagenta
+    Write-Host ("  Novel Reader - 跨平台部署工具") -ForegroundColor $ColMagenta
+    Write-Host ("═══════════════════════════════════════════") -ForegroundColor $ColMagenta
+    Write-Host ""
+    Write-Host "1. Docker Desktop 部署        (推荐，有 Docker 的用户)"
+    Write-Host "2. WSL2 部署                  (Linux 子系统)"
+    Write-Host "3. 本地安装                   (无 Docker，纯 Windows)"
+    Write-Host "4. Termux 部署说明            (Android)"
+    Write-Host ""
+    Write-Host "s. 查看状态"
+    Write-Host "m. 配置镜像源"
+    Write-Host "u. 卸载"
+    Write-Host "q. 退出"
+    Write-Host ""
+    Write-Host ("═══════════════════════════════════════════") -ForegroundColor $ColMagenta
+    Write-Host ""
+}
+
+function Show-Help-Windows {
     @"
-Novel Reader 跨平台部署脚本 (Windows)
+Novel Reader 跨平台部署脚本 (Windows PowerShell)
 
-用法: .\deploy.ps1 [mode]
-
-模式:
-  local     Docker Desktop 模式 (默认)
-  wsl       WSL2 模式 (推荐中国用户)
-  native    原生模式 (不使用 Docker)
+用法: .\deploy.ps1 [command]
 
 命令:
-  .\deploy.ps1           部署 (默认 Docker 模式)
-  .\deploy.ps1 local      Docker Desktop 模式
-  .\deploy.ps1 wsl        WSL2 模式
-  .\deploy.ps1 native     原生模式
-  .\deploy.ps1 status     查看状态
-  .\deploy.ps1 stop       停止服务
-  .\deploy.ps1 help       显示帮助
+  docker      Docker Desktop 部署 (推荐)
+  wsl         WSL2 部署
+  local       本地安装 (纯 Windows)
+  termux      Termux 部署说明
+  status      查看服务状态
+  mirror      配置镜像源
+  uninstall   卸载
+  help        显示帮助
 
-访问地址:
-  前端: http://localhost
-  API:  http://localhost:8000/docs
+示例:
+  .\deploy.ps1           # 显示交互式菜单
+  .\deploy.ps1 docker     # Docker 部署
+  .\deploy.ps1 local     # 本地安装
+  .\deploy.ps1 status    # 查看状态
+
+支持平台:
+  Windows 10/11 + Docker Desktop
+  Windows 10/11 + WSL2
+  Windows 10/11 (本地 Python + Node.js)
+  Android + Termux (使用 deploy-termux.sh)
+  Linux (使用 deploy.sh)
 "@
 }
 
-switch ($Mode) {
-    "local" { Deploy-Local }
+switch ($Command.ToLower()) {
+    "docker" { Deploy-Docker-Windows }
     "wsl" { Deploy-WSL }
-    "native" { Deploy-Native }
-    "status" { Show-Status }
-    "stop" { Stop-All }
-    "help" { Show-Help }
-    default {
-        if ($Mode -match "^(stop|status|help)$") {
-            & "$PSCommandPath" $Mode
-        } else {
-            Deploy-Local
+    "local" { Deploy-Local-Windows }
+    "termux" { Deploy-Termux-Windows }
+    "status" { Show-Status-Windows }
+    "stop" { Stop-Services-Windows }
+    "mirror" { Set-Mirrors-Windows }
+    "uninstall" { Uninstall-Windows }
+    "help" { Show-Help-Windows }
+    "q" { exit 0 }
+    "" {
+        Show-Menu
+        $choice = Read-Host "请选择 (1-4, s, m, u, q)"
+        switch ($choice) {
+            "1" { Deploy-Docker-Windows }
+            "2" { Deploy-WSL }
+            "3" { Deploy-Local-Windows }
+            "4" { Deploy-Termux-Windows }
+            "s" { Show-Status-Windows }
+            "m" { Set-Mirrors-Windows }
+            "u" { Uninstall-Windows }
+            "q" { exit 0 }
         }
+    }
+    default {
+        Write-Err "未知命令: $Command"
+        Show-Help-Windows
+        exit 1
     }
 }
