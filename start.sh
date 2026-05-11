@@ -263,7 +263,8 @@ start_backend() {
             python3 -m venv venv
         fi
         source venv/bin/activate
-        nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
+        pip install -r requirements.txt -q 2>/dev/null || pip install -r requirements.txt
+        nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
         echo $! > uvicorn.pid
         deactivate
         cd ..
@@ -399,16 +400,22 @@ case "${1:-}" in
         if command -v docker &> /dev/null && docker info &> /dev/null; then
             docker-compose logs -f
         else
-            if [ -f "data/logs/backend.log" ] && [ -f "data/logs/frontend.log" ]; then
-                print_info "同时显示前后端日志 (Ctrl+C 退出)"
-                echo ""
-                tail -f data/logs/backend.log data/logs/frontend.log
-            elif [ -f "data/logs/backend.log" ]; then
-                tail -f data/logs/backend.log
-            elif [ -f "data/logs/frontend.log" ]; then
-                tail -f data/logs/frontend.log
+            # 使用智能日志整合器
+            if [ -f "scripts/log_unifier.py" ] && command -v python3 &> /dev/null; then
+                python3 scripts/log_unifier.py
             else
-                print_warning "日志文件不存在"
+                # 降级到基础 tail
+                if [ -f "data/logs/backend.log" ] && [ -f "data/logs/frontend.log" ]; then
+                    print_info "同时显示前后端日志 (Ctrl+C 退出)"
+                    echo ""
+                    tail -f data/logs/backend.log data/logs/frontend.log
+                elif [ -f "data/logs/backend.log" ]; then
+                    tail -f data/logs/backend.log
+                elif [ -f "data/logs/frontend.log" ]; then
+                    tail -f data/logs/frontend.log
+                else
+                    print_warning "日志文件不存在"
+                fi
             fi
         fi
         ;;

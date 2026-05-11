@@ -332,7 +332,7 @@ start_backend_local() {
     if [ -f "uvicorn.pid" ] && kill -0 $(cat uvicorn.pid) 2>/dev/null; then
         log_info "后端已在运行"
     else
-        nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
+        nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
         echo $! > uvicorn.pid
         log_success "后端已启动 (PID: $(cat uvicorn.pid))"
     fi
@@ -579,16 +579,22 @@ cmd_logs() {
             log_info "查看前端日志 (Ctrl+C 退出)"
             tail -f data/logs/frontend.log 2>/dev/null || echo "日志文件不存在"
         else
-            if [ -f "data/logs/backend.log" ] && [ -f "data/logs/frontend.log" ]; then
-                log_info "同时显示前后端日志 (Ctrl+C 退出)"
-                echo ""
-                tail -f data/logs/backend.log data/logs/frontend.log
-            elif [ -f "data/logs/backend.log" ]; then
-                tail -f data/logs/backend.log
-            elif [ -f "data/logs/frontend.log" ]; then
-                tail -f data/logs/frontend.log
+            # 使用智能日志整合器
+            if [ -f "scripts/log_unifier.py" ] && command -v python3 &> /dev/null; then
+                python3 scripts/log_unifier.py
             else
-                log_warning "日志文件不存在"
+                # 降级到基础 tail
+                if [ -f "data/logs/backend.log" ] && [ -f "data/logs/frontend.log" ]; then
+                    log_info "同时显示前后端日志 (Ctrl+C 退出)"
+                    echo ""
+                    tail -f data/logs/backend.log data/logs/frontend.log
+                elif [ -f "data/logs/backend.log" ]; then
+                    tail -f data/logs/backend.log
+                elif [ -f "data/logs/frontend.log" ]; then
+                    tail -f data/logs/frontend.log
+                else
+                    log_warning "日志文件不存在"
+                fi
             fi
         fi
     fi
