@@ -1,416 +1,380 @@
 #!/bin/bash
 
 # Novel Reader Android/Termux 部署脚本
-# 用法: ./deploy-termux.sh [command]
-#
-# 命令:
-#   install     安装依赖
-#   start       启动服务
-#   stop        停止服务
-#   status      查看状态
-#   update      更新项目
-#   help        显示帮助
+# 专为 Termux (Android) 优化，无需 root
+# 用法:
+#   ./deploy-termux.sh           - 交互式菜单
+#   ./deploy-termux.sh local     - 本地安装
+#   ./deploy-termux.sh status    - 查看状态
+#   ./deploy-termux.sh update     - 更新项目
+#   ./deploy-termux.sh uninstall  - 卸载
 
 set -e
 
 PROJECT_NAME="novel-reader"
-PROJECT_DIR="$HOME/storage/shared/novel-reader"
-BACKEND_DIR="$PROJECT_DIR/backend"
-FRONTEND_DIR="$PROJECT_DIR/frontend"
-DATA_DIR="$PROJECT_DIR/data"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$SCRIPT_DIR"
+BACKEND_DIR="$SCRIPT_DIR/backend"
+FRONTEND_DIR="$SCRIPT_DIR/frontend"
+DATA_DIR="$SCRIPT_DIR/data"
+INSTALL_MARKER="$SCRIPT_DIR/.installed-termux"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 NC='\033[0m'
 
 print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-print_success() { echo -e "${GREEN}[✓]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
-print_error() { echo -e "${RED}[✗]${NC} $1"; }
-print_header() { echo -e "\n${CYAN}════════════════════════════════════════════════${NC}"; echo -e "${CYAN}  $1${NC}"; echo -e "${CYAN}════════════════════════════════════════════════${NC}\n"; }
+print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+print_err() { echo -e "${RED}[ERROR]${NC} $1"; }
+print_header() { echo -e "\n${MAGENTA}══════ $1 ══════${NC}"; }
 
-check_termux() {
-    if [ ! -d "$PREFIX" ]; then
-        print_error "此脚本仅适用于 Termux (Android)"
-        exit 1
+check_command() {
+    if ! command -v "$1" &> /dev/null; then
+        return 1
     fi
-    print_info "检测到 Termux 环境"
+    return 0
 }
 
-detect_china() {
-    if command -v curl &> /dev/null; then
-        COUNTRY=$(curl -s --max-time 3 "https://ipinfo.io/country" 2>/dev/null || echo "unknown")
-        if [ "$COUNTRY" = "CN" ]; then
-            echo "china"
-            return
-        fi
+is_termux() {
+    if [ -n "$TERMUX_VERSION" ] || [ -d "$PREFIX" ]; then
+        return 0
     fi
-    echo "global"
+    return 1
 }
 
-setup_mirrors() {
-    print_info "配置 Termux 镜像源..."
-    REGION=$(detect_china)
-
-    if [ "$REGION" = "china" ]; then
-        print_info "检测到中国地区，配置国内镜像..."
-
-        if [ -f "$PREFIX/etc/apt/sources.list" ]; then
-            print_info "配置 Termux 镜像..."
-            echo "https://mirrors.ustc.edu.cn/termux/apt/termux-main" > "$PREFIX/etc/apt/sources.list"
-            print_success "Termux 镜像: USTC"
-        fi
-
-        mkdir -p ~/.pip
-        cat > ~/.pip/pip.conf << 'EOF'
-[global]
-index-url = https://mirrors.aliyun.com/pypi/simple/
-timeout = 120
-retries = 5
-
-[install]
-trusted-host = mirrors.aliyun.com
-             pypi.tuna.tsinghua.edu.cn
-EOF
-        print_success "pip: 阿里云镜像"
-
-        npm config set registry https://registry.npmmirror.com 2>/dev/null || true
-        print_success "npm: npmmirror.com"
-    else
-        print_info "使用官方源"
+setup_termux_repos() {
+    print_info "配置 Termux 仓库..."
+    if [ ! -f ~/.termux/boot ]; then
+        mkdir -p ~/.termux
     fi
+    print_success "Termux 环境检测完成"
 }
 
-install_system_deps() {
-    print_header "安装系统依赖 (Termux)"
-
-    print_info "更新包列表..."
-    pkg update -y
-
-    print_info "安装基础工具..."
-    pkg install -y python python-pip nodejs-lts npm git curl wget termux-services
-
-    print_info "安装 Python 开发工具..."
-    pkg install -y python-dev clang make
-
-    print_info "配置 Python..."
-    python -m pip install --upgrade pip
-
-    print_success "系统依赖安装完成"
+update_packages() {
+    print_header "更新 Termux 包"
+    pkg update && pkg upgrade -y
+    print_success "包更新完成"
 }
 
-create_directories() {
-    if [ ! -d "$PROJECT_DIR" ]; then
-        print_info "项目目录不存在，需要先克隆项目"
-        print_info "请在 Termux 中运行:"
-        echo "  cd ~/storage/shared"
-        echo "  git clone https://github.com/lobster-xiaozhua/novel-reader.git"
-        exit 1
-    fi
+install_python_deps_termux() {
+    print_header "安装 Python 依赖"
 
-    print_info "创建数据目录..."
-    mkdir -p "$DATA_DIR"/{books,index,static,logs,cache,backups}
-    print_success "目录创建完成"
-}
-
-check_env() {
-    if [ ! -f "$PROJECT_DIR/.env" ]; then
-        print_info "创建 .env 配置文件..."
-        SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-        cat > "$PROJECT_DIR/.env" << EOF
-SECRET_KEY=$SECRET_KEY
-DEBUG=false
-DATABASE_URL=sqlite+aiosqlite:///data/novel.db
-REDIS_URL=redis://localhost:6379
-DATA_DIR=./data
-BOOKS_DIR=./data/books
-INDEX_DIR=./data/index
-STATIC_DIR=./data/static
-LOGS_DIR=./data/logs
-CACHE_DIR=./data/cache
-EOF
-        print_success ".env 文件已创建"
-    fi
-}
-
-install_python_deps() {
-    print_header "安装 Python 依赖 (Termux)"
-
-    cd "$BACKEND_DIR"
-
-    if [ ! -d "venv" ]; then
+    if [ ! -d "$BACKEND_DIR/venv" ]; then
         print_info "创建 Python 虚拟环境..."
-        python -m venv venv
+        python -m venv "$BACKEND_DIR/venv"
     fi
 
-    source venv/bin/activate
+    source "$BACKEND_DIR/venv/bin/activate"
 
-    print_info "安装依赖 (兼容版本)..."
-    if [ -f "requirements-compat.txt" ]; then
-        pip install --no-cache-dir -r requirements-compat.txt
+    pip install --upgrade pip -q
+
+    if [ -f "$BACKEND_DIR/requirements-pure-python.txt" ]; then
+        print_info "使用纯 Python 依赖列表..."
+        pip install -r "$BACKEND_DIR/requirements-pure-python.txt" -q
     else
-        pip install --no-cache-dir -r requirements.txt
+        pip install -r "$BACKEND_DIR/requirements.txt" -q
     fi
 
     deactivate
-    cd ..
     print_success "Python 依赖安装完成"
 }
 
-install_node_deps() {
-    print_header "安装 Node.js 依赖 (Termux)"
-
+install_node_deps_termux() {
+    print_header "安装 Node.js 依赖"
     cd "$FRONTEND_DIR"
 
-    print_info "安装 npm 包..."
-    npm install
+    if [ ! -d "node_modules" ]; then
+        npm config set registry https://registry.npmmirror.com
+        npm install
+    fi
 
     cd ..
     print_success "Node.js 依赖安装完成"
 }
 
-start_redis() {
-    print_info "启动 Redis..."
+create_dirs_termux() {
+    print_info "创建数据目录..."
+    mkdir -p "$DATA_DIR"/{books,index,static,logs,cache,backups,versions}
+    print_success "目录创建完成"
+}
 
-    if command -v redis-server &> /dev/null; then
-        if ! pgrep -x redis-server > /dev/null; then
-            redis-server --daemonize yes --port 6379 --maxmemory 64mb --maxmemory-policy allkeys-lru
+test_env_termux() {
+    if [ ! -f ".env" ]; then
+        print_info "创建 .env 配置文件..."
+        SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+        cat > .env << EOF
+SECRET_KEY=$SECRET
+DEBUG=false
+DATABASE_URL=sqlite+aiosqlite:///$DATA_DIR/novel.db
+REDIS_URL=redis://localhost:6379
+DATA_DIR=$DATA_DIR
+BOOKS_DIR=$DATA_DIR/books
+INDEX_DIR=$DATA_DIR/index
+STATIC_DIR=$DATA_DIR/static
+LOGS_DIR=$DATA_DIR/logs
+CACHE_DIR=$DATA_DIR/cache
+EOF
+        print_success ".env 已创建"
+    fi
+}
+
+start_redis_termux() {
+    print_header "启动 Redis"
+
+    if ! check_command "redis-server"; then
+        print_info "安装 Redis..."
+        pkg install redis -y
+    fi
+
+    if pgrep -x redis-server > /dev/null; then
+        print_info "Redis 已在运行"
+    else
+        redis-server --daemonize yes --port 6379
+        sleep 1
+        if redis-cli ping > /dev/null 2>&1; then
             print_success "Redis 已启动"
         else
-            print_info "Redis 已在运行"
+            print_warn "Redis 启动失败，缓存功能将不可用"
         fi
+    fi
+}
+
+deploy_local_termux() {
+    print_header "Termux 本地部署"
+
+    if ! is_termux; then
+        print_warn "检测到非 Termux 环境，某些功能可能受限"
+    fi
+
+    update_packages
+
+    print_info "安装基础工具..."
+    pkg install -y python nodejs-lts git curl wget
+
+    setup_termux_repos
+    create_dirs_termux
+    test_env_termux
+    start_redis_termux
+
+    print_info "安装 Python 依赖 (纯 Python 版本)..."
+    install_python_deps_termux
+
+    print_info "安装 Node.js 依赖..."
+    install_node_deps_termux
+
+    print_success "Termux 部署完成!"
+    echo ""
+    echo -e "${YELLOW}启动服务:${NC}"
+    echo ""
+    echo -e "${CYAN}方式 1 - 使用一键脚本:${NC}"
+    echo "  cd $PROJECT_DIR && ./start.sh"
+    echo ""
+    echo -e "${CYAN}方式 2 - 手动启动:${NC}"
+    echo "  cd $BACKEND_DIR"
+    echo "  source venv/bin/activate"
+    echo "  uvicorn main:app --host 0.0.0.0 --port 8000"
+    echo ""
+    echo -e "${CYAN}方式 3 - 后台运行:${NC}"
+    echo "  cd $BACKEND_DIR"
+    echo "  source venv/bin/activate"
+    echo "  nohup uvicorn main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &"
+    echo ""
+    echo -e "${YELLOW}访问地址:${NC}"
+    echo "  http://localhost:8000      (API 文档)"
+    echo "  http://localhost:8001      (前端 Dev 服务器)"
+    echo ""
+    echo -e "${CYAN}停止服务:${NC}"
+    echo "  pkill -f uvicorn"
+    echo "  pkill -f vite"
+
+    echo "termux" > "$INSTALL_MARKER"
+    return 0
+}
+
+show_status_termux() {
+    print_header "服务状态 (Termux)"
+
+    echo -e "${CYAN}进程状态:${NC}"
+
+    if pgrep -f "uvicorn main:app" > /dev/null; then
+        print_success "后端 (uvicorn): 运行中"
     else
-        print_warning "Redis 未安装，禁用缓存功能"
-        print_info "可选: pkg install redis"
-    fi
-}
-
-start_backend() {
-    print_header "启动后端服务"
-
-    cd "$BACKEND_DIR"
-
-    if [ ! -d "venv" ]; then
-        python -m venv venv
-    fi
-
-    source venv/bin/activate
-
-    export DATABASE_URL="sqlite+aiosqlite:///data/novel.db"
-    export REDIS_URL="redis://localhost:6379"
-    export PYTHONDONTWRITEBYTECODE=1
-    export TERMUX=1
-
-    nohup python -m uvicorn main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
-    echo $! > uvicorn.pid
-
-    deactivate
-    cd ..
-
-    print_info "等待后端启动..."
-    for i in {1..30}; do
-        if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
-            print_success "后端服务已就绪"
-            return
-        fi
-        sleep 1
-    done
-    print_warning "后端启动较慢，请稍后检查"
-}
-
-start_frontend() {
-    print_header "启动前端服务"
-
-    cd "$FRONTEND_DIR"
-
-    nohup npm run dev -- --host 0.0.0.0 --port 8080 > ../data/logs/frontend.log 2>&1 &
-    echo $! > vite.pid
-
-    cd ..
-
-    print_success "前端服务已启动"
-}
-
-do_install() {
-    print_header "安装 Novel Reader (Termux)"
-
-    check_termux
-    setup_mirrors
-    install_system_deps
-    create_directories
-    check_env
-    install_python_deps
-    install_node_deps
-
-    print_success "安装完成!"
-    echo ""
-    echo -e "${GREEN}下一步:${NC}"
-    echo "  ./deploy-termux.sh start   # 启动服务"
-    echo ""
-}
-
-do_start() {
-    print_header "启动 Novel Reader (Termux)"
-
-    check_termux
-
-    if [ ! -d "$PROJECT_DIR" ]; then
-        print_error "项目目录不存在"
-        print_info "请先运行: ./deploy-termux.sh install"
-        exit 1
-    fi
-
-    create_directories
-    check_env
-    start_redis
-    start_backend
-    start_frontend
-
-    print_success "服务已启动!"
-    echo ""
-    echo -e "  ${GREEN}📖${NC} 前端页面: http://localhost:8080"
-    echo -e "  ${GREEN}🔧${NC} API 文档:  http://localhost:8000/docs"
-    echo ""
-    print_warning "注意: 服务在后台运行，关闭 Termux 会停止服务"
-}
-
-do_stop() {
-    print_header "停止服务"
-
-    if [ -f "$BACKEND_DIR/uvicorn.pid" ]; then
-        kill $(cat "$BACKEND_DIR/uvicorn.pid") 2>/dev/null || true
-        rm -f "$BACKEND_DIR/uvicorn.pid"
-    fi
-
-    if [ -f "$FRONTEND_DIR/vite.pid" ]; then
-        kill $(cat "$FRONTEND_DIR/vite.pid") 2>/dev/null || true
-        rm -f "$FRONTEND_DIR/vite.pid"
-    fi
-
-    pkill -f "uvicorn" 2>/dev/null || true
-    pkill -f "vite" 2>/dev/null || true
-
-    if command -v redis-cli &> /dev/null; then
-        redis-cli shutdown 2>/dev/null || true
-    fi
-
-    print_success "所有服务已停止"
-}
-
-do_status() {
-    print_header "服务状态"
-
-    echo -e "${CYAN}[原生模式 - Termux]${NC}"
-
-    if pgrep -f "uvicorn" > /dev/null; then
-        print_success "后端: 运行中"
-    else
-        print_error "后端: 未运行"
+        print_warn "后端 (uvicorn): 未运行"
     fi
 
     if pgrep -f "vite" > /dev/null; then
-        print_success "前端: 运行中"
+        print_success "前端 (vite): 运行中"
     else
-        print_error "前端: 未运行"
+        print_warn "前端 (vite): 未运行"
+    fi
+
+    if check_command "redis-cli" && redis-cli ping > /dev/null 2>&1; then
+        print_success "Redis: 运行中"
+    else
+        print_warn "Redis: 未运行"
     fi
 
     echo ""
+    echo -e "${CYAN}健康检查:${NC}"
+
     if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
-        print_success "API: 运行中"
+        print_success "后端 API: 运行中 (http://localhost:8000)"
     else
-        print_error "API: 未响应"
+        print_err "后端 API: 未响应"
     fi
 
-    if curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 2>/dev/null | grep -qE "^(200|301|302)"; then
-        print_success "前端: 运行中"
+    if curl -s -o /dev/null -w "%{http_code}" http://localhost:8001 2>/dev/null | grep -qE "^(200|301|302)"; then
+        print_success "前端页面: 运行中 (http://localhost:8001)"
     else
-        print_error "前端: 未响应"
+        print_warn "前端页面: 未运行"
     fi
+
+    echo ""
+    echo -e "${CYAN}存储空间:${NC}"
+    df -h "$PROJECT_DIR" 2>/dev/null | tail -1 || print_info "无法获取存储信息"
 }
 
-do_update() {
+stop_services_termux() {
+    print_header "停止服务"
+
+    pkill -f "uvicorn main:app" 2>/dev/null || true
+    pkill -f "vite" 2>/dev/null || true
+    pkill -f "redis-server" 2>/dev/null || true
+
+    print_success "服务已停止"
+}
+
+update_project() {
     print_header "更新项目"
 
-    if [ ! -d "$PROJECT_DIR" ]; then
-        print_error "项目目录不存在"
-        exit 1
-    fi
-
     cd "$PROJECT_DIR"
-    git pull origin main
 
-    print_info "重新安装依赖..."
-    cd "$BACKEND_DIR"
-    if [ -d "venv" ]; then
-        source venv/bin/activate
-        pip install --upgrade -r requirements-compat.txt
-        deactivate
+    if [ -d ".git" ]; then
+        print_info "拉取最新代码..."
+        git pull origin main || git pull origin master
+        print_success "代码更新完成"
+    else
+        print_warn "非 Git 仓库，跳过更新"
     fi
 
-    cd "$FRONTEND_DIR"
-    npm install
+    print_info "更新 Python 依赖..."
+    install_python_deps_termux
 
-    print_success "更新完成!"
+    print_info "更新 Node.js 依赖..."
+    install_node_deps_termux
+
+    print_success "项目更新完成"
 }
 
-show_help() {
+uninstall_termux() {
+    print_header "卸载"
+    print_warn "此操作将删除虚拟环境和配置!"
+
+    stop_services_termux
+
+    if [ -d "$BACKEND_DIR/venv" ]; then
+        rm -rf "$BACKEND_DIR/venv"
+        print_success "已删除虚拟环境"
+    fi
+
+    if [ -f "$INSTALL_MARKER" ]; then
+        rm -f "$INSTALL_MARKER"
+        print_success "已删除安装标记"
+    fi
+
+    print_success "卸载完成"
+}
+
+show_help_termux() {
     cat << EOF
 Novel Reader Android/Termux 部署脚本
 
 用法: ./deploy-termux.sh [command]
 
 命令:
-  install     安装所有依赖
-  start       启动服务
+  local       本地安装 (首次使用)
+  status      查看服务状态
   stop        停止服务
-  status      查看状态
   update      更新项目
+  uninstall   卸载
   help        显示帮助
 
-首次使用:
-  1. pkg install git
-  2. cd ~/storage/shared
-  3. git clone https://github.com/lobster-xiaozhua/novel-reader.git
-  4. cd novel-reader
-  5. ./deploy-termux.sh install
-  6. ./deploy-termux.sh start
-
-访问地址 (在手机浏览器中):
-  前端: http://localhost:8080
-  API:  http://localhost:8000/docs
+首次使用步骤:
+  1. pkg update && pkg upgrade
+  2. pkg install git
+  3. cd 到项目目录
+  4. ./deploy-termux.sh local
 
 注意:
-  - 需要授予 Termux 存储权限: termux-setup-storage
-  - 服务在后台运行，关闭 Termux 会停止服务
-  - 建议保持 Termux 在后台运行
+  - Termux 版本需要 >= 0.118
+  - 推荐使用 proot-distro 安装 Ubuntu 获得更完整的体验
+  - Python 依赖使用纯 Python 版本，无需编译
+  - Redis 用于缓存，如无需缓存功能可跳过
+
+故障排除:
+  - 如遇权限问题，检查 Termux 存储权限
+  - 如遇网络问题，使用镜像源
+  - 如遇启动失败，查看 logs 目录下的日志
 EOF
 }
 
+show_menu_termux() {
+    echo ""
+    echo -e "${MAGENTA}═══════════════════════════════════════════${NC}"
+    echo -e "${MAGENTA}  Novel Reader - Termux 部署工具${NC}"
+    echo -e "${MAGENTA}═══════════════════════════════════════════${NC}"
+    echo ""
+    echo "1. 本地安装             (首次使用必选)"
+    echo "2. 查看状态"
+    echo "3. 停止服务"
+    echo "4. 更新项目"
+    echo "5. 卸载"
+    echo ""
+    echo "q. 退出"
+    echo ""
+    echo -e "${MAGENTA}═══════════════════════════════════════════${NC}"
+    echo ""
+}
+
 case "${1:-}" in
-    install)
-        do_install
-        ;;
-    start)
-        do_start
-        ;;
-    stop)
-        do_stop
+    local)
+        deploy_local_termux
         ;;
     status)
-        do_status
+        show_status_termux
+        ;;
+    stop)
+        stop_services_termux
         ;;
     update)
-        do_update
+        update_project
         ;;
-    help|--help|-h|"")
-        show_help
+    uninstall)
+        uninstall_termux
+        ;;
+    help|--help|-h)
+        show_help_termux
+        ;;
+    "")
+        show_menu_termux
+        read -p "请选择 (1-5, q): " choice
+        case "$choice" in
+            1) deploy_local_termux ;;
+            2) show_status_termux ;;
+            3) stop_services_termux ;;
+            4) update_project ;;
+            5) uninstall_termux ;;
+            q) exit 0 ;;
+        esac
         ;;
     *)
-        print_error "未知命令: $1"
-        show_help
+        print_err "未知命令: $1"
+        show_help_termux
         exit 1
         ;;
 esac
