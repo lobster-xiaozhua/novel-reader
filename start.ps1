@@ -16,7 +16,6 @@ $Script:ProjectRoot = $PSScriptRoot
 $Script:BackendDir = Join-Path $Script:ProjectRoot "backend"
 $Script:FrontendDir = Join-Path $Script:ProjectRoot "frontend"
 $Script:DataDir = Join-Path $Script:ProjectRoot "data"
-$Script:VenvDir = Join-Path $Script:BackendDir "venv"
 
 function Write-Info($msg) { Write-Host "[INFO] $msg" -ForegroundColor Cyan }
 function Write-OK($msg) { Write-Host "[OK] $msg" -ForegroundColor Green }
@@ -145,23 +144,29 @@ function Get-RedisMode {
 function Install-PythonDeps {
     Write-Sep "Install Python Dependencies"
     Set-Mirrors
-    if (-not (Test-Path $Script:VenvDir)) {
-        Write-Info "Creating venv..."
+    $venvPath = Join-Path $Script:BackendDir "venv"
+    if (-not (Test-Path $venvPath)) {
+        Write-Info "Creating venv in backend folder..."
+        Set-Location $Script:BackendDir
         python -m venv venv
         if (-not $?) {
             Write-Err "Venv creation failed"
+            Set-Location $Script:ProjectRoot
             return $false
         }
+        Set-Location $Script:ProjectRoot
     }
-    $pip = Join-Path $Script:VenvDir "Scripts\pip.exe"
+    $pip = Join-Path $venvPath "Scripts\pip.exe"
     if (-not (Test-Path $pip)) {
         Write-Warn "Venv corrupted, recreating..."
-        Remove-Item -Recurse -Force $Script:VenvDir -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force $venvPath -ErrorAction SilentlyContinue
+        Set-Location $Script:BackendDir
         python -m venv venv
-        $pip = Join-Path $Script:VenvDir "Scripts\pip.exe"
+        Set-Location $Script:ProjectRoot
+        $pip = Join-Path $venvPath "Scripts\pip.exe"
     }
     Write-Info "Upgrading pip..."
-    & $pip install --upgrade pip --quiet 2>$null
+    cmd /c "`"$pip`" install --upgrade pip" 2>$null
     Write-Info "Installing dependencies..."
     $deps = @(
         "fastapi==0.110.0",
@@ -184,11 +189,11 @@ function Install-PythonDeps {
     )
     $depsStr = $deps -join " "
     Write-Info "Installing core packages (may take minutes)..."
-    & $pip install $depsStr --quiet 2>&1 | Out-Null
+    cmd /c "`"$pip`" install $depsStr" 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Warn "Some deps failed, retry one by one..."
         foreach ($dep in $deps) {
-            & $pip install $dep --quiet 2>$null
+            cmd /c "`"$pip`" install $dep" 2>$null
         }
     }
     Write-OK "Python deps installed"
@@ -262,8 +267,9 @@ function Start-Redis {
 function Start-Backend {
     Write-Sep "Start Backend"
     if (Test-Port 8000) { Kill-Port 8000 }
-    $activate = Join-Path $Script:VenvDir "Scripts\Activate.ps1"
-    if (-not (Test-Path $activate)) {
+    $venvPath = Join-Path $Script:BackendDir "venv"
+    $python = Join-Path $venvPath "Scripts\python.exe"
+    if (-not (Test-Path $python)) {
         Write-Err "Venv not found, run install first"
         return $false
     }
@@ -273,7 +279,6 @@ function Start-Backend {
         New-Item -ItemType Directory -Force -Path $logDir | Out-Null
     }
     Write-Info "Starting uvicorn..."
-    $python = Join-Path $Script:VenvDir "Scripts\python.exe"
     $script:BackendJob = Start-Job -ScriptBlock {
         param($python, $logFile, $root)
         $env:PYTHONDONTWRITEBYTECODE = "1"
@@ -281,7 +286,7 @@ function Start-Backend {
         $env:REDIS_URL = "redis://127.0.0.1:6379"
         $env:DATA_DIR = "./data"
         Set-Location $root
-        & $python -m uvicorn main:app --host 0.0.0.0 --port 8000 2>&1 | Out-File -FilePath $logFile -Append
+        cmd /c "`"$python`" -m uvicorn main:app --host 0.0.0.0 --port 8000" 2>&1 | Out-File -FilePath $logFile -Append
     } -ArgumentList $python, $logFile, $Script:BackendDir
     Write-Info "Waiting for backend..."
     for ($i = 1; $i -le 30; $i++) {
@@ -493,7 +498,8 @@ function Main {
                 $confirm = Read-Host "Confirm? (yes/no)"
                 if ($confirm -eq "yes") {
                     Stop-All
-                    Remove-Item -Recurse -Force (Join-Path $Script:BackendDir "venv") -ErrorAction SilentlyContinue
+                    $venvPath = Join-Path $Script:BackendDir "venv"
+                    Remove-Item -Recurse -Force $venvPath -ErrorAction SilentlyContinue
                     Remove-Item -Recurse -Force (Join-Path $Script:FrontendDir "node_modules") -ErrorAction SilentlyContinue
                     Full-Install
                 }
