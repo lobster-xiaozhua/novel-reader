@@ -1,8 +1,19 @@
 #!/bin/bash
-# Novel Reader - Linux/macOS Deployment Script
-# Supported package managers: apt/yum/dnf/zypper/pacman
+
+# Novel Reader 跨平台部署脚本 (Linux/macOS/WSL)
+# 用法: ./deploy.sh [mode]
+#
+# 模式:
+#   docker     Docker 模式 (默认)
+#   native     原生模式
 
 set -e
+
+PROJECT_NAME="novel-reader"
+BACKEND_DIR="backend"
+FRONTEND_DIR="frontend"
+DATA_DIR="data"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -12,296 +23,398 @@ CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m'
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-USE_DOCKER=false
-SKIP_INSTALL=false
-USE_VENV=true
-
-usage() {
-    echo "Usage: $0 [options]"
-    echo ""
-    echo "Options:"
-    echo "  -d, --docker      Use Docker deployment"
-    echo "  -n, --native      Native Python deployment (default)"
-    echo "  -s, --skip        Skip dependency installation"
-    echo "  -h, --help        Show this help"
-    echo ""
-}
-
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -d|--docker)
-            USE_DOCKER=true
-            shift
-            ;;
-        -n|--native)
-            USE_DOCKER=false
-            shift
-            ;;
-        -s|--skip)
-            SKIP_INSTALL=true
-            shift
-            ;;
-        -h|--help)
-            usage
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1"
-            usage
-            exit 1
-            ;;
-    esac
-done
-
-echo -e "${MAGENTA}"
-cat << 'EOF'
-╔══════════════════════════════════════════════════════════════╗
-║         Novel Reader - Linux Deployment Script v1.0        ║
-║  Support: apt/yum/dnf/zypper/pacman + Docker               ║
-╚══════════════════════════════════════════════════════════════╝
-EOF
-echo -e "${NC}"
-
-log_step() {
-    echo -e "\n${CYAN}=== $1 ===${NC}"
-}
-
-log_success() {
-    echo -e "${GREEN}[OK] $1${NC}"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARN] $1${NC}"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR] $1${NC}"
-}
+print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+print_success() { echo -e "${GREEN}[✓]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
+print_error() { echo -e "${RED}[✗]${NC} $1"; }
+print_header() { echo -e "\n${CYAN}════════════════════════════════════════════════════════${NC}"; echo -e "${CYAN}  $1${NC}"; echo -e "${CYAN}════════════════════════════════════════════════════════${NC}\n"; }
 
 check_command() {
-    command -v "$1" >/dev/null 2>&1
+    if ! command -v "$1" &> /dev/null; then
+        print_error "$1 未安装"
+        return 1
+    fi
+    return 0
 }
 
-detect_os() {
-    if check_command apt-get; then
-        echo "debian"
-    elif check_command yum; then
-        echo "rhel"
-    elif check_command dnf; then
-        echo "fedora"
-    elif check_command zypper; then
-        echo "suse"
-    elif check_command pacman; then
-        echo "arch"
-    elif check_command apk; then
-        echo "alpine"
+detect_region() {
+    if command -v curl &> /dev/null; then
+        COUNTRY=$(curl -s --max-time 3 "https://ipinfo.io/country" 2>/dev/null || echo "unknown")
+        if [ "$COUNTRY" = "CN" ]; then
+            echo "china"
+            return
+        fi
+    fi
+    echo "global"
+}
+
+setup_mirrors() {
+    print_info "配置镜像源..."
+    REGION=$(detect_region)
+
+    if [ "$REGION" = "china" ]; then
+        print_info "检测到中国地区，配置国内镜像..."
+
+        mkdir -p ~/.pip
+        cat > ~/.pip/pip.conf << 'EOF'
+[global]
+index-url = https://mirrors.aliyun.com/pypi/simple/
+timeout = 120
+retries = 5
+
+[install]
+trusted-host = mirrors.aliyun.com
+             pypi.tuna.tsinghua.edu.cn
+EOF
+        print_success "pip: 阿里云镜像"
+
+        npm config set registry https://registry.npmmirror.com 2>/dev/null || true
+        print_success "npm: npmmirror.com"
+
+        if command -v docker &> /dev/null; then
+            mkdir -p ~/.docker
+            cat > ~/.docker/daemon.json << 'EOF'
+{
+  "registry-mirrors": [
+    "https://docker.1ms.run",
+    "https://docker.xuanyuan.me",
+    "https://dockerproxy.cn"
+  ]
+}
+EOF
+            print_success "Docker: 镜像加速已配置"
+        fi
     else
-        echo "unknown"
+        print_info "使用官方源"
+    fi
+}
+
+create_directories() {
+    print_info "创建数据目录..."
+    mkdir -p "$DATA_DIR"/{books,index,static,logs,cache,backups}
+    print_success "目录创建完成"
+}
+
+check_env() {
+    if [ ! -f ".env" ]; then
+        print_info "创建 .env 配置文件..."
+        if command -v openssl &> /dev/null; then
+            SECRET_KEY=$(openssl rand -hex 32)
+        else
+            SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+        fi
+        cat > .env << EOF
+SECRET_KEY=$SECRET_KEY
+DEBUG=false
+DATABASE_URL=sqlite+aiosqlite:///data/novel.db
+REDIS_URL=redis://localhost:6379
+DATA_DIR=./data
+BOOKS_DIR=./data/books
+INDEX_DIR=./data/index
+STATIC_DIR=./data/static
+LOGS_DIR=./data/logs
+CACHE_DIR=./data/cache
+EOF
+        print_success ".env 文件已创建"
     fi
 }
 
 install_system_deps() {
-    local os_type="$1"
-    log_step "Installing system dependencies"
+    print_info "安装系统依赖..."
 
-    case "$os_type" in
-        debian)
-            log_step "Detected Debian/Ubuntu"
-            sudo apt-get update
-            sudo apt-get install -y python3 python3-pip python3-venv \
-                libmagic1 libxml2 libxslt1.1 zlib1g \
-                build-essential pkg-config \
-                curl redis-server
-            ;;
-        rhel|centos)
-            log_step "Detected RHEL/CentOS"
-            sudo yum install -y python3 python3-pip \
-                file-devel libxml2-devel libxslt-devel zlib-devel \
-                gcc gcc-c++ \
-                curl redis
-            sudo systemctl enable redis
-            ;;
-        fedora)
-            log_step "Detected Fedora"
-            sudo dnf install -y python3 python3-pip \
-                file-devel libxml2-devel libxslt-devel zlib-devel \
-                gcc gcc-c++ \
-                curl redis
-            sudo systemctl enable redis
-            ;;
-        suse)
-            log_step "Detected openSUSE"
-            sudo zypper install -y python3 python3-pip \
-                file-devel libxml2-devel libxslt-devel zlib-devel \
-                gcc gcc-c++ \
-                curl redis
-            ;;
-        arch)
-            log_step "Detected Arch Linux"
-            sudo pacman -Sy --noconfirm python python-pip \
-                libmagic libxml2 libxslt zlib \
-                base-devel \
-                curl redis
-            sudo systemctl enable redis
-            ;;
-        alpine)
-            log_step "Detected Alpine"
-            apk add --no-cache python3 py3-pip \
-                file libxml2-dev libxslt-dev zlib-dev \
-                gcc musl-dev python3-dev \
-                curl redis
-            ;;
-        *)
-            log_warning "Cannot detect OS type, please install manually:"
-            log_warning "  Python 3.10+, pip, build-essential"
-            log_warning "  libmagic, libxml2, libxslt, zlib"
-            ;;
-    esac
-
-    if check_command python3; then
-        local py_version=$(python3 --version 2>&1 | grep -oP '\d+\.\d+' | head -1)
-        log_success "Python version: $py_version"
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq python3 python3-venv python3-pip \
+            nodejs npm redis-server curl git file libmagic1
+        print_success "系统依赖安装完成 (apt)"
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y python3 python3-pip nodejs npm \
+            redis curl git file-devel
+        print_success "系统依赖安装完成 (yum)"
+    elif command -v dnf &> /dev/null; then
+        sudo dnf install -y python3 python3-pip nodejs npm \
+            redis curl git file-devel
+        print_success "系统依赖安装完成 (dnf)"
+    elif command -v pacman &> /dev/null; then
+        sudo pacman -Sy --noconfirm python python-pip nodejs npm \
+            redis curl git base-devel file
+        print_success "系统依赖安装完成 (pacman)"
+    elif command -v apk &> /dev/null; then
+        apk add --no-cache python3 py3-pip nodejs npm redis curl git file
+        print_success "系统依赖安装完成 (apk)"
+    else
+        print_warning "无法自动安装系统依赖，请手动安装"
     fi
 }
 
-install_python_deps() {
-    log_step "Installing Python dependencies"
+install_python_deps_native() {
+    print_info "安装 Python 依赖 (原生模式)..."
 
-    if [ ! -d "$PROJECT_ROOT/venv" ]; then
-        log_step "Creating virtual environment"
-        python3 -m venv "$PROJECT_ROOT/venv"
-        log_success "Virtual environment created"
+    cd "$BACKEND_DIR"
+
+    if [ ! -d "venv" ]; then
+        print_info "创建 Python 虚拟环境..."
+        python3 -m venv venv
+    fi
+
+    source venv/bin/activate
+
+    print_info "升级 pip..."
+    pip install --upgrade pip
+
+    print_info "安装依赖..."
+    if [ -f "requirements-compat.txt" ]; then
+        pip install -r requirements-compat.txt
     else
-        log_warning "Virtual environment exists, skipping"
+        pip install -r requirements.txt
     fi
 
-    source "$PROJECT_ROOT/venv/bin/activate"
-
-    log_step "Upgrading pip and installing wheel"
-    pip install --upgrade pip wheel setuptools
-
-    log_step "Installing project dependencies"
-    if [ -f "$PROJECT_ROOT/requirements.txt" ]; then
-        pip install -r "$PROJECT_ROOT/requirements.txt"
-    elif [ -f "$PROJECT_ROOT/backend/requirements-crossplatform.txt" ]; then
-        pip install -r "$PROJECT_ROOT/backend/requirements-crossplatform.txt"
-    elif [ -f "$PROJECT_ROOT/backend/requirements.txt" ]; then
-        pip install -r "$PROJECT_ROOT/backend/requirements.txt"
-    fi
-
-    log_success "Python dependencies installed"
     deactivate
+    cd ..
+    print_success "Python 依赖安装完成"
 }
 
-init_data_dirs() {
-    log_step "Initializing data directories"
-    mkdir -p "$PROJECT_ROOT/data"/{books,index,static,logs,cache}
-    log_success "Data directories initialized"
+install_node_deps_native() {
+    print_info "安装 Node.js 依赖 (原生模式)..."
+
+    cd "$FRONTEND_DIR"
+    npm install
+    cd ..
+
+    print_success "Node.js 依赖安装完成"
 }
 
-setup_env_file() {
-    log_step "Configuring environment variables"
-    if [ ! -f "$PROJECT_ROOT/.env" ]; then
-        if [ -f "$PROJECT_ROOT/.env.example" ]; then
-            cp "$PROJECT_ROOT/.env.example" "$PROJECT_ROOT/.env"
-            log_success ".env file created, please set SECRET_KEY"
+start_redis_native() {
+    print_info "启动 Redis..."
+
+    if command -v redis-server &> /dev/null; then
+        if ! pgrep -x redis-server > /dev/null; then
+            redis-server --daemonize yes --port 6379 --maxmemory 64mb --maxmemory-policy allkeys-lru
+            print_success "Redis 已启动"
         else
-            cat > "$PROJECT_ROOT/.env" << 'ENVEOF'
-SECRET_KEY=change-me-in-production
-DEBUG=false
-DATABASE_URL=sqlite+aiosqlite:///data/novel.db
-REDIS_URL=redis://localhost:6379
-ENVEOF
-            log_success ".env file created"
+            print_info "Redis 已在运行"
         fi
     else
-        log_warning ".env file exists"
+        print_warning "Redis 未安装，禁用缓存功能"
     fi
 }
 
-start_redis() {
-    if check_command redis-server; then
-        log_step "Starting Redis service"
-        if check_command systemctl; then
-            sudo systemctl start redis 2>/dev/null || sudo systemctl start redis-server 2>/dev/null || true
-        fi
-        if ! pgrep -x redis-server > /dev/null; then
-            redis-server --daemonize yes --maxmemory 64mb --maxmemory-policy allkeys-lru 2>/dev/null || true
-        fi
-        log_success "Redis service started"
+start_backend_native() {
+    print_info "启动后端服务 (原生模式)..."
+
+    cd "$BACKEND_DIR"
+
+    if [ ! -d "venv" ]; then
+        python3 -m venv venv
     fi
+
+    source venv/bin/activate
+
+    export DATABASE_URL="sqlite+aiosqlite:///data/novel.db"
+    export REDIS_URL="redis://localhost:6379"
+    export PYTHONDONTWRITEBYTECODE=1
+
+    nohup python -m uvicorn main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
+    echo $! > uvicorn.pid
+
+    deactivate
+    cd ..
+
+    print_info "等待后端启动..."
+    for i in {1..30}; do
+        if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
+            print_success "后端服务已就绪"
+            return
+        fi
+        sleep 1
+    done
+    print_warning "后端启动较慢，请稍后检查"
 }
 
-start_backend() {
-    log_step "Starting backend service"
-    source "$PROJECT_ROOT/venv/bin/activate"
+start_frontend_native() {
+    print_info "启动前端服务 (原生模式)..."
 
-    export PYTHONPATH="$PROJECT_ROOT/backend:$PROJECT_ROOT"
-    export DATA_DIR="$PROJECT_ROOT/data"
-    export BOOKS_DIR="$PROJECT_ROOT/data/books"
-    export LOG_LEVEL="INFO"
+    cd "$FRONTEND_DIR"
+    nohup npm run dev -- --host 0.0.0.0 --port 80 > ../data/logs/frontend.log 2>&1 &
+    echo $! > vite.pid
+    cd ..
 
-    cd "$PROJECT_ROOT/backend"
-
-    echo ""
-    log_success "Start command: python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000"
-    echo -e "${YELLOW}Press Ctrl+C to stop${NC}"
-    echo ""
-
-    python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+    print_success "前端服务已启动"
 }
 
 deploy_docker() {
-    log_step "Using Docker deployment"
+    print_header "Docker 模式部署"
 
     if ! check_command docker; then
-        log_error "Docker not installed"
-        exit 1
+        print_error "Docker 未安装，请先安装 Docker"
+        print_info "访问 https://docs.docker.com/get-docker/"
+        return 1
     fi
 
-    if ! check_command docker-compose && ! docker compose version >/dev/null 2>&1; then
-        log_error "Docker Compose not installed"
-        exit 1
+    if ! docker info &> /dev/null; then
+        print_error "Docker 未运行，请先启动 Docker"
+        return 1
     fi
 
-    log_step "Building Docker image"
-    docker-compose build
+    setup_mirrors
+    create_directories
+    check_env
 
-    log_step "Starting services"
-    docker-compose up -d
+    print_info "启动 Docker 服务..."
+    docker-compose up -d redis
+    sleep 3
+    docker-compose up -d backend
+    docker-compose up -d frontend
 
-    log_step "Waiting for services"
-    sleep 10
+    print_info "等待服务启动..."
+    for i in {1..60}; do
+        if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
+            print_success "服务已就绪"
+            break
+        fi
+        sleep 1
+    done
 
-    log_step "Service status"
-    docker-compose ps
-
-    log_success "Deployment complete!"
+    print_success "部署完成!"
     echo ""
-    echo -e "Access URLs:"
-    echo -e "  ${CYAN}Frontend: http://localhost:80${NC}"
-    echo -e "  ${CYAN}Backend: http://localhost:8000${NC}"
-    echo -e "  ${CYAN}API Docs: http://localhost:8000/docs${NC}"
+    echo -e "  ${GREEN}📖${NC} 前端页面: http://localhost"
+    echo -e "  ${GREEN}🔧${NC} API 文档:  http://localhost:8000/docs"
+    echo ""
 }
 
-main() {
-    local os_type=$(detect_os)
-    echo -e "${GREEN}Detected OS: $os_type${NC}"
+deploy_native() {
+    print_header "原生模式部署 (无 Docker)"
 
-    if [ "$USE_DOCKER" = true ]; then
-        deploy_docker
+    setup_mirrors
+    create_directories
+    check_env
+    install_system_deps
+
+    install_python_deps_native
+    install_node_deps_native
+
+    start_redis_native
+    start_backend_native
+    start_frontend_native
+
+    print_success "部署完成!"
+    echo ""
+    echo -e "  ${GREEN}📖${NC} 前端页面: http://localhost"
+    echo -e "  ${GREEN}🔧${NC} API 文档:  http://localhost:8000/docs"
+    echo ""
+    print_warning "注意: 原生模式需要手动启动服务"
+}
+
+show_status() {
+    print_header "服务状态"
+
+    if command -v docker &> /dev/null && docker info &> /dev/null; then
+        echo -e "${CYAN}[Docker 容器]${NC}"
+        docker-compose ps
     else
-        if [ "$SKIP_INSTALL" = false ]; then
-            install_system_deps "$os_type"
-            install_python_deps
+        echo -e "${CYAN}[原生模式]${NC}"
+
+        if pgrep -x uvicorn > /dev/null; then
+            print_success "后端: 运行中"
+        else
+            print_error "后端: 未运行"
         fi
 
-        init_data_dirs
-        setup_env_file
-        start_redis
-        start_backend
+        if pgrep -f "vite|npm run dev" > /dev/null; then
+            print_success "前端: 运行中"
+        else
+            print_error "前端: 未运行"
+        fi
+    fi
+
+    echo ""
+    if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
+        print_success "API: 运行中"
+    else
+        print_error "API: 未响应"
+    fi
+
+    if curl -s -o /dev/null -w "%{http_code}" http://localhost 2>/dev/null | grep -qE "^(200|301|302)"; then
+        print_success "前端: 运行中"
+    else
+        print_error "前端: 未响应"
     fi
 }
 
-main
+stop_all() {
+    print_header "停止服务"
+
+    if command -v docker &> /dev/null && docker info &> /dev/null; then
+        print_info "停止 Docker 容器..."
+        docker-compose down
+    fi
+
+    if [ -f "$BACKEND_DIR/uvicorn.pid" ]; then
+        kill $(cat "$BACKEND_DIR/uvicorn.pid") 2>/dev/null || true
+        rm -f "$BACKEND_DIR/uvicorn.pid"
+    fi
+
+    if [ -f "$FRONTEND_DIR/vite.pid" ]; then
+        kill $(cat "$FRONTEND_DIR/vite.pid") 2>/dev/null || true
+        rm -f "$FRONTEND_DIR/vite.pid"
+    fi
+
+    pkill -f "uvicorn" 2>/dev/null || true
+    pkill -f "vite" 2>/dev/null || true
+
+    if command -v redis-cli &> /dev/null; then
+        redis-cli shutdown 2>/dev/null || true
+    fi
+
+    print_success "所有服务已停止"
+}
+
+show_help() {
+    cat << EOF
+Novel Reader 跨平台部署脚本 (Linux/macOS/WSL)
+
+用法: ./deploy.sh [mode]
+
+模式:
+  docker     Docker 模式 (默认)
+  native     原生模式 (不使用 Docker)
+
+命令:
+  ./deploy.sh           部署 (默认 Docker 模式)
+  ./deploy.sh docker     Docker 模式
+  ./deploy.sh native     原生模式
+  ./deploy.sh status     查看状态
+  ./deploy.sh stop       停止服务
+  ./deploy.sh help       显示帮助
+
+访问地址:
+  前端: http://localhost
+  API:  http://localhost:8000/docs
+EOF
+}
+
+case "${1:-}" in
+    docker)
+        deploy_docker
+        ;;
+    native)
+        deploy_native
+        ;;
+    status)
+        show_status
+        ;;
+    stop)
+        stop_all
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    "")
+        deploy_docker
+        ;;
+    *)
+        print_error "未知模式: $1"
+        show_help
+        exit 1
+        ;;
+esac
