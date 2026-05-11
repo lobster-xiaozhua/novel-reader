@@ -1,6 +1,6 @@
-# Novel Reader Windows 一键启动脚本
-# 用法: .\start.ps1
-# 什么都不用管，一键启动，自动更新，自动处理所有问题
+# Novel Reader Windows Launcher
+# Encoding: UTF-8 with BOM
+# Usage: .\start.ps1
 
 param(
     [switch]$SkipUpdate,
@@ -9,7 +9,9 @@ param(
 )
 
 $ErrorActionPreference = "Continue"
-if ($Debug) { $ErrorActionPreference = "Continue" }
+$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
 $Script:ProjectRoot = $PSScriptRoot
 $Script:BackendDir = Join-Path $Script:ProjectRoot "backend"
@@ -18,15 +20,15 @@ $Script:DataDir = Join-Path $Script:ProjectRoot "data"
 $Script:VenvDir = Join-Path $Script:BackendDir "venv"
 $Script:PidsDir = Join-Path $Script:ProjectRoot ".pids"
 
-$Red = "Red"; $Green = "Green"; $Yellow = "Yellow"; $Blue = "Cyan"; $Cyan = "Cyan"
+$R = "Red"; $G = "Green"; $Y = "Yellow"; $B = "Cyan"; $C = "Cyan"
 
-function Write-Info($msg) { Write-Host "[INFO] $msg" -ForegroundColor $Blue }
-function Write-Success($msg) { Write-Host "[OK] $msg" -ForegroundColor $Green }
-function Write-Warn($msg) { Write-Host "[WARN] $msg" -ForegroundColor $Yellow }
-function Write-Err($msg) { Write-Host "[ERROR] $msg" -ForegroundColor $Red }
-function Write-Step($msg) {
+function W($msg) { Write-Host "[INFO] $msg" -ForegroundColor $B }
+function S($msg) { Write-Host "[OK] $msg" -ForegroundColor $G }
+function Wn($msg) { Write-Host "[WARN] $msg" -ForegroundColor $Y }
+function E($msg) { Write-Host "[ERROR] $msg" -ForegroundColor $R }
+function H($msg) {
     Write-Host ""
-    Write-Host "═══ $msg ═══" -ForegroundColor $Cyan
+    Write-Host "=== $msg ===" -ForegroundColor $C
 }
 
 function Get-Region {
@@ -37,19 +39,15 @@ function Get-Region {
     return "global"
 }
 
-function Test-Admin {
-    return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
-function Set-ExecutionPolicy-Bypass {
+function Set-Policy {
     $current = Get-ExecutionPolicy -Scope CurrentUser
     if ($current -eq "Restricted" -or $current -eq "Undefined") {
-        Write-Info "设置 PowerShell 执行策略..."
+        W "Setting PowerShell policy..."
         Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
     }
 }
 
-function Initialize-Directories {
+function Init-Dirs {
     $dirs = @("books", "index", "static", "logs", "cache", "backups")
     foreach ($dir in $dirs) {
         $path = Join-Path $DataDir $dir
@@ -62,10 +60,10 @@ function Initialize-Directories {
     }
 }
 
-function Initialize-EnvFile {
+function Init-Env {
     $envPath = Join-Path $Script:ProjectRoot ".env"
     if (-not (Test-Path $envPath)) {
-        Write-Info "创建配置文件..."
+        W "Creating .env file..."
         $key = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | ForEach-Object { [char]$_ })
         $content = @"
 SECRET_KEY=$key
@@ -80,14 +78,14 @@ LOGS_DIR=./data/logs
 CACHE_DIR=./data/cache
 "@
         $content | Out-File -FilePath $envPath -Encoding UTF8
-        Write-Success "配置文件已创建"
+        S ".env created"
     }
 }
 
 function Set-Mirrors {
     $region = Get-Region
     if ($region -eq "china") {
-        Write-Info "检测到中国，配置国内镜像..."
+        W "Detected China, setting up mirrors..."
         
         $pipDir = "$env:APPDATA\pip"
         if (-not (Test-Path $pipDir)) { New-Item -ItemType Directory -Force -Path $pipDir | Out-Null }
@@ -100,59 +98,52 @@ trusted-host = mirrors.aliyun.com
 "@ | Out-File -Path "$pipDir\pip.ini" -Encoding UTF8
         
         npm config set registry https://registry.npmmirror.com --location user 2>$null
-        Write-Success "镜像源已配置 (阿里云/腾讯)"
+        S "Mirrors configured"
     }
 }
 
-function Test-Command($cmd) {
+function Test-Cmd($cmd) {
     return !!(Get-Command $cmd -ErrorAction SilentlyContinue)
 }
 
 function Install-Python {
-    if (Test-Command "python") {
+    if (Test-Cmd "python") {
         $ver = python --version 2>&1
-        Write-Info "Python: $ver"
+        W "Python: $ver"
         return $true
     }
     
-    Write-Step "安装 Python"
+    H "Install Python"
     
-    if (Test-Command "py") {
-        Write-Info "使用 py launcher 安装..."
+    if (Test-Cmd "py") {
+        W "Try using py launcher..."
         py -3.11 -m pip --version 2>$null
         if ($?) {
-            Write-Success "使用 py launcher"
+            S "Using py launcher"
             return $true
         }
     }
     
-    Write-Warn "Python 未安装"
-    Write-Info "请选择安装方式:"
-    Write-Host "  1. Microsoft Store (推荐, 自动)" -ForegroundColor Yellow
-    Write-Host "  2. python.org 下载安装包" -ForegroundColor Yellow
-    Write-Host ""
+    Wn "Python not found!"
+    W "Please install Python from Microsoft Store or python.org"
     
     try {
-        Write-Host "正在打开 Microsoft Store..." -ForegroundColor Cyan
         Start-Process "ms-windows-store://search/python"
-        Start-Sleep 2
     } catch {}
     
-    Write-Host ""
-    Write-Host "安装 Python 后，请重新运行此脚本" -ForegroundColor Yellow
     return $false
 }
 
 function Install-Nodejs {
-    if (Test-Command "node") {
+    if (Test-Cmd "node") {
         $ver = node --version
-        Write-Info "Node.js: v$ver"
+        W "Node.js: v$ver"
         return $true
     }
     
-    Write-Step "安装 Node.js"
-    Write-Warn "Node.js 未安装"
-    Write-Host "请访问 https://nodejs.org 下载安装 LTS 版本" -ForegroundColor Cyan
+    H "Install Node.js"
+    Wn "Node.js not found!"
+    W "Please install from https://nodejs.org"
     
     try {
         Start-Process "https://nodejs.org"
@@ -161,45 +152,40 @@ function Install-Nodejs {
     return $false
 }
 
-function Install-RedisOrSkip {
-    if (Test-Command "redis-server") {
-        return "native"
-    }
-    
-    if (Test-Command "memurai") {
-        return "memurai"
-    }
-    
-    Write-Warn "Redis 未安装，将禁用缓存功能"
+function Get-RedisMode {
+    if (Test-Cmd "redis-server") { return "native" }
+    if (Test-Cmd "memurai") { return "memurai" }
+    Wn "Redis not found, cache disabled"
     return "none"
 }
 
 function Install-PythonDeps {
-    Set-Step "安装 Python 依赖"
+    H "Install Python Dependencies"
     
     Set-Mirrors
     
     if (-not (Test-Path $Script:VenvDir)) {
-        Write-Info "创建虚拟环境..."
+        W "Creating venv..."
         python -m venv venv
         if (-not $?) {
-            Write-Err "虚拟环境创建失败"
+            E "Venv creation failed"
             return $false
         }
     }
     
     $pip = Join-Path $Script:VenvDir "Scripts\pip.exe"
     if (-not (Test-Path $pip)) {
-        Write-Err "虚拟环境损坏，重新创建..."
+        Wn "Venv corrupted, recreating..."
         Remove-Item -Recurse -Force $Script:VenvDir -ErrorAction SilentlyContinue
         python -m venv venv
         $pip = Join-Path $Script:VenvDir "Scripts\pip.exe"
     }
     
-    Write-Info "升级 pip..."
+    W "Upgrading pip..."
     & $pip install --upgrade pip --quiet 2>$null
     
-    Write-Info "安装项目依赖..."
+    W "Installing dependencies..."
+    
     $deps = @(
         "fastapi==0.110.0",
         "uvicorn[standard]==0.27.1",
@@ -221,39 +207,39 @@ function Install-PythonDeps {
     )
     
     $depsStr = $deps -join " "
-    Write-Info "安装核心依赖 (这可能需要几分钟)..."
+    W "Installing core packages (may take minutes)..."
     
     & $pip install $depsStr --quiet 2>&1 | Out-Null
     
     if ($LASTEXITCODE -ne 0) {
-        Write-Warn "部分依赖安装失败，尝试逐个安装..."
+        Wn "Some deps failed, retry one by one..."
         foreach ($dep in $deps) {
             & $pip install $dep --quiet 2>$null
         }
     }
     
-    Write-Success "Python 依赖安装完成"
+    S "Python deps installed"
     return $true
 }
 
 function Install-NodeDeps {
-    Set-Step "安装前端依赖"
+    H "Install Frontend Dependencies"
     
     Set-Location $Script:FrontendDir
     
     if (-not (Test-Path "package.json")) {
-        Write-Err "package.json 不存在"
+        E "package.json not found"
         Set-Location $Script:ProjectRoot
         return $false
     }
     
     if (-not (Test-Path "node_modules")) {
-        Write-Info "安装 npm 依赖..."
+        W "Installing npm packages..."
         npm install 2>&1 | Out-Null
     }
     
     Set-Location $Script:ProjectRoot
-    Write-Success "前端依赖安装完成"
+    S "Node deps installed"
     return $true
 }
 
@@ -262,18 +248,16 @@ function Test-Port($port) {
     return ($null -ne $conn -and $conn.Count -gt 0)
 }
 
-function Get-PortProcess($port) {
+function Get-PortPID($port) {
     $conn = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
-    if ($conn) {
-        return $conn[0].OwningProcess
-    }
+    if ($conn) { return $conn[0].OwningProcess }
     return $null
 }
 
-function Stop-ProcessOnPort($port) {
-    $pid = Get-PortProcess $port
+function Kill-Port($port) {
+    $pid = Get-PortPID $port
     if ($pid) {
-        Write-Warn "端口 $port 被占用，尝试关闭..."
+        Wn "Port $port in use, killing..."
         Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
         Start-Sleep 1
     }
@@ -283,129 +267,118 @@ function Start-Redis {
     param([string]$Mode = "none")
     
     if ($Mode -eq "none") {
-        Write-Info "Redis: 禁用 (无缓存模式)"
-        $env:REDIS_URL = "redis://127.0.0.1:6379"
+        W "Redis: disabled (no-cache mode)"
         return $true
     }
     
     if (Test-Port 6379) {
-        Write-Info "Redis: 已在运行"
+        W "Redis: already running"
         return $true
     }
     
     if ($Mode -eq "memurai") {
-        Write-Info "启动 Memurai..."
-        Start-Process -FilePath "memurai" -ArgumentList "server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru" -WindowStyle Hidden -ErrorAction SilentlyContinue
+        W "Starting Memurai..."
+        Start-Process -FilePath "memurai" -ArgumentList "server", "--maxmemory", "64mb" -WindowStyle Hidden -ErrorAction SilentlyContinue
     } else {
-        Write-Info "启动 Redis..."
+        W "Starting Redis..."
         Start-Process -FilePath "redis-server" -ArgumentList "--daemonize", "yes", "--port", "6379", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru" -WindowStyle Hidden -ErrorAction SilentlyContinue
     }
     
     Start-Sleep 2
     
     if (Test-Port 6379) {
-        Write-Success "Redis 已启动"
+        S "Redis started"
         return $true
     } else {
-        Write-Warn "Redis 启动失败，禁用缓存"
+        Wn "Redis start failed, continuing without cache"
         return $true
     }
 }
 
 function Start-Backend {
-    Set-Step "启动后端服务"
+    H "Start Backend"
     
-    if (Test-Port 8000) {
-        Write-Warn "端口 8000 已被占用"
-        Stop-ProcessOnPort 8000
-    }
+    if (Test-Port 8000) { Kill-Port 8000 }
     
     $activate = Join-Path $Script:VenvDir "Scripts\Activate.ps1"
     if (-not (Test-Path $activate)) {
-        Write-Err "虚拟环境未找到"
+        E "Venv not found, run install first"
         return $false
     }
     
     $logFile = Join-Path $DataDir "logs\backend.log"
-    if (-not (Test-Path (Split-Path $logFile))) {
-        New-Item -ItemType Directory -Force -Path (Split-Path $logFile) | Out-Null
+    $logDir = Split-Path $logFile
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
     }
     
-    Write-Info "启动 uvicorn (日志: $logFile)..."
+    W "Starting uvicorn..."
     
     $python = Join-Path $Script:VenvDir "Scripts\python.exe"
     $script:BackendJob = Start-Job -ScriptBlock {
         param($python, $logFile, $root)
-        
         $env:PYTHONDONTWRITEBYTECODE = "1"
         $env:DATABASE_URL = "sqlite+aiosqlite:///data/novel.db"
         $env:REDIS_URL = "redis://127.0.0.1:6379"
         $env:DATA_DIR = "./data"
-        
         Set-Location $root
-        
         & $python -m uvicorn main:app --host 0.0.0.0 --port 8000 2>&1 | Out-File -FilePath $logFile -Append
     } -ArgumentList $python, $logFile, $Script:BackendDir
     
-    Write-Info "等待后端启动..."
+    W "Waiting for backend..."
     for ($i = 1; $i -le 30; $i++) {
         try {
             $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
             if ($resp.StatusCode -eq 200) {
-                Write-Success "后端已就绪 (耗时 ${i}s)"
+                S "Backend ready (${i}s)"
                 return $true
             }
         } catch {}
-        if ($i % 5 -eq 0) { Write-Info "仍在启动中... ($i/30)" }
+        if ($i % 5 -eq 0) { W "Still starting... ($i/30)" }
         Start-Sleep 1
     }
     
-    Write-Warn "后端启动超时，请检查日志: $logFile"
+    Wn "Backend timeout, check logs"
     return $false
 }
 
 function Start-Frontend {
-    Set-Step "启动前端服务"
+    H "Start Frontend"
     
-    if (Test-Port 8080) {
-        Write-Warn "端口 8080 已被占用"
-        Stop-ProcessOnPort 8080
-    }
+    if (Test-Port 8080) { Kill-Port 8080 }
     
     Set-Location $Script:FrontendDir
     
-    Write-Info "启动 Vite 开发服务器..."
-    
+    W "Starting Vite..."
     $logFile = Join-Path $DataDir "logs\frontend.log"
     
     $script:FrontendJob = Start-Job -ScriptBlock {
         param($dir, $logFile)
-        
         Set-Location $dir
         npm run dev -- --host 0.0.0.0 --port 8080 2>&1 | Out-File -FilePath $logFile -Append
     } -ArgumentList $Script:FrontendDir, $logFile
     
-    Write-Info "等待前端启动..."
+    W "Waiting for frontend..."
     for ($i = 1; $i -le 60; $i++) {
         try {
             $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8080" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
             if ($resp.StatusCode -eq 200) {
-                Write-Success "前端已就绪 (耗时 ${i}s)"
+                S "Frontend ready (${i}s)"
                 Set-Location $Script:ProjectRoot
                 return $true
             }
         } catch {}
-        if ($i % 10 -eq 0) { Write-Info "仍在启动中... ($i/60)" }
+        if ($i % 10 -eq 0) { W "Still starting... ($i/60)" }
         Start-Sleep 1
     }
     
-    Write-Warn "前端启动超时，请检查日志: $logFile"
+    Wn "Frontend timeout, check logs"
     Set-Location $Script:ProjectRoot
     return $false
 }
 
-function Stop-AllServices {
-    Write-Step "停止所有服务"
+function Stop-All {
+    H "Stop Services"
     
     if ($script:BackendJob) {
         Stop-Job -Job $script:BackendJob -ErrorAction SilentlyContinue
@@ -423,59 +396,59 @@ function Stop-AllServices {
         Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     }
     
-    Write-Success "所有服务已停止"
+    S "All services stopped"
 }
 
 function Show-Menu {
     Write-Host ""
-    Write-Host "═══════════════════════════════════" -ForegroundColor Cyan
-    Write-Host "  Novel Reader 控制面板" -ForegroundColor Cyan
-    Write-Host "═══════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "===================================" -ForegroundColor $C
+    Write-Host "  Novel Reader Control Panel" -ForegroundColor $C
+    Write-Host "===================================" -ForegroundColor $C
     Write-Host ""
-    Write-Host "  1. 启动服务" -ForegroundColor Green
-    Write-Host "  2. 停止服务" -ForegroundColor Yellow
-    Write-Host "  3. 重启服务" -ForegroundColor Cyan
-    Write-Host "  4. 检查更新" -ForegroundColor Blue
-    Write-Host "  5. 查看日志" -ForegroundColor Gray
-    Write-Host "  6. 完整重装" -ForegroundColor Red
-    Write-Host "  0. 退出" -ForegroundColor White
+    Write-Host "  1. Start Services" -ForegroundColor Green
+    Write-Host "  2. Stop Services" -ForegroundColor Yellow
+    Write-Host "  3. Restart Services" -ForegroundColor Cyan
+    Write-Host "  4. Check Updates" -ForegroundColor Blue
+    Write-Host "  5. View Logs" -ForegroundColor Gray
+    Write-Host "  6. Clean Reinstall" -ForegroundColor Red
+    Write-Host "  0. Exit" -ForegroundColor White
     Write-Host ""
     
-    $choice = Read-Host "请输入选项"
+    $choice = Read-Host "Select option"
     return $choice
 }
 
 function Update-Project {
-    Write-Step "检查更新"
+    H "Check Updates"
     
     Set-Location $Script:ProjectRoot
     
-    Write-Info "拉取最新代码..."
-    git fetch origin main 2>$null
-    
-    $local = git rev-parse HEAD 2>$null
-    $remote = git rev-parse origin/main 2>$null
-    
-    if ($local -eq $remote) {
-        Write-Success "已是最新版本"
+    try {
+        git fetch origin main 2>$null
+        $local = git rev-parse HEAD 2>$null
+        $remote = git rev-parse origin/main 2>$null
+        
+        if ($local -eq $remote) {
+            S "Already up to date"
+            return $true
+        }
+        
+        Wn "Updates available"
+        Write-Host "Local:  $local"
+        Write-Host "Remote: $remote"
+        Write-Host ""
+        
+        $confirm = Read-Host "Update? (y/n)"
+        if ($confirm -ne "y" -and $confirm -ne "Y") { return $false }
+        
+        W "Updating..."
+        git pull origin main 2>&1
+        S "Update complete, restart services"
         return $true
-    }
-    
-    Write-Warn "发现新版本"
-    Write-Host "本地:  $local"
-    Write-Host "远程:  $remote"
-    Write-Host ""
-    
-    $confirm = Read-Host "是否更新? (y/n)"
-    if ($confirm -ne "y" -and $confirm -ne "Y") {
+    } catch {
+        Wn "Update failed: $_"
         return $false
     }
-    
-    Write-Info "正在更新..."
-    git pull origin main 2>&1
-    
-    Write-Success "更新完成，请重启服务"
-    return $true
 }
 
 function Show-Logs {
@@ -483,94 +456,79 @@ function Show-Logs {
     $frontendLog = Join-Path $DataDir "logs\frontend.log"
     
     Write-Host ""
-    Write-Host "═══ 后端日志 (最后 30 行) ═══" -ForegroundColor Cyan
+    Write-Host "=== Backend Log (last 30 lines) ===" -ForegroundColor $C
     if (Test-Path $backendLog) {
         Get-Content $backendLog -Tail 30
     } else {
-        Write-Host "(无日志)" -ForegroundColor Gray
+        Write-Host "(no log)" -ForegroundColor Gray
     }
     
     Write-Host ""
-    Write-Host "═══ 前端日志 (最后 30 行) ═══" -ForegroundColor Cyan
+    Write-Host "=== Frontend Log (last 30 lines) ===" -ForegroundColor $C
     if (Test-Path $frontendLog) {
         Get-Content $frontendLog -Tail 30
     } else {
-        Write-Host "(无日志)" -ForegroundColor Gray
+        Write-Host "(no log)" -ForegroundColor Gray
     }
 }
 
-function Get-ServiceStatus {
+function Get-Status {
     Write-Host ""
-    Write-Host "═══ 服务状态 ═══" -ForegroundColor Cyan
+    Write-Host "=== Service Status ===" -ForegroundColor $C
     
     $backendOk = $false
     try {
         $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
         $backendOk = ($resp.StatusCode -eq 200)
     } catch {}
-    if ($backendOk) { Write-Success "后端 API: 运行中" } else { Write-Err "后端 API: 未运行" }
+    if ($backendOk) { S "Backend API: Running" } else { E "Backend API: Stopped" }
     
     $frontendOk = $false
     try {
         $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8080" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
         $frontendOk = ($resp.StatusCode -eq 200)
     } catch {}
-    if ($frontendOk) { Write-Success "前端页面: 运行中" } else { Write-Err "前端页面: 未运行" }
+    if ($frontendOk) { S "Frontend: Running" } else { E "Frontend: Stopped" }
     
-    if ((Test-Port 6379)) { Write-Success "Redis: 运行中" } else { Write-Info "Redis: 未运行 (无缓存)" }
+    if (Test-Port 6379) { S "Redis: Running" } else { W "Redis: Not running" }
 }
 
-function Start-FullInstall {
-    Write-Step "Novel Reader 一键安装启动"
+function Full-Install {
+    H "Novel Reader Setup"
     
-    Set-ExecutionPolicy-Bypass
+    Set-Policy
+    Init-Dirs
+    Init-Env
     
-    Initialize-Directories
-    Initialize-EnvFile
+    if (-not (Install-Python)) { return }
+    if (-not (Install-Nodejs)) { return }
     
-    if (-not (Install-Python)) {
-        Write-Err "Python 安装失败"
-        return
-    }
-    
-    if (-not (Install-Nodejs)) {
-        Write-Err "Node.js 安装失败"
-        return
-    }
-    
-    $redisMode = Install-RedisOrSkip
+    $redisMode = Get-RedisMode
     Start-Redis -Mode $redisMode
     
-    if (-not (Install-PythonDeps)) {
-        Write-Err "Python 依赖安装失败"
-        return
-    }
+    if (-not (Install-PythonDeps)) { return }
+    if (-not (Install-NodeDeps)) { return }
     
-    if (-not (Install-NodeDeps)) {
-        Write-Err "前端依赖安装失败"
-        return
-    }
-    
-    Write-Step "启动服务"
+    H "Start Services"
     
     Start-Redis -Mode $redisMode
     $backendOk = Start-Backend
     $frontendOk = Start-Frontend
     
     Write-Host ""
-    Write-Host "═══════════════════════════════════" -ForegroundColor Green
+    Write-Host "===================================" -ForegroundColor Green
     if ($backendOk -and $frontendOk) {
-        Write-Host "  ✓ 服务已全部启动!" -ForegroundColor Green
+        Write-Host "  All services started!" -ForegroundColor Green
     } else {
-        Write-Host "  ⚠ 部分服务启动异常" -ForegroundColor Yellow
+        Write-Host "  Some services failed" -ForegroundColor Yellow
     }
-    Write-Host "═══════════════════════════════════" -ForegroundColor Green
+    Write-Host "===================================" -ForegroundColor Green
     Write-Host ""
-    Write-Host "  📖 前端: http://localhost:8080" -ForegroundColor Cyan
-    Write-Host "  🔧 API:  http://localhost:8000/docs" -ForegroundColor Cyan
+    Write-Host "  Frontend: http://localhost:8080" -ForegroundColor Cyan
+    Write-Host "  API:       http://localhost:8000/docs" -ForegroundColor Cyan
     Write-Host ""
     
-    Get-ServiceStatus
+    Get-Status
 }
 
 function Main {
@@ -579,52 +537,48 @@ function Main {
     Set-Location $Script:ProjectRoot
     
     Write-Host ""
-    Write-Host "╔═══════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "║   Novel Reader 启动器 v1.0        ║" -ForegroundColor Cyan
-    Write-Host "╚═══════════════════════════════════╝" -ForegroundColor Cyan
+    Write-Host "===================================" -ForegroundColor Cyan
+    Write-Host "   Novel Reader Launcher v1.0" -ForegroundColor Cyan
+    Write-Host "===================================" -ForegroundColor Cyan
     Write-Host ""
     
     if (-not $SkipUpdate) {
-        Write-Info "检查更新..."
+        W "Checking updates..."
         try {
             git fetch origin main 2>$null
             $behind = git rev-list HEAD..origin/main --count 2>$null
             if ($behind -gt 0) {
-                Write-Warn "发现 $behind 个更新"
-                $u = Read-Host "是否更新? (y/n)"
-                if ($u -eq "y" -or $u -eq "Y") {
-                    Update-Project
-                }
+                Wn "Found $behind update(s)"
+                $u = Read-Host "Update now? (y/n)"
+                if ($u -eq "y" -or $u -eq "Y") { Update-Project }
             }
         } catch {}
     }
     
-    if ($Force) {
-        Stop-AllServices
-    }
+    if ($Force) { Stop-All }
     
     while ($true) {
-        Get-ServiceStatus
+        Get-Status
         $choice = Show-Menu
         
         switch ($choice) {
-            "1" { Start-FullInstall }
-            "2" { Stop-AllServices; Write-Success "已停止" }
-            "3" { Stop-AllServices; Start-Sleep 2; Start-FullInstall }
+            "1" { Full-Install }
+            "2" { Stop-All; S "Stopped" }
+            "3" { Stop-All; Start-Sleep 2; Full-Install }
             "4" { Update-Project }
             "5" { Show-Logs }
             "6" {
-                Write-Warn "即将删除所有依赖并重新安装..."
-                $confirm = Read-Host "确认? (yes/no)"
+                Wn "Will delete all deps and reinstall..."
+                $confirm = Read-Host "Confirm? (yes/no)"
                 if ($confirm -eq "yes") {
-                    Stop-AllServices
+                    Stop-All
                     Remove-Item -Recurse -Force (Join-Path $Script:BackendDir "venv") -ErrorAction SilentlyContinue
                     Remove-Item -Recurse -Force (Join-Path $Script:FrontendDir "node_modules") -ErrorAction SilentlyContinue
-                    Start-FullInstall
+                    Full-Install
                 }
             }
-            "0" { Write-Host "再见!"; break }
-            default { Write-Warn "无效选项" }
+            "0" { Write-Host "Goodbye!"; break }
+            default { Wn "Invalid option" }
         }
         
         if ($choice -eq "0") { break }
