@@ -1,0 +1,44 @@
+# Novel Reader 兼容性依赖清单
+# 优先使用预编译 wheel，避免编译
+# 适用于 Windows/Linux/Android (Termux)
+
+# 核心框架
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+sqlalchemy==2.0.23
+aiosqlite==0.19.0
+
+# 数据库
+redis==5.0.1
+
+# 数据验证
+pydantic==2.5.2
+pydantic-settings==2.1.0
+
+# 认证安全 (使用预编译 wheel)
+python-jose[cryptography]==3.3.0
+cryptography==41.0.7
+passlib==1.7.4
+bcrypt==4.1.2
+python-multipart==0.0.6
+
+# 网络请求
+aiohttp==3.9.1
+
+# 解析
+beautifulsoup4==4.12.2
+tenacity==8.2.3
+
+# 文件类型检测 (Linux 需要系统库)
+python-magic==0.4.27
+
+# 终端美化
+rich==13.7.0
+
+# 注意:
+# 1. cryptography, bcrypt 优先使用预编译 wheel
+# 2. python-magic 在 Linux 上需要 libmagic:
+#    - Debian/Ubuntu: apt install libmagic1
+#    - CentOS/RHEL: yum install file-devel
+#    - Termux: pkg install libmagic
+# 3. Termux 建议使用 Python 3.11
