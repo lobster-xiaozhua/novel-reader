@@ -177,13 +177,6 @@ install_termux_deps() {
     deactivate
     cd "$SCRIPT_DIR"
 
-    cd "$FRONTEND_DIR"
-    if [ -f "package.json" ]; then
-        print_info "Installing npm packages..."
-        npm install
-    fi
-    cd "$SCRIPT_DIR"
-
     print_success "All dependencies installed!"
 }
 
@@ -199,8 +192,8 @@ install_docker_deps() {
     print_info "Building and starting..."
     docker-compose up -d
     print_success "Services started"
-    print_info "Frontend: http://localhost"
-    print_info "API: http://localhost:8000/docs"
+    print_info "App: http://localhost"
+    print_info "API docs: http://localhost:8000/docs"
 }
 
 install_native_deps() {
@@ -239,12 +232,6 @@ install_native_deps() {
     deactivate
     cd "$SCRIPT_DIR"
 
-    cd "$FRONTEND_DIR"
-    if [ -f "package.json" ]; then
-        npm install
-    fi
-    cd "$SCRIPT_DIR"
-
     print_success "Dependencies installed"
 }
 
@@ -273,20 +260,15 @@ start_termux_services() {
     deactivate
     cd "$SCRIPT_DIR"
 
-    cd "$FRONTEND_DIR"
-    nohup npm run dev -- --host 0.0.0.0 --port 8080 > ../data/logs/frontend.log 2>&1 &
-    echo $! > vite.pid
-    cd "$SCRIPT_DIR"
-
-    print_info "Waiting for services..."
+    print_info "Waiting for backend..."
     for i in $(seq 1 30); do
         curl -s http://localhost:8000/api/health > /dev/null 2>&1 && break
         sleep 1
     done
 
     print_success "Services started"
-    print_info "Frontend: http://localhost:8080"
-    print_info "API: http://localhost:8000/docs"
+    print_info "App (frontend + API): http://localhost:8000"
+    print_info "API docs: http://localhost:8000/docs"
 }
 
 start_native_services() {
@@ -314,20 +296,15 @@ start_native_services() {
     deactivate
     cd "$SCRIPT_DIR"
 
-    cd "$FRONTEND_DIR"
-    nohup npm run dev -- --host 0.0.0.0 --port 80 > ../data/logs/frontend.log 2>&1 &
-    echo $! > vite.pid
-    cd "$SCRIPT_DIR"
-
-    print_info "Waiting for services..."
+    print_info "Waiting for backend..."
     for i in $(seq 1 30); do
         curl -s http://localhost:8000/api/health > /dev/null 2>&1 && break
         sleep 1
     done
 
     print_success "Services started"
-    print_info "Frontend: http://localhost"
-    print_info "API: http://localhost:8000/docs"
+    print_info "App: http://localhost:8000"
+    print_info "API docs: http://localhost:8000/docs"
 }
 
 stop_services() {
@@ -337,12 +314,7 @@ stop_services() {
         kill $(cat "$BACKEND_DIR/uvicorn.pid") 2>/dev/null || true
         rm -f "$BACKEND_DIR/uvicorn.pid"
     fi
-    if [ -f "$FRONTEND_DIR/vite.pid" ]; then
-        kill $(cat "$FRONTEND_DIR/vite.pid") 2>/dev/null || true
-        rm -f "$FRONTEND_DIR/vite.pid"
-    fi
     pkill -f "uvicorn" 2>/dev/null || true
-    pkill -f "vite" 2>/dev/null || true
     docker-compose down 2>/dev/null || true
     if command -v redis-cli &> /dev/null; then
         redis-cli shutdown 2>/dev/null || true
@@ -356,20 +328,7 @@ show_status() {
     SYSTEM=$(detect_system)
     echo "System: $SYSTEM"
 
-    case "$SYSTEM" in
-        docker)
-            docker-compose ps 2>/dev/null || print_info "Docker not running"
-            ;;
-        termux)
-            pgrep -f "uvicorn" > /dev/null && print_success "Backend: running" || print_error "Backend: stopped"
-            pgrep -f "vite" > /dev/null && print_success "Frontend: running" || print_error "Frontend: stopped"
-            ;;
-        *)
-            pgrep -x uvicorn > /dev/null && print_success "Backend: running" || print_error "Backend: stopped"
-            pgrep -f "vite|npm" > /dev/null && print_success "Frontend: running" || print_error "Frontend: stopped"
-            ;;
-    esac
-
+    pgrep -f "uvicorn" > /dev/null && print_success "App: running on :8000" || print_error "App: stopped"
     echo ""
     curl -s http://localhost:8000/api/health > /dev/null 2>&1 && print_success "API: responding" || print_error "API: not responding"
 }

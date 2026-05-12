@@ -1,8 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers, ErrorHandlingMiddleware
@@ -20,55 +23,63 @@ logger = get_logger(__name__)
 
 startup_report = None
 
+FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global startup_report
 
-    logger.success(f"正在启动 {settings.APP_NAME} v{settings.APP_VERSION}")
+    logger.success(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
 
     startup_report = await startup_check.run_all()
 
     if not startup_report.healthy:
-        logger.error(f"启动自检未通过: {startup_report.errors} 个错误")
+        logger.error(f"Startup check failed: {startup_report.errors} errors")
         if startup_report.errors > 0:
             for check in startup_report.checks:
                 if not check.passed and not check.skipped and check.severity == "error":
-                    logger.error(f"  ├─ {check.name}: {check.message}")
+                    logger.error(f"  {check.name}: {check.message}")
     else:
-        logger.success("启动自检通过")
+        logger.success("Startup check passed")
 
     from app.api.health import set_startup_report
     set_startup_report(startup_report)
 
     await init_database()
-    logger.success("数据库初始化完成")
+    logger.success("Database initialized")
 
     await cache_service.connect()
-    logger.success("缓存服务初始化完成")
+    logger.success("Cache service initialized")
 
     try:
         await search_service.ensure_fts_table()
-        logger.success("FTS5 索引表已就绪")
+        logger.success("FTS5 index ready")
     except Exception as e:
-        logger.warning(f"FTS5 索引表初始化失败（非致命）: {e}")
+        logger.warning(f"FTS5 init failed (non-fatal): {e}")
+
+    if FRONTEND_DIST.is_dir():
+        logger.success(f"Frontend: serving from {FRONTEND_DIST}")
+    else:
+        logger.warning(f"Frontend dist not found at {FRONTEND_DIST}")
 
     logger.success("=" * 50)
-    logger.success(f"  {settings.APP_NAME} 已启动!")
-    logger.success(f"  API 文档: http://localhost:8000/docs")
+    logger.success(f"  {settings.APP_NAME} started!")
+    logger.success(f"  http://localhost:8000")
+    logger.success(f"  API docs: http://localhost:8000/docs")
     logger.success("=" * 50)
 
     yield
 
-    logger.info("应用正在关闭...")
+    logger.info("Shutting down...")
     await cache_service.disconnect()
-    logger.success("应用已关闭")
+    logger.success("Shutdown complete")
 
 
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="本地小说阅读与分享平台",
+    description="Local novel reader platform",
     lifespan=lifespan
 )
 
@@ -94,14 +105,15 @@ app.include_router(health.router, prefix="/api")
 app.include_router(update.router, prefix="/api")
 app.include_router(version.router, prefix="/api")
 
+if FRONTEND_DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
 
-@app.get("/")
-async def root():
-    return {
-        "name": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-        "status": "running"
-    }
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        file_path = FRONTEND_DIST / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(FRONTEND_DIST / "index.html")
 
 
 if __name__ == "__main__":
