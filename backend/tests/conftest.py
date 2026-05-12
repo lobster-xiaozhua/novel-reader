@@ -6,8 +6,10 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 
 from app.core.config import get_settings
-from app.database import Base, get_db
+from app.database import get_db
 from main import app
+
+Base = declarative_base()
 
 settings = get_settings()
 

@@ -118,3 +118,29 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
         )
 
     return int(user_id)
+
+
+async def get_current_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    return credentials.credentials
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    token = credentials.credentials
+    payload = decode_token(token)
+    
+    if not payload or payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证令牌",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    return {"id": int(payload.get("sub")), "is_admin": payload.get("is_admin", False)}
+
+
+def require_admin(user: dict):
+    if not user.get("is_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足，需要管理员权限",
+        )

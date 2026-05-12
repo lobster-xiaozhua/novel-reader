@@ -43,6 +43,10 @@ class CacheService:
     def available(self) -> bool:
         return self._client is not None
 
+    @property
+    def is_redis_available(self) -> bool:
+        return self._client is not None
+
     async def get(self, key: str) -> Optional[str]:
         if not self.available:
             return None
