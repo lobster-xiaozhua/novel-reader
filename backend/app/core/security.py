@@ -82,3 +82,7 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
         )
 
     return int(user_id)
+
+
+async def get_current_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    return credentials.credentials

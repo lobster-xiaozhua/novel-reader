@@ -24,3 +24,8 @@ AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
+
+
+async def get_db_no_commit():
+    async with AsyncSessionLocal() as session:
+        yield session
