@@ -1,135 +1,76 @@
-# Novel Reader - Windows 统一部署入口脚本 (PowerShell)
-# 自动检测并选择合适的部署方式
-
+# Novel Reader - Windows 部署脚本
 param(
-    [switch]$UseWSL,
-    [switch]$SkipDocker,
-    [switch]$NoInstall,
-    [string]$Command = ""
+    [switch]$Docker,
+    [switch]$WSL,
+    [switch]$Native,
+    [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
 
-$SCRIPT_DIR = $PSScriptRoot
-$SCRIPTS_DIR = Join-Path $SCRIPT_DIR "scripts"
-
-function Write-ColorOutput {
-    param([string]$Message, [string]$Color = "White")
-    Write-Host $Message -ForegroundColor $Color
+function Write-Header {
+    param([string]$Text)
+    Write-Host "`n========================================" -ForegroundColor Cyan
+    Write-Host " $Text" -ForegroundColor Cyan
+    Write-Host "========================================`n" -ForegroundColor Cyan
 }
 
-$Colors = @{
-    Info = "Cyan"
-    Success = "Green"
-    Warning = "Yellow"
-    Error = "Red"
-    Header = "Magenta"
+function Write-Success { param([string]$Text) Write-Host "[OK] $Text" -ForegroundColor Green }
+function Write-Info { param([string]$Text) Write-Host "[INFO] $Text" -ForegroundColor Yellow }
+function Write-Err { param([string]$Text) Write-Host "[ERROR] $Text" -ForegroundColor Red }
+
+function Test-Command {
+    param([string]$Command)
+    $null = Get-Command $Command -ErrorAction SilentlyContinue
+    return $?
 }
 
-function Show-Banner {
-    Clear-Host
-    Write-ColorOutput @"
-
-╔══════════════════════════════════════════════════════════════════╗
-║                                                                  ║
-║   ██████╗ ███████╗███████╗██╗██████╗ ██╗ █████╗ ███╗   ██╗      ║
-║   ██╔══██╗██╔════╝██╔════╝██║██╔══██╗██║██╔══██╗████╗  ██║      ║
-║   ██████╔╝█████╗  ███████╗██║██████╔╝██║███████║██╔██╗ ██║      ║
-║   ██╔══██╗██╔══╝  ╚════██║██║██╔══██╗██║██╔══██║██║╚██╗██║      ║
-║   ██║  ██║███████╗███████║██║██║  ██║██║██║  ██║██║ ╚████║      ║
-║   ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝      ║
-║              统一跨平台部署脚本 (Windows PowerShell)             ║
-║                                                                  ║
-╚══════════════════════════════════════════════════════════════════╝
-
-"@ $Colors.Header
-}
-
-function Test-WSL {
-    if (Test-Path "/proc/version" -PathType Leaf) {
-        $content = Get-Content "/proc/version" -Raw -ErrorAction SilentlyContinue
-        if ($content -match "Microsoft|WSL") {
-            return $true
-        }
+function Deploy-Docker {
+    Write-Header "使用 Docker Desktop 部署"
+    if (-not (Test-Command "docker")) { Write-Err "Docker 未安装"; return $false }
+    Write-Success "Docker: $(docker --version)"
+    $composeCmd = if (Test-Command "docker compose") { "docker compose" } else { "docker-compose" }
+    if (-not (Test-Path "$ProjectRoot\.env")) {
+        $envExample = "$ProjectRoot\.env.example"
+        if (Test-Path $envExample) { Copy-Item $envExample "$ProjectRoot\.env"; Write-Success "已创建 .env 文件" }
     }
+    & $composeCmd up -d --build
+    if ($LASTEXITCODE -eq 0) { Write-Success "服务启动成功!"; return $true }
     return $false
 }
 
-function Test-Termux {
-    return (Test-Path "$env:PREFIX" -PathType Container)
-}
-
-function Show-Help {
-    Show-Banner
-    @"
-用法: .\deploy.ps1 [command] [options]
-
-命令:
-  install     安装所有依赖
-  start       启动服务
-  stop        停止服务
-  restart     重启服务
-  status      查看服务状态
-  logs        查看日志
-  docker      使用 Docker 模式启动
-  help        显示帮助
-
-选项:
-  -UseWSL      使用 WSL2 模式 (如果可用)
-  -SkipDocker  跳过 Docker 模式，使用本地模式
-  -NoInstall   跳过依赖安装
-
-示例:
-  .\deploy.ps1          # 交互式部署
-  .\deploy.ps1 install  # 安装依赖
-  .\deploy.ps1 start    # 启动服务
-  .\deploy.ps1 docker   # Docker 模式启动
-
-Windows 部署说明:
-  1. PowerShell 5.1+ (Windows 10/11 自带)
-  2. 支持 Docker Desktop 或 WSL2
-  3. 推荐使用 Windows Terminal 运行
-
-"@
+function Deploy-Native {
+    Write-Header "原生 Python 部署"
+    $pythonCmd = if (Test-Command "python3") { "python3" } else { "python" }
+    if (-not (Test-Command $pythonCmd)) { Write-Err "Python 未安装"; return $false }
+    Write-Success "Python: $(&$pythonCmd --version)"
+    $venvPath = "$ProjectRoot\venv"
+    if (-not (Test-Path $venvPath)) { & $pythonCmd -m venv $venvPath; Write-Success "虚拟环境已创建" }
+    & "$venvPath\Scripts\Activate.ps1"
+    python -m pip install --upgrade pip
+    python -m pip install -r "$ProjectRoot\backend\requirements.txt"
+    Write-Success "依赖安装完成"
+    @("books", "index", "static", "logs", "cache") | ForEach-Object { New-Item -ItemType Directory -Path "$ProjectRoot\data\$_" -Force | Out-Null }
+    return $true
 }
 
 function Main {
-    $cmd = $Command.Trim()
-    if ([string]::IsNullOrEmpty($cmd)) {
-        $cmd = $args[0]
+    Write-Host "`n  ╔═══════════════════════════════════╗" -ForegroundColor Magenta
+    Write-Host "  ║   Novel Reader 部署脚本 (Windows)  ║" -ForegroundColor Magenta
+    Write-Host "  ╚═══════════════════════════════════╝" -ForegroundColor Magenta
+    if ($Help) { Write-Host @"
+用法: .\deploy.ps1 [选项]
+  -Docker    使用 Docker Desktop 部署
+  -WSL       使用 WSL2 + Docker 部署
+  -Native    原生 Python 部署
+  -Help      显示帮助
+"@; return }
+    if (-not $Docker -and -not $WSL -and -not $Native) {
+        if (Test-Command "docker") { $Docker = $true } else { $Native = $true }
     }
-
-    if ($cmd -eq "help" -or $cmd -eq "-h" -or $cmd -eq "--help") {
-        Show-Help
-        return
-    }
-
-    Show-Banner
-
-    Write-ColorOutput "[INFO] 检测运行环境..." $Colors.Info
-
-    if (Test-Termux) {
-        Write-ColorOutput "[INFO] 检测到 Termux 环境，请使用 Bash 脚本:" $Colors.Warning
-        Write-ColorOutput "[INFO] 运行: bash deploy.sh" $Colors.Info
-        return
-    }
-
-    if (Test-WSL -and -not $UseWSL) {
-        Write-ColorOutput "[INFO] 检测到 WSL 环境，建议使用:" $Colors.Warning
-        Write-ColorOutput "[INFO]   bash deploy.sh    # 使用 Bash 脚本" $Colors.Info
-        Write-ColorOutput "[INFO] 或: .\deploy.ps1 -UseWSL    # 使用 WSL" $Colors.Info
-        Write-ColorOutput "" $Colors.Info
-    }
-
-    if ($UseWSL) {
-        Write-ColorOutput "[INFO] 使用 WSL2 模式..." $Colors.Info
-        bash "$SCRIPTS_DIR/deploy_linux.sh" $args
-        return
-    }
-
-    Write-ColorOutput "[INFO] 使用 Windows PowerShell 部署脚本..." $Colors.Info
-    & "$SCRIPTS_DIR\deploy_windows.ps1" @args
+    if ($Docker) { $result = Deploy-Docker }
+    elseif ($Native) { $result = Deploy-Native }
+    if ($result) { Write-Header "部署完成!" } else { Write-Header "部署失败"; exit 1 }
 }
-
 Main
