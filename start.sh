@@ -90,18 +90,29 @@ EOF
 
 ensure_rust_termux() {
     if command -v rustc &> /dev/null; then
-        print_success "Rust already installed: $(rustc --version)"
+        print_success "Rust: $(rustc --version)"
         return 0
     fi
 
-    print_info "Installing Rust toolchain (required for pydantic-core)..."
+    print_info "Installing Rust (needed for pydantic-core)..."
     pkg install -y rust cmake
 
     if command -v rustc &> /dev/null; then
-        print_success "Rust installed: $(rustc --version)"
+        print_success "Rust: $(rustc --version)"
     else
         print_error "Rust install failed"
         return 1
+    fi
+}
+
+pip_install_one() {
+    local pkg="$1"
+    local desc="$2"
+    print_info "[$desc] $pkg ..."
+    if pip install "$pkg" 2>&1; then
+        print_success "$pkg installed"
+    else
+        print_warning "$pkg failed (non-critical, continuing)"
     fi
 }
 
@@ -111,7 +122,7 @@ install_termux_deps() {
     print_info "Updating packages..."
     pkg update -y 2>/dev/null || true
 
-    print_info "Installing base tools..."
+    print_info "Installing base tools + Rust..."
     pkg install -y python python-pip nodejs-lts npm git curl wget rust cmake 2>/dev/null || true
 
     ensure_rust_termux
@@ -130,57 +141,50 @@ install_termux_deps() {
     source venv/bin/activate
 
     print_info "Upgrading pip..."
-    pip install --upgrade pip setuptools wheel 2>/dev/null || true
+    pip install --upgrade pip setuptools wheel
 
-    print_info "Installing Python deps (may compile from source)..."
-    REQ_FILE="$BACKEND_DIR/requirements-termux.txt"
-    if [ -f "$REQ_FILE" ]; then
-        pip install -r "$REQ_FILE" 2>&1 | tail -5
-    else
-        pip install -r "$BACKEND_DIR/requirements.txt" 2>&1 | tail -5
-    fi
+    print_header "Install Python Packages"
+    print_info "Installing packages one by one (with progress)..."
 
-    if [ $? -ne 0 ]; then
-        print_warning "Batch install had issues, trying one by one..."
-        local deps=(
-            "fastapi==0.110.0"
-            "uvicorn[standard]==0.27.1"
-            "sqlalchemy==2.0.27"
-            "aiosqlite==0.19.0"
-            "redis==5.0.1"
-            "pydantic==2.6.1"
-            "pydantic-settings==2.1.0"
-            "python-multipart==0.0.9"
-            "beautifulsoup4==4.12.3"
-            "tenacity==8.2.3"
-            "rich==13.7.0"
-            "python-jose[cryptography]==3.3.0"
-            "pycryptodome==3.20.0"
-            "passlib==1.7.4"
-            "bcrypt==4.1.2"
-            "aiohttp==3.9.3"
-            "httpx==0.27.0"
-            "aiofiles==23.2.1"
-        )
-        for dep in "${deps[@]}"; do
-            print_info "Installing $dep..."
-            pip install "$dep" 2>/dev/null || print_warning "Failed: $dep (may not be critical)"
-        done
-    fi
+    pip_install_one "fastapi==0.110.0" "1/18"
+    pip_install_one "uvicorn[standard]==0.27.1" "2/18"
+    pip_install_one "sqlalchemy==2.0.27" "3/18"
+    pip_install_one "aiosqlite==0.19.0" "4/18"
+    pip_install_one "redis==5.0.1" "5/18"
 
-    print_info "Installing aiofiles..."
-    pip install aiofiles 2>/dev/null || true
+    echo ""
+    print_warning "========================================="
+    print_warning "  Next: pydantic (compiles from source)"
+    print_warning "  This takes 10-30 min on ARM Android"
+    print_warning "  Please wait, do NOT cancel!"
+    print_warning "========================================="
+    echo ""
+    pip_install_one "pydantic==2.6.1" "6/18"
+
+    pip_install_one "pydantic-settings==2.1.0" "7/18"
+    pip_install_one "python-multipart==0.0.9" "8/18"
+    pip_install_one "beautifulsoup4==4.12.3" "9/18"
+    pip_install_one "tenacity==8.2.3" "10/18"
+    pip_install_one "rich==13.7.0" "11/18"
+    pip_install_one "python-jose[cryptography]==3.3.0" "12/18"
+    pip_install_one "pycryptodome==3.20.0" "13/18"
+    pip_install_one "passlib==1.7.4" "14/18"
+    pip_install_one "bcrypt==4.1.2" "15/18"
+    pip_install_one "aiohttp==3.9.3" "16/18"
+    pip_install_one "httpx==0.27.0" "17/18"
+    pip_install_one "aiofiles==23.2.1" "18/18"
 
     deactivate
     cd "$SCRIPT_DIR"
 
     cd "$FRONTEND_DIR"
     if [ -f "package.json" ]; then
-        npm install 2>/dev/null || true
+        print_info "Installing npm packages..."
+        npm install
     fi
     cd "$SCRIPT_DIR"
 
-    print_success "Dependencies installed"
+    print_success "All dependencies installed!"
 }
 
 install_docker_deps() {
@@ -230,14 +234,14 @@ install_native_deps() {
         python3 -m venv venv
     fi
     source venv/bin/activate
-    pip install --upgrade pip 2>/dev/null || true
-    pip install -r requirements.txt 2>&1 | tail -5
+    pip install --upgrade pip
+    pip install -r requirements.txt
     deactivate
     cd "$SCRIPT_DIR"
 
     cd "$FRONTEND_DIR"
     if [ -f "package.json" ]; then
-        npm install 2>/dev/null || true
+        npm install
     fi
     cd "$SCRIPT_DIR"
 
