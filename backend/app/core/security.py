@@ -1,10 +1,13 @@
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
+import hashlib
+import hmac
+import base64
+import secrets
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jwt import PyJWTError as JWTError, encode, decode
-import bcrypt
 
 from .config import get_settings
 
@@ -13,19 +16,52 @@ security = HTTPBearer()
 
 
 def hash_password(password: str) -> str:
+    """使用纯Python的PBKDF2-HMAC-SHA256进行密码哈希（跨平台兼容）"""
+    salt = secrets.token_bytes(16)
     password_bytes = password.encode("utf-8")
-    salt = bcrypt.gensalt(rounds=settings.BCRYPT_ROUNDS)
-    hashed = bcrypt.hashpw(password_bytes, salt)
-    return hashed.decode("utf-8")
+    hashed = hashlib.pbkdf2_hmac(
+        "sha256",
+        password_bytes,
+        salt,
+        iterations=100000
+    )
+    salt_b64 = base64.b64encode(salt).decode("utf-8")
+    hash_b64 = base64.b64encode(hashed).decode("utf-8")
+    return f"pbkdf2_sha256$100000${salt_b64}${hash_b64}"
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """验证密码（纯Python实现）"""
     try:
-        return bcrypt.checkpw(
-            plain_password.encode("utf-8"),
-            hashed_password.encode("utf-8"),
-        )
-    except (ValueError, TypeError):
+        if hashed_password.startswith("pbkdf2_sha256$"):
+            parts = hashed_password.split("$")
+            if len(parts) != 4:
+                return False
+            algo, iterations_str, salt_b64, hash_b64 = parts
+            iterations = int(iterations_str)
+            
+            password_bytes = plain_password.encode("utf-8")
+            salt = base64.b64decode(salt_b64.encode("utf-8"))
+            expected_hash = base64.b64decode(hash_b64.encode("utf-8"))
+            
+            computed_hash = hashlib.pbkdf2_hmac(
+                "sha256",
+                password_bytes,
+                salt,
+                iterations
+            )
+            
+            return hmac.compare_digest(computed_hash, expected_hash)
+        else:
+            try:
+                import bcrypt
+                return bcrypt.checkpw(
+                    plain_password.encode("utf-8"),
+                    hashed_password.encode("utf-8"),
+                )
+            except ImportError:
+                return False
+    except (ValueError, TypeError, IndexError):
         return False
 
 
