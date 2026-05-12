@@ -15,47 +15,26 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-print_success() { echo -e "${GREEN}[✓]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
-print_error() { echo -e "${RED}[✗]${NC} $1"; }
-print_header() { echo -e "\n${CYAN}════════════════════════════════════════════════${NC}"; echo -e "${CYAN}  $1${NC}"; echo -e "${CYAN}════════════════════════════════════════════════${NC}\n"; }
+print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+print_header() { echo -e "\n${CYAN}=== $1 ===${NC}\n"; }
 
 detect_system() {
     if [ -d "$PREFIX" ] && [ -f "$PREFIX/bin/bash" ]; then
         echo "termux"
         return
     fi
-    
     if command -v docker &> /dev/null && docker info &> /dev/null 2>&1; then
         echo "docker"
         return
     fi
-    
-    if command -v apt-get &> /dev/null; then
-        echo "debian"
-        return
-    fi
-    if command -v yum &> /dev/null; then
-        echo "redhat"
-        return
-    fi
-    if command -v dnf &> /dev/null; then
-        echo "redhat"
-        return
-    fi
-    if command -v pacman &> /dev/null; then
-        echo "arch"
-        return
-    fi
-    if command -v apk &> /dev/null; then
-        echo "alpine"
-        return
-    fi
-    if command -v brew &> /dev/null; then
-        echo "macos"
-        return
-    fi
-    
+    if command -v apt-get &> /dev/null; then echo "debian"; return; fi
+    if command -v yum &> /dev/null; then echo "redhat"; return; fi
+    if command -v dnf &> /dev/null; then echo "redhat"; return; fi
+    if command -v pacman &> /dev/null; then echo "arch"; return; fi
+    if command -v apk &> /dev/null; then echo "alpine"; return; fi
+    if command -v brew &> /dev/null; then echo "macos"; return; fi
     echo "unknown"
 }
 
@@ -105,301 +84,321 @@ STATIC_DIR=./data/static
 LOGS_DIR=./data/logs
 CACHE_DIR=./data/cache
 EOF
-        print_success ".env 已创建"
+        print_success ".env created"
+    fi
+}
+
+ensure_rust_termux() {
+    if command -v rustc &> /dev/null; then
+        print_success "Rust already installed: $(rustc --version)"
+        return 0
+    fi
+
+    print_info "Installing Rust toolchain (required for pydantic-core)..."
+    pkg install -y rust cmake
+
+    if command -v rustc &> /dev/null; then
+        print_success "Rust installed: $(rustc --version)"
+    else
+        print_error "Rust install failed"
+        return 1
     fi
 }
 
 install_termux_deps() {
-    print_header "安装 Termux 依赖"
-    
-    print_info "更新包列表..."
-    pkg update -y
-    
-    print_info "安装基础工具..."
-    pkg install -y python python-pip nodejs-lts npm git curl wget
-    
+    print_header "Termux Setup"
+
+    print_info "Updating packages..."
+    pkg update -y 2>/dev/null || true
+
+    print_info "Installing base tools..."
+    pkg install -y python python-pip nodejs-lts npm git curl wget rust cmake 2>/dev/null || true
+
+    ensure_rust_termux
+
     setup_mirrors
-    
     create_directories
     check_env
-    
+
     cd "$BACKEND_DIR"
-    
+
     if [ ! -d "venv" ]; then
+        print_info "Creating venv..."
         python -m venv venv
     fi
-    
+
     source venv/bin/activate
-    
-    print_info "安装 Python 依赖 (仅使用预编译包)..."
-    pip install --upgrade pip setuptools wheel
-    pip install --only-binary=:all: \
-        fastapi==0.110.0 \
-        uvicorn[standard]==0.27.1 \
-        sqlalchemy==2.0.27 \
-        aiosqlite==0.19.0 \
-        redis==5.0.1 \
-        "pydantic==2.6.1" \
-        pydantic-settings==2.1.0 \
-        python-multipart==0.0.9 \
-        beautifulsoup4==4.12.3 \
-        tenacity==8.2.3 \
-        rich==13.7.0 \
-        "python-jose[cryptography]==3.3.0" \
-        pycryptodome==3.20.0 \
-        passlib==1.7.4 \
-        bcrypt==4.1.2 \
-        aiohttp==3.9.3 \
-        httpx==0.27.0
-    
+
+    print_info "Upgrading pip..."
+    pip install --upgrade pip setuptools wheel 2>/dev/null || true
+
+    print_info "Installing Python deps (may compile from source)..."
+    REQ_FILE="$BACKEND_DIR/requirements-termux.txt"
+    if [ -f "$REQ_FILE" ]; then
+        pip install -r "$REQ_FILE" 2>&1 | tail -5
+    else
+        pip install -r "$BACKEND_DIR/requirements.txt" 2>&1 | tail -5
+    fi
+
+    if [ $? -ne 0 ]; then
+        print_warning "Batch install had issues, trying one by one..."
+        local deps=(
+            "fastapi==0.110.0"
+            "uvicorn[standard]==0.27.1"
+            "sqlalchemy==2.0.27"
+            "aiosqlite==0.19.0"
+            "redis==5.0.1"
+            "pydantic==2.6.1"
+            "pydantic-settings==2.1.0"
+            "python-multipart==0.0.9"
+            "beautifulsoup4==4.12.3"
+            "tenacity==8.2.3"
+            "rich==13.7.0"
+            "python-jose[cryptography]==3.3.0"
+            "pycryptodome==3.20.0"
+            "passlib==1.7.4"
+            "bcrypt==4.1.2"
+            "aiohttp==3.9.3"
+            "httpx==0.27.0"
+            "aiofiles==23.2.1"
+        )
+        for dep in "${deps[@]}"; do
+            print_info "Installing $dep..."
+            pip install "$dep" 2>/dev/null || print_warning "Failed: $dep (may not be critical)"
+        done
+    fi
+
+    print_info "Installing aiofiles..."
+    pip install aiofiles 2>/dev/null || true
+
     deactivate
     cd "$SCRIPT_DIR"
-    
+
     cd "$FRONTEND_DIR"
-    npm install
+    if [ -f "package.json" ]; then
+        npm install 2>/dev/null || true
+    fi
     cd "$SCRIPT_DIR"
-    
-    print_success "依赖安装完成"
+
+    print_success "Dependencies installed"
 }
 
 install_docker_deps() {
-    print_header "Docker 模式"
-    
+    print_header "Docker Setup"
     if ! command -v docker &> /dev/null; then
-        print_error "Docker 未安装"
+        print_error "Docker not installed"
         exit 1
     fi
-    
-    if ! docker info &> /dev/null 2>&1; then
-        print_error "Docker 未运行"
-        exit 1
-    fi
-    
     setup_mirrors
     create_directories
     check_env
-    
-    print_info "构建并启动服务..."
+    print_info "Building and starting..."
     docker-compose up -d
-    
-    print_success "服务已启动"
-    print_info "前端: http://localhost"
-    print_info "API:  http://localhost:8000/docs"
+    print_success "Services started"
+    print_info "Frontend: http://localhost"
+    print_info "API: http://localhost:8000/docs"
 }
 
 install_native_deps() {
-    print_header "原生模式安装"
-    
+    print_header "Native Setup"
     SYSTEM=$(detect_system)
     setup_mirrors
     create_directories
     check_env
-    
+
     case "$SYSTEM" in
         debian)
-            sudo apt-get update -qq
-            sudo apt-get install -y python3 python3-venv python3-pip nodejs npm redis-server curl git
+            sudo apt-get update -qq 2>/dev/null || true
+            sudo apt-get install -y python3 python3-venv python3-pip nodejs npm redis-server curl git 2>/dev/null || true
             ;;
         redhat)
-            sudo yum install -y python3 python3-pip nodejs npm redis curl git
+            sudo yum install -y python3 python3-pip nodejs npm redis curl git 2>/dev/null || true
             ;;
         arch)
-            sudo pacman -Sy --noconfirm python python-pip nodejs npm redis curl git
+            sudo pacman -Sy --noconfirm python python-pip nodejs npm redis curl git 2>/dev/null || true
             ;;
         alpine)
-            apk add --no-cache python3 py3-pip nodejs npm redis curl git
+            apk add --no-cache python3 py3-pip nodejs npm redis curl git 2>/dev/null || true
             ;;
         macos)
-            [ ! -f /usr/local/bin/brew ] && brew install python node redis
+            command -v brew &> /dev/null && brew install python node redis 2>/dev/null || true
             ;;
     esac
-    
+
     cd "$BACKEND_DIR"
-    
     if [ ! -d "venv" ]; then
         python3 -m venv venv
     fi
-    
     source venv/bin/activate
-    
-    print_info "安装 Python 依赖..."
-    pip install --upgrade pip
-    pip install -r requirements.txt
-    
+    pip install --upgrade pip 2>/dev/null || true
+    pip install -r requirements.txt 2>&1 | tail -5
     deactivate
     cd "$SCRIPT_DIR"
-    
+
     cd "$FRONTEND_DIR"
-    npm install
+    if [ -f "package.json" ]; then
+        npm install 2>/dev/null || true
+    fi
     cd "$SCRIPT_DIR"
-    
-    print_success "依赖安装完成"
+
+    print_success "Dependencies installed"
 }
 
 start_termux_services() {
-    print_header "启动 Termux 服务"
-    
+    print_header "Start Services (Termux)"
+
     if ! pgrep -x redis-server > /dev/null 2>&1; then
         if command -v redis-server &> /dev/null; then
             redis-server --daemonize yes --port 6379 --maxmemory 64mb --maxmemory-policy allkeys-lru 2>/dev/null || true
         fi
     fi
-    
+
     cd "$BACKEND_DIR"
-    
     if [ ! -d "venv" ]; then
         python -m venv venv
     fi
-    
     source venv/bin/activate
-    
+
     export DATABASE_URL="sqlite+aiosqlite:///data/novel.db"
     export REDIS_URL="redis://localhost:6379"
     export PYTHONDONTWRITEBYTECODE=1
-    
+
     nohup python -m uvicorn main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
     echo $! > uvicorn.pid
-    
+
     deactivate
     cd "$SCRIPT_DIR"
-    
+
     cd "$FRONTEND_DIR"
     nohup npm run dev -- --host 0.0.0.0 --port 8080 > ../data/logs/frontend.log 2>&1 &
     echo $! > vite.pid
     cd "$SCRIPT_DIR"
-    
-    print_info "等待服务启动..."
-    for i in {1..30}; do
+
+    print_info "Waiting for services..."
+    for i in $(seq 1 30); do
         curl -s http://localhost:8000/api/health > /dev/null 2>&1 && break
         sleep 1
     done
-    
-    print_success "服务已启动"
-    print_info "前端: http://localhost:8080"
-    print_info "API:  http://localhost:8000/docs"
+
+    print_success "Services started"
+    print_info "Frontend: http://localhost:8080"
+    print_info "API: http://localhost:8000/docs"
 }
 
 start_native_services() {
-    print_header "启动原生服务"
-    
+    print_header "Start Services"
+
     if ! pgrep -x redis-server > /dev/null 2>&1; then
         if command -v redis-server &> /dev/null; then
             redis-server --daemonize yes --port 6379 --maxmemory 64mb --maxmemory-policy allkeys-lru 2>/dev/null || true
         fi
     fi
-    
+
     cd "$BACKEND_DIR"
-    
     if [ ! -d "venv" ]; then
         python3 -m venv venv
     fi
-    
     source venv/bin/activate
-    
+
     export DATABASE_URL="sqlite+aiosqlite:///data/novel.db"
     export REDIS_URL="redis://localhost:6379"
     export PYTHONDONTWRITEBYTECODE=1
-    
+
     nohup python -m uvicorn main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
     echo $! > uvicorn.pid
-    
+
     deactivate
     cd "$SCRIPT_DIR"
-    
+
     cd "$FRONTEND_DIR"
     nohup npm run dev -- --host 0.0.0.0 --port 80 > ../data/logs/frontend.log 2>&1 &
     echo $! > vite.pid
     cd "$SCRIPT_DIR"
-    
-    print_info "等待服务启动..."
-    for i in {1..30}; do
+
+    print_info "Waiting for services..."
+    for i in $(seq 1 30); do
         curl -s http://localhost:8000/api/health > /dev/null 2>&1 && break
         sleep 1
     done
-    
-    print_success "服务已启动"
-    print_info "前端: http://localhost"
-    print_info "API:  http://localhost:8000/docs"
+
+    print_success "Services started"
+    print_info "Frontend: http://localhost"
+    print_info "API: http://localhost:8000/docs"
 }
 
 stop_services() {
-    print_header "停止服务"
-    
+    print_header "Stop Services"
+
     if [ -f "$BACKEND_DIR/uvicorn.pid" ]; then
         kill $(cat "$BACKEND_DIR/uvicorn.pid") 2>/dev/null || true
         rm -f "$BACKEND_DIR/uvicorn.pid"
     fi
-    
     if [ -f "$FRONTEND_DIR/vite.pid" ]; then
         kill $(cat "$FRONTEND_DIR/vite.pid") 2>/dev/null || true
         rm -f "$FRONTEND_DIR/vite.pid"
     fi
-    
     pkill -f "uvicorn" 2>/dev/null || true
     pkill -f "vite" 2>/dev/null || true
-    
     docker-compose down 2>/dev/null || true
-    
     if command -v redis-cli &> /dev/null; then
         redis-cli shutdown 2>/dev/null || true
     fi
-    
-    print_success "所有服务已停止"
+
+    print_success "All services stopped"
 }
 
 show_status() {
-    print_header "服务状态"
-    
+    print_header "Service Status"
     SYSTEM=$(detect_system)
-    echo "系统: $SYSTEM"
-    
+    echo "System: $SYSTEM"
+
     case "$SYSTEM" in
         docker)
-            docker-compose ps 2>/dev/null || print_info "Docker 未运行"
+            docker-compose ps 2>/dev/null || print_info "Docker not running"
             ;;
         termux)
-            pgrep -f "uvicorn" > /dev/null && print_success "后端: 运行中" || print_error "后端: 未运行"
-            pgrep -f "vite" > /dev/null && print_success "前端: 运行中" || print_error "前端: 未运行"
+            pgrep -f "uvicorn" > /dev/null && print_success "Backend: running" || print_error "Backend: stopped"
+            pgrep -f "vite" > /dev/null && print_success "Frontend: running" || print_error "Frontend: stopped"
             ;;
         *)
-            pgrep -x uvicorn > /dev/null && print_success "后端: 运行中" || print_error "后端: 未运行"
-            pgrep -f "vite|npm" > /dev/null && print_success "前端: 运行中" || print_error "前端: 未运行"
+            pgrep -x uvicorn > /dev/null && print_success "Backend: running" || print_error "Backend: stopped"
+            pgrep -f "vite|npm" > /dev/null && print_success "Frontend: running" || print_error "Frontend: stopped"
             ;;
     esac
-    
+
     echo ""
-    curl -s http://localhost:8000/api/health > /dev/null 2>&1 && print_success "API: 运行中" || print_error "API: 未响应"
+    curl -s http://localhost:8000/api/health > /dev/null 2>&1 && print_success "API: responding" || print_error "API: not responding"
 }
 
 show_help() {
     cat << EOF
-Novel Reader 智能启动脚本
+Novel Reader Launcher
 
-用法: ./start.sh [command]
+Usage: ./start.sh [command]
 
-命令:
-  install     自动检测系统并安装依赖
-  start       启动所有服务
-  stop        停止所有服务
-  status      查看服务状态
+Commands:
+  install     Detect system and install dependencies
+  start       Start all services
+  stop        Stop all services
+  status      Show service status
 
-自动检测支持:
+Supported systems:
   - Termux (Android)
   - Docker
   - Linux (Debian/RHEL/Arch/Alpine)
   - macOS
 
-示例:
-  ./start.sh install   # 安装依赖
-  ./start.sh start    # 启动服务
-  ./start.sh status   # 查看状态
+Examples:
+  ./start.sh install
+  ./start.sh start
+  ./start.sh status
 EOF
 }
 
 main() {
     SYSTEM=$(detect_system)
-    print_info "检测到系统: $SYSTEM"
-    
+    print_info "Detected system: $SYSTEM"
+
     case "${1:-}" in
         install)
             case "$SYSTEM" in
@@ -413,7 +412,7 @@ main() {
                 termux) start_termux_services ;;
                 docker)
                     docker-compose up -d
-                    print_success "Docker 服务已启动"
+                    print_success "Docker services started"
                     ;;
                 *) start_native_services ;;
             esac
@@ -428,7 +427,7 @@ main() {
             show_help
             ;;
         *)
-            print_error "未知命令: $1"
+            print_error "Unknown command: $1"
             show_help
             exit 1
             ;;
