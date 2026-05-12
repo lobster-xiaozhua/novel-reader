@@ -269,6 +269,12 @@ start_termux_services() {
     print_success "Services started"
     print_info "App (frontend + API): http://localhost:8000"
     print_info "API docs: http://localhost:8000/docs"
+    
+    # Show network info for Termux
+    IP_ADDR=$(ifconfig wlan0 2>/dev/null | grep 'inet ' | awk '{print $2}' || echo "")
+    if [ -n "$IP_ADDR" ]; then
+        print_info "LAN access: http://$IP_ADDR:8000"
+    fi
 }
 
 start_native_services() {
@@ -323,6 +329,42 @@ stop_services() {
     print_success "All services stopped"
 }
 
+diagnose_network() {
+    print_header "Network Diagnosis"
+    
+    print_info "Checking if backend is running..."
+    if pgrep -f "uvicorn" > /dev/null; then
+        print_success "Backend process found"
+    else
+        print_error "Backend not running!"
+        return 1
+    fi
+    
+    print_info "Checking localhost:8000..."
+    if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
+        print_success "localhost:8000 is responding"
+    else
+        print_error "localhost:8000 not responding"
+    fi
+    
+    print_info "Checking network interfaces..."
+    IP_ADDR=$(ifconfig wlan0 2>/dev/null | grep 'inet ' | awk '{print $2}' || echo "")
+    if [ -n "$IP_ADDR" ]; then
+        print_info "WiFi IP: $IP_ADDR"
+        print_info "Testing $IP_ADDR:8000..."
+        if curl -s --connect-timeout 3 http://$IP_ADDR:8000/api/health > /dev/null 2>&1; then
+            print_success "$IP_ADDR:8000 is accessible"
+        else
+            print_error "$IP_ADDR:8000 not accessible (firewall?)"
+        fi
+    else
+        print_warning "No WiFi IP found"
+    fi
+    
+    print_info "Checking listening ports..."
+    netstat -tlnp 2>/dev/null | grep 8000 || ss -tlnp 2>/dev/null | grep 8000 || print_warning "Cannot check ports"
+}
+
 show_status() {
     print_header "Service Status"
     SYSTEM=$(detect_system)
@@ -344,6 +386,7 @@ Commands:
   start       Start all services
   stop        Stop all services
   status      Show service status
+  diagnose    Network diagnosis (Termux)
 
 Supported systems:
   - Termux (Android)
@@ -355,6 +398,7 @@ Examples:
   ./start.sh install
   ./start.sh start
   ./start.sh status
+  ./start.sh diagnose
 EOF
 }
 
@@ -385,6 +429,9 @@ main() {
             ;;
         status)
             show_status
+            ;;
+        diagnose)
+            diagnose_network
             ;;
         help|--help|-h|"")
             show_help
