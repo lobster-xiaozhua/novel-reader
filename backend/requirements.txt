@@ -1,27 +1,17 @@
-# Basic dependencies
+# 跨平台兼容依赖 - 纯Python或预编译版本
+# 避免需要编译的包，确保Windows/Linux/Termux都能正常安装
+
 fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-sqlalchemy[asyncio]>=2.0.0
+uvicorn>=0.24.0
+sqlalchemy>=2.0.0
 aiosqlite>=0.19.0
 redis>=5.0.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
+python-jose>=3.3.0
+passlib>=1.7.4
 python-multipart>=0.0.6
+aiohttp>=3.9.0
 beautifulsoup4>=4.12.0
 tenacity>=8.2.0
 rich>=13.0.0
-
-# JWT auth - pycryptodome pure Python
-python-jose[cryptography]>=3.3.0
-pycryptodome>=3.20.0
-
-# Password hashing
-passlib[bcrypt]>=1.7.4
-bcrypt>=4.0.1
-
-# HTTP client
-aiohttp>=3.9.0
-httpx>=0.26.0
-
-# Async file operations
-aiofiles>=23.0.0
