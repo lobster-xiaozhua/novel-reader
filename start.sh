@@ -238,6 +238,12 @@ install_native_deps() {
 start_termux_services() {
     print_header "Start Services (Termux)"
 
+    # Keep Android awake so network doesn't drop
+    if command -v termux-wake-lock &> /dev/null; then
+        termux-wake-lock 2>/dev/null || true
+        print_info "Wake lock acquired (prevents sleep)"
+    fi
+
     if ! pgrep -x redis-server > /dev/null 2>&1; then
         if command -v redis-server &> /dev/null; then
             redis-server --daemonize yes --port 6379 --maxmemory 64mb --maxmemory-policy allkeys-lru 2>/dev/null || true
@@ -254,7 +260,8 @@ start_termux_services() {
     export REDIS_URL="redis://localhost:6379"
     export PYTHONDONTWRITEBYTECODE=1
 
-    nohup python -m uvicorn main:app --host 0.0.0.0 --port 8000 > ../data/logs/backend.log 2>&1 &
+    # Termux needs explicit host binding for external access
+    nohup python -m uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers > ../data/logs/backend.log 2>&1 &
     echo $! > uvicorn.pid
 
     deactivate
@@ -270,11 +277,19 @@ start_termux_services() {
     print_info "App (frontend + API): http://localhost:8000"
     print_info "API docs: http://localhost:8000/docs"
     
-    # Show network info for Termux
+    # Get all possible access addresses
     IP_ADDR=$(ifconfig wlan0 2>/dev/null | grep 'inet ' | awk '{print $2}' || echo "")
     if [ -n "$IP_ADDR" ]; then
         print_info "LAN access: http://$IP_ADDR:8000"
     fi
+    
+    # Auto-open browser on Android if possible
+    if command -v termux-open-url &> /dev/null; then
+        print_info "Opening browser..."
+        termux-open-url "http://localhost:8000" 2>/dev/null || true
+    fi
+    
+    print_warning "If browser cannot connect, run: ./start.sh tunnel"
 }
 
 start_native_services() {
@@ -326,6 +341,15 @@ stop_services() {
         redis-cli shutdown 2>/dev/null || true
     fi
 
+    # Release wake lock on Termux
+    if command -v termux-wake-unlock &> /dev/null; then
+        termux-wake-unlock 2>/dev/null || true
+        print_info "Wake lock released"
+    fi
+
+    # Stop any active tunnel
+    stop_tunnel 2>/dev/null || true
+
     print_success "All services stopped"
 }
 
@@ -363,6 +387,86 @@ diagnose_network() {
     
     print_info "Checking listening ports..."
     netstat -tlnp 2>/dev/null | grep 8000 || ss -tlnp 2>/dev/null | grep 8000 || print_warning "Cannot check ports"
+    
+    print_info "Checking Termux network properties..."
+    if [ -n "$TERMUX_VERSION" ]; then
+        print_info "TERMUX_VERSION: $TERMUX_VERSION"
+    fi
+    if [ -f /proc/net/netstat ]; then
+        print_success "Network stack accessible"
+    fi
+}
+
+start_tunnel() {
+    print_header "Start Public Tunnel"
+    
+    if ! pgrep -f "uvicorn" > /dev/null; then
+        print_error "Backend not running! Start services first: ./start.sh start"
+        return 1
+    fi
+    
+    # Try cloudflared first (most reliable)
+    if command -v cloudflared &> /dev/null; then
+        print_info "Starting Cloudflare tunnel..."
+        cloudflared tunnel --url http://localhost:8000 2>&1 | tee /tmp/tunnel.log &
+        TUNNEL_PID=$!
+        echo $TUNNEL_PID > /tmp/tunnel.pid
+        sleep 5
+        URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/tunnel.log | head -1)
+        if [ -n "$URL" ]; then
+            print_success "Public URL: $URL"
+            if command -v termux-open-url &> /dev/null; then
+                termux-open-url "$URL" 2>/dev/null || true
+            fi
+            return 0
+        fi
+    fi
+    
+    # Try localtunnel via npx
+    if command -v npx &> /dev/null; then
+        print_info "Starting localtunnel..."
+        npx -y localtunnel --port 8000 2>&1 | tee /tmp/tunnel.log &
+        TUNNEL_PID=$!
+        echo $TUNNEL_PID > /tmp/tunnel.pid
+        sleep 5
+        URL=$(grep -o 'https://[a-z0-9-]*\.loca\.lt' /tmp/tunnel.log | head -1)
+        if [ -n "$URL" ]; then
+            print_success "Public URL: $URL"
+            if command -v termux-open-url &> /dev/null; then
+                termux-open-url "$URL" 2>/dev/null || true
+            fi
+            return 0
+        fi
+    fi
+    
+    # Try serveo.net SSH tunnel
+    if command -v ssh &> /dev/null; then
+        print_info "Starting SSH tunnel (serveo.net)..."
+        print_warning "Press Enter when you see the URL..."
+        ssh -o StrictHostKeyChecking=no -R 80:localhost:8000 serveo.net 2>&1 | tee /tmp/tunnel.log &
+        TUNNEL_PID=$!
+        echo $TUNNEL_PID > /tmp/tunnel.pid
+        sleep 8
+        URL=$(grep -o 'https://[a-z0-9-]*\.serveo\.net' /tmp/tunnel.log | head -1)
+        if [ -n "$URL" ]; then
+            print_success "Public URL: $URL"
+            return 0
+        fi
+    fi
+    
+    print_error "No tunnel method available"
+    print_info "Install one of: cloudflared, nodejs (for npx), or ensure ssh works"
+    return 1
+}
+
+stop_tunnel() {
+    if [ -f /tmp/tunnel.pid ]; then
+        kill $(cat /tmp/tunnel.pid) 2>/dev/null || true
+        rm -f /tmp/tunnel.pid
+        print_success "Tunnel stopped"
+    else
+        print_warning "No tunnel running"
+    fi
 }
 
 show_status() {
@@ -387,6 +491,8 @@ Commands:
   stop        Stop all services
   status      Show service status
   diagnose    Network diagnosis (Termux)
+  tunnel      Create public URL for external access
+  tunnel-stop Stop public tunnel
 
 Supported systems:
   - Termux (Android)
@@ -399,6 +505,7 @@ Examples:
   ./start.sh start
   ./start.sh status
   ./start.sh diagnose
+  ./start.sh tunnel
 EOF
 }
 
@@ -432,6 +539,12 @@ main() {
             ;;
         diagnose)
             diagnose_network
+            ;;
+        tunnel)
+            start_tunnel
+            ;;
+        tunnel-stop)
+            stop_tunnel
             ;;
         help|--help|-h|"")
             show_help
