@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     BCRYPT_ROUNDS: int = 12
     MAX_LOGIN_ATTEMPTS: int = 5
     LOGIN_LOCKOUT_MINUTES: int = 15
+    LOGIN_RATE_LIMIT_WINDOW: int = 900  # 15 minutes in seconds
+    LOGIN_RATE_LIMIT_MAX: int = 5
 
     # 爬虫配置
     CRAWLER_MAX_CONCURRENT: int = 5

@@ -136,4 +136,41 @@ class AuthService:
                 self._local_attempts.pop(username, None)
                 self._local_until.pop(username, None)
 
+    async def check_login_attempts(self, username: str) -> bool:
+        return not await self._is_locked(username)
+
+    async def get_lockout_remaining(self, username: str) -> int:
+        async with self._local_lock:
+            try:
+                if cache_service.is_redis_available:
+                    ttl = await cache_service.ttl(f"login_lock:{username}")
+                    return max(0, ttl)
+                else:
+                    remaining = self._local_until.get(username, 0) - time.time()
+                    return max(0, int(remaining))
+            except RedisError:
+                remaining = self._local_until.get(username, 0) - time.time()
+                return max(0, int(remaining))
+
+    async def record_failed_login(self, username: str):
+        await self._record_fail(username)
+
+    async def get_remaining_attempts(self, username: str) -> int:
+        async with self._local_lock:
+            try:
+                if cache_service.is_redis_available:
+                    count = await cache_service.get(f"login_attempts:{username}")
+                    if count is None:
+                        return settings.LOGIN_RATE_LIMIT_MAX
+                    return max(0, settings.LOGIN_RATE_LIMIT_MAX - int(count))
+                else:
+                    attempts = self._local_attempts.get(username, 0)
+                    return max(0, settings.LOGIN_RATE_LIMIT_MAX - attempts)
+            except RedisError:
+                attempts = self._local_attempts.get(username, 0)
+                return max(0, settings.LOGIN_RATE_LIMIT_MAX - attempts)
+
+    async def reset_login_attempts(self, username: str):
+        await self._clear_attempts(username)
+
 auth_service = AuthService()

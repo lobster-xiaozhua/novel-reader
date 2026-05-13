@@ -43,6 +43,10 @@ class CacheService:
     def available(self) -> bool:
         return self._client is not None
 
+    @property
+    def is_redis_available(self) -> bool:
+        return self._client is not None
+
     async def get(self, key: str) -> Optional[str]:
         if not self.available:
             return None
@@ -71,6 +75,16 @@ class CacheService:
             return True
         except Exception as e:
             logger.error(f"Redis DELETE 失败 key={key}: {e}")
+            return False
+
+    async def setex(self, key: str, seconds: int, value: str) -> bool:
+        if not self.available:
+            return False
+        try:
+            await self._client.setex(key, seconds, value)
+            return True
+        except Exception as e:
+            logger.error(f"Redis SETEX 失败 key={key}: {e}")
             return False
 
     async def get_json(self, key: str) -> Optional[Any]:
