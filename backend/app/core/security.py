@@ -118,3 +118,50 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
         )
 
     return int(user_id)
+
+
+async def get_current_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    return credentials.credentials
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    from app.database import AsyncSessionLocal
+    from app.models import User
+    from sqlalchemy import select
+    
+    token = credentials.credentials
+    payload = decode_token(token)
+    
+    if not payload or payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证令牌",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    user_id = payload.get("sub")
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证令牌",
+        )
+    
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).where(User.id == int(user_id)))
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户不存在",
+            )
+        
+        return user
+
+
+def require_admin(user):
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限",
+        )

@@ -1,5 +1,8 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import declarative_base
 from app.core.config import get_settings
+
+Base = declarative_base()
 
 settings = get_settings()
 
@@ -24,3 +27,14 @@ AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
+
+
+async def get_db_no_commit():
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+async def init_database():
+    from app.models import User, Book, Chapter, ReadingProgress, Favorite, CrawlerTask, Tag, BookTag, FavoriteFolder
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
