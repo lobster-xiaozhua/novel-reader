@@ -10,7 +10,7 @@ from app.database import get_db_no_commit
 from app.models import User
 from app.core.security import (
     hash_password, verify_password, validate_password_strength,
-    create_access_token, create_refresh_token, decode_token, get_current_user_id, get_current_token
+    create_access_token, create_refresh_token, decode_token, get_current_user_id
 )
 from app.schemas.schemas import UserCreate, UserResponse, TokenResponse
 from app.services.auth_service import auth_service
@@ -82,9 +82,7 @@ async def login(
 @router.post("/logout")
 async def logout(
     current_user_id: int = Depends(get_current_user_id),
-    token: str = Depends(get_current_token),
 ):
-    await auth_service.blacklist_token(token)
     logger.info(f"用户 {current_user_id} 登出")
     return {"message": "登出成功"}
 

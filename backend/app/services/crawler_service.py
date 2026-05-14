@@ -371,9 +371,9 @@ class CrawlerService:
         headers = {"User-Agent": self._get_ua()}
         try:
             async with session.get(url, headers=headers) as resp:
-                if resp.status_code == 200:
+                if resp.status == 200:
                     return await resp.text(errors="replace")
-                logger.warning(f"HTTP {resp.status_code} for {url}")
+                logger.warning(f"HTTP {resp.status} for {url}")
                 return None
         except Exception as e:
             logger.warning(f"Fetch err for {url}: {e}")

@@ -1,21 +1,16 @@
 import logging
-import uuid
-from datetime import datetime
 from typing import Optional
 
-import aiohttp
-from bs4 import BeautifulSoup
 from fastapi import APIRouter, Depends, BackgroundTasks, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.database import get_db_no_commit
 from app.models import CrawlerTask
 from app.schemas.schemas import CrawlerTaskCreate, CrawlerTaskResponse
 from app.core.security import get_current_user_id
 from app.core.config import get_settings
-from app.core.exceptions import NotFoundError, CrawlerError
+from app.core.exceptions import NotFoundError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/crawler", tags=["爬虫"])
@@ -75,40 +70,5 @@ async def create_task(
 
 
 async def execute_crawl(task_id: int):
-    from app.database import AsyncSessionLocal
-
-    async with AsyncSessionLocal() as db:
-        try:
-            result = await db.execute(select(CrawlerTask).where(CrawlerTask.id == task_id))
-            task = result.scalar_one_or_none()
-            if not task:
-                return
-
-            task.status = "running"
-            await db.commit()
-
-            try:
-                await crawl_url(task.url)
-                task.status = "completed"
-                task.downloaded_chapters = 1
-                task.total_chapters = 1
-            except Exception as e:
-                logger.error(f"爬虫任务失败: {task_id} - {e}")
-                task.status = "failed"
-                task.error_message = str(e)
-
-            task.updated_at = datetime.utcnow()
-            await db.commit()
-        except Exception as e:
-            await db.rollback()
-            logger.error(f"爬虫任务执行异常: {task_id} - {e}")
-
-
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
-async def crawl_url(url: str):
-    timeout = aiohttp.ClientTimeout(total=settings.CRAWLER_TIMEOUT)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url) as response:
-            if response.status != 200:
-                raise CrawlerError(f"HTTP {response.status}")
-            await response.text()
+    from app.services.crawler_service import crawler_service
+    await crawler_service.run_task(task_id)

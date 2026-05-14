@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     BCRYPT_ROUNDS: int = 12
     MAX_LOGIN_ATTEMPTS: int = 5
     LOGIN_LOCKOUT_MINUTES: int = 15
+    LOGIN_RATE_LIMIT_WINDOW: int = 900  # 15分钟（秒）
+    LOGIN_RATE_LIMIT_MAX: int = 5  # 最大登录尝试次数
 
     # 爬虫配置
     CRAWLER_MAX_CONCURRENT: int = 5
@@ -51,6 +53,7 @@ class Settings(BaseSettings):
     FTS_BATCH_SIZE: int = 100  # FTS索引批量大小
     DB_POOL_SIZE: int = 5  # 数据库连接池大小
     DB_MAX_OVERFLOW: int = 10  # 连接池溢出
+    DB_POOL_RECYCLE: int = 3600  # 连接池回收时间（秒）
     REDIS_POOL_SIZE: int = 10  # Redis连接池大小
 
     class Config:
