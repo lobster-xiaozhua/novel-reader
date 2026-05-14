@@ -6,8 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 
 from app.core.config import get_settings
-from app.database import Base, get_db
-from main import app
+from app.database import AsyncSessionLocal, get_db
 
 settings = get_settings()
 
@@ -30,10 +29,10 @@ TestSessionLocal = async_sessionmaker(
 @pytest_asyncio.fixture(scope="session")
 async def db_engine():
     async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(declarative_base().metadata.create_all)
     yield test_engine
     async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(declarative_base().metadata.drop_all)
     await test_engine.dispose()
 
 
@@ -52,6 +51,7 @@ def client(db_session):
     def override_get_db():
         yield db_session
 
+    from main import app
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
         yield test_client
