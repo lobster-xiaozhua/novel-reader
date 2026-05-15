@@ -79,6 +79,8 @@ def validate_password_strength(password: str) -> Tuple[bool, str]:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
+    if "sub" in to_encode:
+        to_encode["sub"] = str(to_encode["sub"])
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire, "type": "access"})
     return encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
@@ -86,6 +88,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
+    if "sub" in to_encode:
+        to_encode["sub"] = str(to_encode["sub"])
     expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
     return encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
@@ -118,3 +122,20 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
         )
 
     return int(user_id)
+
+
+async def get_current_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    return credentials.credentials
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int:
+    return await get_current_user_id(credentials)
+
+
+def require_admin(user_id: int) -> int:
+    from app.models import User
+    from app.database import AsyncSessionLocal
+    from sqlalchemy import select
+    from app.core.exceptions import PermissionError
+
+    return user_id

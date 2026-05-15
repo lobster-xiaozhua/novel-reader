@@ -1,7 +1,11 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import declarative_base
 from app.core.config import get_settings
 
+Base = declarative_base()
 settings = get_settings()
+
+DB_POOL_RECYCLE = getattr(settings, 'DB_POOL_RECYCLE', 3600)
 
 if "sqlite" in settings.DATABASE_URL:
     engine = create_async_engine(
@@ -24,3 +28,23 @@ AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
+
+
+async def get_db_no_commit():
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+async def get_db_managed():
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+async def init_database():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
