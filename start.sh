@@ -60,6 +60,11 @@ timeout = 120
 trusted-host = mirrors.aliyun.com
 EOF
         npm config set registry https://registry.npmmirror.com 2>/dev/null || true
+        # GitHub mirror for China
+        git config --global url."https://ghproxy.com/https://github.com/".insteadOf "https://github.com/" 2>/dev/null || true
+    else
+        # Reset git mirror if outside China
+        git config --global --unset-all url."https://ghproxy.com/https://github.com/".insteadOf 2>/dev/null || true
     fi
 }
 
@@ -469,6 +474,38 @@ stop_tunnel() {
     fi
 }
 
+update_repo() {
+    print_header "Update Repository"
+
+    cd "$SCRIPT_DIR"
+
+    if [ ! -d ".git" ]; then
+        print_error "Not a git repository"
+        return 1
+    fi
+
+    # Detect region and setup mirror before pull
+    setup_mirrors
+
+    print_info "Fetching updates..."
+    if git pull origin main 2>&1; then
+        print_success "Repository updated"
+    else
+        print_error "Git pull failed"
+        print_info "Trying with mirror..."
+        # Force mirror and retry
+        git config --global url."https://ghproxy.com/https://github.com/".insteadOf "https://github.com/" 2>/dev/null || true
+        if git pull origin main 2>&1; then
+            print_success "Repository updated via mirror"
+        else
+            print_error "Update failed. Check network or run manually:"
+            print_info "  git fetch origin"
+            print_info "  git reset --hard origin/main"
+            return 1
+        fi
+    fi
+}
+
 show_status() {
     print_header "Service Status"
     SYSTEM=$(detect_system)
@@ -493,6 +530,7 @@ Commands:
   diagnose    Network diagnosis (Termux)
   tunnel      Create public URL for external access
   tunnel-stop Stop public tunnel
+  update      Update code from GitHub (auto mirror for China)
 
 Supported systems:
   - Termux (Android)
@@ -506,6 +544,7 @@ Examples:
   ./start.sh status
   ./start.sh diagnose
   ./start.sh tunnel
+  ./start.sh update
 EOF
 }
 
@@ -545,6 +584,9 @@ main() {
             ;;
         tunnel-stop)
             stop_tunnel
+            ;;
+        update)
+            update_repo
             ;;
         help|--help|-h|"")
             show_help
