@@ -38,6 +38,14 @@ async def get_db() -> AsyncSession:
         yield session
 
 
+async def get_db_no_commit() -> AsyncSession:
+    session = AsyncSessionLocal()
+    try:
+        yield session
+    finally:
+        await session.close()
+
+
 async def init_database():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
