@@ -8,8 +8,12 @@ import secrets
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jwt import PyJWTError as JWTError, encode, decode
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from .config import get_settings
+from app.database import get_db_no_commit
+from app.models import User
 
 settings = get_settings()
 security = HTTPBearer()
@@ -99,6 +103,10 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
+async def get_current_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    return credentials.credentials
+
+
 async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int:
     token = credentials.credentials
     payload = decode_token(token)
@@ -118,3 +126,32 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
         )
 
     return int(user_id)
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db_no_commit)
+) -> User:
+    user_id = await get_current_user_id(credentials)
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户不存在",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="用户已被禁用",
+        )
+    return user
+
+
+def require_admin(user: User):
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限",
+        )
