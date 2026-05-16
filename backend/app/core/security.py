@@ -1,18 +1,15 @@
 from datetime import datetime, timedelta
-from typing import Optional, Tuple
-import hashlib
-import hmac
-import base64
-import secrets
+from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jwt import PyJWTError as JWTError, encode, decode
+from jose import JWTError, jwt
+import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from .config import get_settings
-from app.database import get_db_no_commit
+from app.database import get_db
 from app.models import User
 
 settings = get_settings()
@@ -20,56 +17,23 @@ security = HTTPBearer()
 
 
 def hash_password(password: str) -> str:
-    """使用纯Python的PBKDF2-HMAC-SHA256进行密码哈希（跨平台兼容）"""
-    salt = secrets.token_bytes(16)
     password_bytes = password.encode("utf-8")
-    hashed = hashlib.pbkdf2_hmac(
-        "sha256",
-        password_bytes,
-        salt,
-        iterations=100000
-    )
-    salt_b64 = base64.b64encode(salt).decode("utf-8")
-    hash_b64 = base64.b64encode(hashed).decode("utf-8")
-    return f"pbkdf2_sha256$100000${salt_b64}${hash_b64}"
+    salt = bcrypt.gensalt(rounds=settings.BCRYPT_ROUNDS)
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """验证密码（纯Python实现）"""
     try:
-        if hashed_password.startswith("pbkdf2_sha256$"):
-            parts = hashed_password.split("$")
-            if len(parts) != 4:
-                return False
-            algo, iterations_str, salt_b64, hash_b64 = parts
-            iterations = int(iterations_str)
-            
-            password_bytes = plain_password.encode("utf-8")
-            salt = base64.b64decode(salt_b64.encode("utf-8"))
-            expected_hash = base64.b64decode(hash_b64.encode("utf-8"))
-            
-            computed_hash = hashlib.pbkdf2_hmac(
-                "sha256",
-                password_bytes,
-                salt,
-                iterations
-            )
-            
-            return hmac.compare_digest(computed_hash, expected_hash)
-        else:
-            try:
-                import bcrypt
-                return bcrypt.checkpw(
-                    plain_password.encode("utf-8"),
-                    hashed_password.encode("utf-8"),
-                )
-            except ImportError:
-                return False
-    except (ValueError, TypeError, IndexError):
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"),
+            hashed_password.encode("utf-8"),
+        )
+    except (ValueError, TypeError):
         return False
 
 
-def validate_password_strength(password: str) -> Tuple[bool, str]:
+def validate_password_strength(password: str):
     if len(password) < settings.PASSWORD_MIN_LENGTH:
         return False, f"密码至少 {settings.PASSWORD_MIN_LENGTH} 位"
     if not any(c.isupper() for c in password):
@@ -85,53 +49,67 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire, "type": "access"})
-    return encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
 
 
 def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
-    return encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
 
 
 def decode_token(token: str) -> Optional[dict]:
     try:
-        payload = decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         return payload
     except JWTError:
         return None
 
 
-async def get_current_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
-    return credentials.credentials
-
-
-async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int:
+async def _validate_and_get_payload(credentials: HTTPAuthorizationCredentials) -> dict:
     token = credentials.credentials
-    payload = decode_token(token)
 
+    from app.services.auth_service import auth_service
+    if await auth_service.is_token_blacklisted(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="令牌已失效",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    payload = decode_token(token)
     if not payload or payload.get("type") != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的认证令牌",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return payload
 
-    user_id: int = payload.get("sub")
-    if user_id is None:
+
+async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int:
+    payload = await _validate_and_get_payload(credentials)
+    user_id_raw = payload.get("sub")
+    if user_id_raw is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证令牌",
+        )
+    try:
+        return int(user_id_raw)
+    except (ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的认证令牌",
         )
 
-    return int(user_id)
+
+async def get_current_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    return credentials.credentials
 
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_db_no_commit)
-) -> User:
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: AsyncSession = Depends(get_db)) -> User:
     user_id = await get_current_user_id(credentials)
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -139,19 +117,14 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户不存在",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="用户已被禁用",
         )
     return user
 
 
-def require_admin(user: User):
+def require_admin(user: User) -> User:
     if not user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="需要管理员权限",
         )
+    return user
