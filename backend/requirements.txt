@@ -1,17 +1,28 @@
-# 跨平台兼容依赖 - 纯Python或预编译版本
-# 避免需要编译的包，确保Windows/Linux/Termux都能正常安装
-
+# 基础依赖
 fastapi>=0.104.0
-uvicorn>=0.24.0
-sqlalchemy>=2.0.0
+uvicorn[standard]>=0.24.0
+sqlalchemy[asyncio]>=2.0.0
 aiosqlite>=0.19.0
 redis>=5.0.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
-python-jose>=3.3.0
-passlib>=1.7.4
 python-multipart>=0.0.6
-aiohttp>=3.9.0
 beautifulsoup4>=4.12.0
 tenacity>=8.2.0
 rich>=13.0.0
+
+# JWT认证
+PyJWT>=2.8.0
+python-jose[cryptography]>=3.3.0
+pycryptodome>=3.20.0
+
+# 密码哈希
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.0.1
+
+# HTTP客户端
+aiohttp>=3.9.0
+httpx>=0.26.0
+
+# 异步文件操作
+aiofiles>=23.0.0
