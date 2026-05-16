@@ -112,7 +112,21 @@ class ConsoleFormatter(logging.Formatter):
     def _sanitize(self, message: str) -> str:
         result = str(message)
         for pattern in SENSITIVE_PATTERNS:
-            result = pattern.sub(lambda m: m.group(0).split('=')[0].split(':')[0] + '=***', result)
+            # Function to replace each match: capture group 1 is the key, then redact the value
+            def replace_match(match):
+                # Check if the pattern has a capture group (the key)
+                if match.groups():
+                    key = match.group(1)
+                    # Check if there's an = or : separator
+                    if '=' in match.group(0):
+                        return f"{key}=***"
+                    elif ':' in match.group(0):
+                        return f"{key}:***"
+                    else:
+                        # For things like "Bearer token123"
+                        return f"{key} ***"
+                return match.group(0)
+            result = pattern.sub(replace_match, result)
         return result
 
     def _format_time(self, record: logging.LogRecord) -> str:
@@ -217,7 +231,21 @@ class ElegantLogger:
     def _sanitize(self, message: str) -> str:
         result = str(message)
         for pattern in SENSITIVE_PATTERNS:
-            result = pattern.sub(lambda m: m.group(0).split('=')[0].split(':')[0] + '=***', result)
+            # Function to replace each match: capture group 1 is the key, then redact the value
+            def replace_match(match):
+                # Check if the pattern has a capture group (the key)
+                if match.groups():
+                    key = match.group(1)
+                    # Check if there's an = or : separator
+                    if '=' in match.group(0):
+                        return f"{key}=***"
+                    elif ':' in match.group(0):
+                        return f"{key}:***"
+                    else:
+                        # For things like "Bearer token123"
+                        return f"{key} ***"
+                return match.group(0)
+            result = pattern.sub(replace_match, result)
         return result
 
     def _log(self, level: int, message: str, *args: Any, exc_info: Exception = None, **kwargs: Any):

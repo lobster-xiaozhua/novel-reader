@@ -31,7 +31,7 @@ async def get_progress(
     )
     progress = result.scalar_one_or_none()
     if not progress:
-        raise HTTPException(status_code=404, detail="暂无阅读进度")
+        raise NotFoundError("阅读进度", str(book_id))
     return progress
 
 
@@ -46,14 +46,14 @@ async def update_progress(
     book_result = await db.execute(select(Book).where(Book.id == book_id))
     book = book_result.scalar_one_or_none()
     if not book:
-        raise HTTPException(status_code=404, detail="书籍不存在")
+        raise NotFoundError("书籍", str(book_id))
 
     chapter_result = await db.execute(
         select(Chapter).where(Chapter.id == data.chapter_id, Chapter.book_id == book_id)
     )
     chapter = chapter_result.scalar_one_or_none()
     if not chapter:
-        raise HTTPException(status_code=404, detail="章节不存在")
+        raise NotFoundError("章节", str(data.chapter_id))
 
     result = await db.execute(
         select(ReadingProgress)
@@ -99,7 +99,7 @@ async def delete_progress(
     )
     progress = result.scalar_one_or_none()
     if not progress:
-        raise HTTPException(status_code=404, detail="阅读进度不存在")
+        raise NotFoundError("阅读进度", str(book_id))
 
     await db.delete(progress)
     await db.commit()
