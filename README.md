@@ -89,6 +89,4 @@ readweb update  # 更新项目
 - [用户指南](docs/USER_GUIDE.md)
 - [部署指南](docs/DEPLOYMENT.md)
 
-## 许可证
 
-MIT
