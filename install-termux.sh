@@ -26,17 +26,17 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-print_success() { echo -e "${GREEN}[✓]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
-print_error() { echo -e "${RED}[✗]${NC} $1"; }
-print_step() { echo -e "${CYAN}[→]${NC} $1"; }
+print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+print_error() { echo -e "${RED}[ERR]${NC} $1"; }
+print_step() { echo -e "${CYAN}[->]${NC} $1"; }
 
 print_banner() {
     clear
     echo ""
-    echo -e "${CYAN}╔═══════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}  ${GREEN}Novel Reader - Termux 安装${NC}                    ${CYAN}║${NC}"
-    echo -e "${CYAN}╚═══════════════════════════════════════════════════╝${NC}"
+    echo -e "${CYAN}=======================================================${NC}"
+    echo -e "  ${GREEN}Novel Reader - Termux 安装${NC}"
+    echo -e "${CYAN}=======================================================${NC}"
     echo ""
 }
 
@@ -51,7 +51,7 @@ check_termux() {
 
 setup_mirrors() {
     print_step "配置国内镜像源..."
-    
+
     mkdir -p ~/.pip
     cat > ~/.pip/pip.conf << 'EOF'
 [global]
@@ -68,13 +68,13 @@ EOF
 
 install_system_deps() {
     print_step "安装系统依赖..."
-    
+
     pkg update -y && pkg upgrade -y
-    
+
     pkg install -y python3 python3-dev nodejs npm redis git
     pkg install -y clang make libffi-dev openssl-dev
     pkg install -y sqlite
-    
+
     print_success "系统依赖安装完成"
 }
 
@@ -117,12 +117,12 @@ EOF
 
 install_python_deps() {
     print_step "安装 Python 依赖..."
-    
+
     if [ ! -d "$VENV_DIR" ]; then
         python3 -m venv "$VENV_DIR"
         print_success "虚拟环境创建完成"
     fi
-    
+
     source "$VENV_DIR/bin/activate"
     pip install --upgrade pip -q
     pip install bcrypt>=4.0.1 -q
@@ -133,32 +133,32 @@ install_python_deps() {
 
 install_node_deps() {
     print_step "安装 Node.js 依赖..."
-    
+
     cd "$FRONTEND_DIR"
-    
+
     if [ ! -d "node_modules" ]; then
         npm install --legacy-peer-deps
     fi
-    
+
     print_info "构建前端..."
     npm run build
-    
+
     cd "$SCRIPT_DIR"
     print_success "Node.js 依赖安装完成"
 }
 
 start_redis() {
     print_step "启动 Redis..."
-    
+
     if pgrep redis-server > /dev/null; then
         print_success "Redis 已运行"
         return
     fi
-    
+
     redis-server --daemonize yes --bind 127.0.0.1 --port 6379 \
         --maxmemory 32mb --maxmemory-policy allkeys-lru \
         --logfile "$DATA_DIR/logs/redis.log"
-    
+
     sleep 2
     if redis-cli ping | grep -q PONG; then
         print_success "Redis 启动成功"
@@ -170,23 +170,23 @@ start_redis() {
 
 start_backend() {
     print_step "启动后端服务..."
-    
+
     stop_backend || true
-    
+
     source "$VENV_DIR/bin/activate"
     export PYTHONPATH="$SCRIPT_DIR"
-    
+
     nohup uvicorn app.main:app \
         --host 0.0.0.0 \
         --port 8000 \
         --workers 1 \
         --log-level info \
         > "$DATA_DIR/logs/backend.log" 2>&1 &
-    
+
     echo $! > "$BACKEND_DIR/uvicorn.pid"
-    
+
     deactivate
-    
+
     for i in {1..30}; do
         if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
             print_success "后端服务已就绪"
@@ -194,27 +194,27 @@ start_backend() {
         fi
         sleep 1
     done
-    
+
     print_warning "后端启动较慢，请稍后检查"
     return 0
 }
 
 start_frontend() {
     print_step "启动前端服务..."
-    
+
     stop_frontend || true
-    
+
     cd "$FRONTEND_DIR"
-    
+
     if command -v serve &> /dev/null; then
         nohup serve -s dist -l 80 > "$DATA_DIR/logs/frontend.log" 2>&1 &
     else
         npm install -g serve > /dev/null 2>&1
         nohup serve -s dist -l 80 > "$DATA_DIR/logs/frontend.log" 2>&1 &
     fi
-    
+
     echo $! > "$FRONTEND_DIR/serve.pid"
-    
+
     cd "$SCRIPT_DIR"
     print_success "前端服务已启动"
 }
@@ -248,38 +248,38 @@ stop_all() {
 show_status() {
     print_step "服务状态"
     echo ""
-    
+
     if redis-cli ping 2>/dev/null | grep -q PONG; then
         print_success "Redis: 运行中"
     else
         print_error "Redis: 未运行"
     fi
-    
+
     if [ -f "$BACKEND_DIR/uvicorn.pid" ] && kill -0 $(cat "$BACKEND_DIR/uvicorn.pid") 2>/dev/null; then
         print_success "后端: 运行中"
     else
         print_error "后端: 未运行"
     fi
-    
+
     if [ -f "$FRONTEND_DIR/serve.pid" ] && kill -0 $(cat "$FRONTEND_DIR/serve.pid") 2>/dev/null; then
         print_success "前端: 运行中"
     else
         print_error "前端: 未运行"
     fi
-    
+
     echo ""
-    
+
     if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
         print_success "API: 正常"
     else
         print_error "API: 未响应"
     fi
-    
+
     echo ""
     print_info "访问地址:"
     echo "  前端: http://localhost"
     echo "  API:  http://localhost:8000"
-    
+
     if command -v ip > /dev/null; then
         IP=$(ip addr show wlan0 2>/dev/null | grep inet | grep -v 127.0.0.1 | awk '{print $2}' | cut -d '/' -f 1 | head -1)
         if [ -n "$IP" ]; then
@@ -297,11 +297,11 @@ show_logs() {
 
 install_global() {
     print_step "配置全局命令..."
-    
+
     if [ -f "$SCRIPT_DIR/readweb" ]; then
         ln -sf "$SCRIPT_DIR/readweb" "$TERMUX_BIN/readweb"
         chmod +x "$TERMUX_BIN/readweb"
-        print_success "readweb → $TERMUX_BIN/readweb"
+        print_success "readweb -> $TERMUX_BIN/readweb"
         echo ""
         print_success "全局命令配置完成!"
         echo -e "${YELLOW}以后可直接使用:${NC}"
@@ -318,33 +318,33 @@ uninstall() {
         print_info "操作已取消"
         return
     fi
-    
+
     stop_all
-    
+
     print_info "删除数据目录..."
     rm -rf "$DATA_DIR"
-    
+
     print_info "删除虚拟环境..."
     rm -rf "$VENV_DIR"
-    
+
     print_info "删除前端依赖..."
     rm -rf "$FRONTEND_DIR/node_modules"
-    
+
     print_info "删除全局命令..."
     rm -f "$TERMUX_BIN/readweb"
-    
+
     print_success "卸载完成"
 }
 
 install() {
     print_banner
-    
+
     check_termux
-    
+
     echo -e "${YELLOW}此脚本将安装 Novel Reader 到 Termux${NC}"
     echo -e "${YELLOW}需要约 500MB 存储空间${NC}"
     echo ""
-    
+
     install_system_deps
     setup_mirrors
     create_directories
@@ -352,11 +352,11 @@ install() {
     install_python_deps
     install_node_deps
     install_global
-    
+
     echo ""
-    echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}=======================================================${NC}"
     echo -e "${GREEN}  安装完成!${NC}"
-    echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}=======================================================${NC}"
     echo ""
     echo -e "${YELLOW}启动命令:${NC}"
     echo "  ./install-termux.sh start"
@@ -366,17 +366,17 @@ install() {
 
 start() {
     print_banner
-    
+
     create_directories
-    
+
     start_redis
     start_backend
     start_frontend
-    
+
     echo ""
-    echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}=======================================================${NC}"
     echo -e "${GREEN}  服务已启动!${NC}"
-    echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}=======================================================${NC}"
     echo ""
     show_status
 }

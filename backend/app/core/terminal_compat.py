@@ -1,7 +1,6 @@
 import os
 import sys
 import locale
-import struct
 import logging
 from typing import Dict
 

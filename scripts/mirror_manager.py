@@ -144,7 +144,7 @@ trusted-host = {mirror.url.replace("https://", "").replace("http://", "").rstrip
 
     def auto_configure(self) -> Optional[Mirror]:
         mirrors = self.MIRRORS["china"] if self.is_china else self.MIRRORS["global"]
-        print(f"[{'✓' if self.is_china else '✗'}] 检测到地区: {'中国' if self.is_china else '海外'}")
+        print(f"[{'+' if self.is_china else '-'}] 检测到地区: {'中国' if self.is_china else '海外'}")
 
         print("正在测试镜像源...")
         results = self.test_mirrors(mirrors)
@@ -226,7 +226,7 @@ class NodeMirrorManager(MirrorManager):
             return False
 
     def auto_configure_npm(self) -> Optional[Mirror]:
-        print(f"[{'✓' if self.is_china else '✗'}] 检测到地区: {'中国' if self.is_china else '海外'}")
+        print(f"[{'+' if self.is_china else '-'}] 检测到地区: {'中国' if self.is_china else '海外'}")
 
         print("正在测试 npm 镜像源...")
         results = self.test_npm_mirrors()
@@ -309,7 +309,7 @@ class DockerMirrorManager(MirrorManager):
         print(f"\n配置 Docker 镜像加速器: {working_mirrors[0]}")
 
         if self.set_docker_mirrors(working_mirrors[:3]):
-            print("✓ Docker 镜像加速配置成功")
+            print("[OK] Docker 镜像加速配置成功")
             print("  请运行: sudo systemctl restart docker")
             return working_mirrors
 
@@ -328,15 +328,15 @@ class DepInstaller:
         print("=" * 50)
         print()
 
-        print("━━━ Python (pip) ━━━")
+        print("--- Python (pip) ---")
         self.python_mgr.auto_configure()
         print()
 
-        print("━━━ Node.js (npm) ━━━")
+        print("--- Node.js (npm) ---")
         self.node_mgr.auto_configure_npm()
         print()
 
-        print("━━━ Docker ━━━")
+        print("--- Docker ---")
         self.docker_mgr.auto_configure()
         print()
 
@@ -406,11 +406,11 @@ def main():
     installer = DepInstaller()
 
     if args.status:
-        print("━━━ Python (pip) ━━━")
+        print("--- Python (pip) ---")
         current = installer.python_mgr.get_current_mirror()
         print(f"  当前镜像: {current or '官方 (pypi.org)'}")
         print()
-        print("━━━ Docker ━━━")
+        print("--- Docker ---")
         config = installer.docker_mgr.get_current_config()
         mirrors = config.get("registry-mirrors", [])
         if mirrors:

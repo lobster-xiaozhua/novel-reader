@@ -93,13 +93,13 @@ LEVEL_NAMES = {
 }
 
 LEVEL_ICONS = {
-    LogLevel.TRACE: "·",
-    LogLevel.DEBUG: "▫",
-    LogLevel.INFO: "ℹ",
-    LogLevel.SUCCESS: "✓",
-    LogLevel.WARNING: "⚠",
-    LogLevel.ERROR: "✗",
-    LogLevel.CRITICAL: "☠",
+    LogLevel.TRACE: ".",
+    LogLevel.DEBUG: "-",
+    LogLevel.INFO: "i",
+    LogLevel.SUCCESS: "+",
+    LogLevel.WARNING: "!",
+    LogLevel.ERROR: "x",
+    LogLevel.CRITICAL: "!!",
 }
 
 
@@ -123,7 +123,7 @@ class ConsoleFormatter(logging.Formatter):
         level = record.levelno
         if level not in LEVEL_NAMES:
             level = LogLevel.INFO
-        return level, LEVEL_NAMES.get(level, "INFO"), LEVEL_ICONS.get(level, "ℹ")
+        return level, LEVEL_NAMES.get(level, "INFO"), LEVEL_ICONS.get(level, "i")
 
     def _colorize_level(self, level_name: str, level: int) -> str:
         if not self.use_color:
@@ -151,7 +151,7 @@ class ConsoleFormatter(logging.Formatter):
 
         parts.append(message)
 
-        return " │ ".join(parts)
+        return " | ".join(parts)
 
 
 class RichConsoleFormatter:
@@ -163,7 +163,7 @@ class RichConsoleFormatter:
             return
 
         level_name = LEVEL_NAMES.get(level, "INFO")
-        icon = LEVEL_ICONS.get(level, "ℹ")
+        icon = LEVEL_ICONS.get(level, "i")
 
         text = Text()
         text.append(f"{datetime.now().strftime('%H:%M:%S.%f')[:-3]} ", style="dim")
@@ -305,7 +305,7 @@ def setup_logging():
         root_logger.debug(f"{Colors.CYAN}调试模式已启用{Colors.RESET}")
         root_logger.debug(f"{Colors.DIM}日志级别: DEBUG{Colors.RESET}")
     else:
-        root_logger.info(f"{Colors.GREEN}✓{Colors.RESET} {Colors.BOLD}{settings.APP_NAME}{Colors.RESET} v{settings.APP_VERSION}")
+        root_logger.info(f"{Colors.GREEN}+{Colors.RESET} {Colors.BOLD}{settings.APP_NAME}{Colors.RESET} v{settings.APP_VERSION}")
 
 
 def get_logger(name: str) -> ElegantLogger:
@@ -319,42 +319,42 @@ class StructuredLogger:
     def log_api_request(self, method: str, path: str, status_code: int, duration: float, request_id: str = None):
         if status_code >= 500:
             self._logger.error(
-                f"API 请求失败 │ {method} {path} │ {status_code} │ {duration:.3f}s",
+                f"API 请求失败 | {method} {path} | {status_code} | {duration:.3f}s",
                 request_id=request_id
             )
         elif status_code >= 400:
             self._logger.warning(
-                f"API 请求错误 │ {method} {path} │ {status_code} │ {duration:.3f}s",
+                f"API 请求错误 | {method} {path} | {status_code} | {duration:.3f}s",
                 request_id=request_id
             )
         else:
             self._logger.info(
-                f"API 请求 │ {method} {path} │ {status_code} │ {duration:.3f}s",
+                f"API 请求 | {method} {path} | {status_code} | {duration:.3f}s",
                 request_id=request_id
             )
 
     def log_database_operation(self, operation: str, table: str, duration: float, success: bool = True):
         if success:
-            self._logger.debug(f"DB {operation} │ {table} │ {duration:.3f}s")
+            self._logger.debug(f"DB {operation} | {table} | {duration:.3f}s")
         else:
-            self._logger.error(f"DB {operation} 失败 │ {table} │ {duration:.3f}s")
+            self._logger.error(f"DB {operation} 失败 | {table} | {duration:.3f}s")
 
     def log_crawler_event(self, event: str, url: str = None, error: str = None):
         if error:
-            self._logger.error(f"爬虫错误 │ {event} │ {url or 'N/A'} │ {error}")
+            self._logger.error(f"爬虫错误 | {event} | {url or 'N/A'} | {error}")
         else:
-            self._logger.info(f"爬虫 │ {event} │ {url or 'N/A'}")
+            self._logger.info(f"爬虫 | {event} | {url or 'N/A'}")
 
     def log_update_event(self, instruction: str, files_created: int, files_modified: int, success: bool):
         if success:
             self._logger.success(
-                f"代码更新 │ {instruction} │ 创建: {files_created} 修改: {files_modified}"
+                f"代码更新 | {instruction} | 创建: {files_created} 修改: {files_modified}"
             )
         else:
-            self._logger.error(f"代码更新失败 │ {instruction}")
+            self._logger.error(f"代码更新失败 | {instruction}")
 
     def log_version_event(self, event: str, version_id: str, name: str = None, success: bool = True):
         if success:
-            self._logger.success(f"版本 {event} │ {version_id} │ {name or ''}")
+            self._logger.success(f"版本 {event} | {version_id} | {name or ''}")
         else:
-            self._logger.error(f"版本 {event} 失败 │ {version_id}")
+            self._logger.error(f"版本 {event} 失败 | {version_id}")

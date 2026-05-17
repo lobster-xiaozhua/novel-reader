@@ -13,10 +13,10 @@ MAGENTA='\033[0;35m'
 NC='\033[0m'
 
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
-log_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
-log_error() { echo -e "${RED}[✗]${NC} $1"; }
-log_header() { echo -e "\n${CYAN}═══ $1 ═══${NC}"; }
+log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERR]${NC} $1"; }
+log_header() { echo -e "\n${CYAN}=== $1 ===${NC}"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_NAME="novel-reader"
@@ -422,9 +422,9 @@ main() {
     local cmd="${1:-help}"
 
     echo ""
-    echo -e "${MAGENTA}╔══════════════════════════════════════════════════════╗${NC}"
-    echo -e "${MAGENTA}║${NC}  ${CYAN}Novel Reader - Linux 部署脚本${NC}                    ${MAGENTA}║${NC}"
-    echo -e "${MAGENTA}╚══════════════════════════════════════════════════════╝${NC}"
+    echo -e "${MAGENTA}=======================================================${NC}"
+    echo -e "  ${CYAN}Novel Reader - Linux 部署脚本${NC}"
+    echo -e "${MAGENTA}=======================================================${NC}"
     echo ""
 
     case "$cmd" in
@@ -449,12 +449,12 @@ main() {
             fi
 
             echo ""
-            echo -e "${GREEN}═════════════════════════════════════════════════════${NC}"
+            echo -e "${GREEN}=======================================================${NC}"
             echo -e "${GREEN}  服务已启动!${NC}"
-            echo -e "${GREEN}═════════════════════════════════════════════════════${NC}"
+            echo -e "${GREEN}=======================================================${NC}"
             echo ""
-            echo -e "  ${GREEN}📖${NC} 前端:  http://localhost"
-            echo -e "  ${GREEN}🔧${NC} API:   http://localhost:8000/docs"
+            echo -e "  ${GREEN}[OK]${NC} 前端:  http://localhost"
+            echo -e "  ${GREEN}[OK]${NC} API:   http://localhost:8000/docs"
             echo ""
             ;;
         stop)
