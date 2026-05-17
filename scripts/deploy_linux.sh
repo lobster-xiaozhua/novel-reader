@@ -1,6 +1,7 @@
 #!/bin/bash
 # Novel Reader - Linux 部署脚本
 # 支持: Ubuntu / Debian / CentOS / Fedora / Arch 等主流发行版
+# 交互逻辑对齐 Windows PowerShell 版本
 
 set -e
 
@@ -53,6 +54,42 @@ check_command() {
         return 1
     fi
     return 0
+}
+
+setup_mirrors() {
+    log_header "配置镜像源"
+    local region=$(detect_region)
+
+    if [ "$region" = "china" ]; then
+        log_info "检测到中国地区，配置国内镜像..."
+
+        mkdir -p ~/.pip
+        cat > ~/.pip/pip.conf << 'EOF'
+[global]
+index-url = https://mirrors.aliyun.com/pypi/simple/
+timeout = 120
+extra-index-url = https://pypi.tuna.tsinghua.edu.cn/simple
+
+[install]
+trusted-host =
+    mirrors.aliyun.com
+    pypi.tuna.tsinghua.edu.cn
+EOF
+        log_success "pip 镜像: 阿里云"
+
+        npm config set registry https://registry.npmmirror.com
+        log_success "npm 镜像: npmmirror.com"
+
+        if command -v apt-get &> /dev/null; then
+            sudo bash -c 'cat > /etc/apt/sources.list.d/docker.list << "EOSOURCES"
+deb https://mirrors.aliyun.com/docker-ce/linux/$OS/$OS_ID $(lsb_release -cs) stable
+EOSOURCES'
+            log_success "apt 镜像: 阿里云"
+        fi
+
+    else
+        log_info "海外地区，使用官方源"
+    fi
 }
 
 install_system_deps() {
@@ -116,45 +153,8 @@ install_system_deps() {
     esac
 }
 
-setup_mirrors() {
-    log_header "配置镜像源"
-
-    local region=$(detect_region)
-
-    if [ "$region" = "china" ]; then
-        log_info "检测到中国地区，配置国内镜像..."
-
-        mkdir -p ~/.pip
-        cat > ~/.pip/pip.conf << 'EOF'
-[global]
-index-url = https://mirrors.aliyun.com.com/pypi/simple/
-timeout = 120
-extra-index-url = https://pypi.tuna.tsinghua.edu.cn/simple
-
-[install]
-trusted-host =
-    mirrors.aliyun.com
-    pypi.tuna.tsinghua.edu.cn
-EOF
-        log_success "pip 镜像: 阿里云"
-
-        npm config set registry https://registry.npmmirror.com
-        log_success "npm 镜像: npmmirror.com"
-
-        if command -v apt-get &> /dev/null; then
-            sudo bash -c 'cat > /etc/apt/sources.list.d/docker.list << "EOSOURCES"
-deb https://mirrors.aliyun.com/docker-ce/linux/$OS/$OS_ID $(lsb_release -cs) stable
-EOSOURCES'
-            log_success "apt 镜像: 阿里云"
-        fi
-
-    else
-        log_info "海外地区，使用官方源"
-    fi
-}
-
 create_directories() {
-    log_header "创建目录结构"
+    log_header "创建数据目录"
 
     for dir in books index static logs cache backups versions; do
         mkdir -p "$DATA_DIR/$dir"
@@ -297,7 +297,7 @@ start_frontend() {
 }
 
 start_docker_mode() {
-    log_header "Docker 模式启动"
+    log_header "启动服务 (Docker 模式)"
 
     if ! command -v docker &> /dev/null; then
         log_error "Docker 未安装"
@@ -309,18 +309,11 @@ start_docker_mode() {
         return 1
     fi
 
-    log_info "启动 Redis..."
-    docker-compose up -d redis
-
-    sleep 2
-
-    log_info "启动后端..."
-    docker-compose up -d backend
-
-    log_info "启动前端..."
-    docker-compose up -d frontend
-
-    log_success "Docker 服务启动完成"
+    log_info "构建并启动容器..."
+    docker-compose up -d
+    log_info "等待服务启动..."
+    sleep 5
+    log_success "Docker 服务已启动"
 }
 
 stop_services() {
@@ -388,6 +381,14 @@ show_status() {
     fi
 }
 
+show_logs() {
+    if [ -d "$DATA_DIR/logs" ]; then
+        tail -f "$DATA_DIR/logs"/*.log 2>/dev/null || echo "暂无日志"
+    else
+        echo "日志目录不存在"
+    fi
+}
+
 show_help() {
     cat << EOF
 
@@ -396,20 +397,22 @@ Novel Reader - Linux 部署脚本
 用法: $0 [command]
 
 命令:
-  install     安装所有依赖
-  start       启动服务
+  install     完整安装所有依赖 (首次运行必须)
+  python      仅安装 Python 依赖
+  node        仅安装 Node.js 依赖
+  redis       安装 Redis (本地方式)
+  start       启动服务 (本地模式)
+  docker      启动服务 (Docker 模式)
   stop        停止服务
-  restart     重启服务
   status      查看服务状态
   logs        查看日志
-  docker      使用 Docker 模式
-  mirrors     配置镜像源
+  mirror      配置镜像源
   help        显示帮助
 
 示例:
   $0 install     # 安装依赖
   $0 start       # 启动服务
-  $0 docker      # Docker 模式启动
+  $0 docker      # 启动 Docker 服务
 
 访问地址:
   前端: http://localhost
@@ -436,17 +439,21 @@ main() {
             install_python_deps
             install_node_deps
             ;;
+        python)
+            install_python_deps
+            ;;
+        node)
+            install_node_deps
+            ;;
+        redis)
+            start_redis
+            ;;
         start)
             create_directories
             create_env_file
-
-            if command -v docker &> /dev/null && docker info &> /dev/null 2>&1; then
-                start_docker_mode
-            else
-                start_redis
-                start_backend
-                start_frontend
-            fi
+            start_redis
+            start_backend
+            start_frontend
 
             echo ""
             echo -e "${GREEN}=======================================================${NC}"
@@ -457,31 +464,30 @@ main() {
             echo -e "  ${GREEN}[OK]${NC} API:   http://localhost:8000/docs"
             echo ""
             ;;
+        docker)
+            create_directories
+            create_env_file
+            start_docker_mode
+
+            echo ""
+            echo -e "${GREEN}=======================================================${NC}"
+            echo -e "${GREEN}  Docker 服务已启动!${NC}"
+            echo -e "${GREEN}=======================================================${NC}"
+            echo ""
+            echo -e "  ${GREEN}[OK]${NC} 前端:  http://localhost"
+            echo -e "  ${GREEN}[OK]${NC} API:   http://localhost:8000/docs"
+            echo ""
+            ;;
         stop)
             stop_services
-            ;;
-        restart)
-            stop_services
-            sleep 2
-            $0 start
             ;;
         status)
             show_status
             ;;
         logs)
-            if [ -d "$DATA_DIR/logs" ]; then
-                tail -f "$DATA_DIR/logs"/*.log 2>/dev/null || echo "暂无日志"
-            else
-                echo "日志目录不存在"
-            fi
+            show_logs
             ;;
-        docker)
-            setup_mirrors
-            create_directories
-            create_env_file
-            start_docker_mode
-            ;;
-        mirrors)
+        mirror)
             setup_mirrors
             ;;
         help|--help|-h|"")

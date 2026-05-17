@@ -2,6 +2,7 @@
 # Novel Reader - Android/Termux 部署脚本
 # 支持: Termux (Android)
 # 要求: Termux 最新版本, Python 3.10+
+# 交互逻辑对齐 Windows PowerShell 版本
 
 set -e
 
@@ -40,6 +41,17 @@ check_command() {
     return 0
 }
 
+detect_region() {
+    if command -v curl &> /dev/null; then
+        COUNTRY=$(curl -s --max-time 3 "https://ipinfo.io/country" 2>/dev/null || echo "unknown")
+        if [ "$COUNTRY" = "CN" ]; then
+            echo "china"
+            return
+        fi
+    fi
+    echo "global"
+}
+
 termux_setup_storage() {
     if is_termux; then
         log_info "配置 Termux 存储访问..."
@@ -47,8 +59,32 @@ termux_setup_storage() {
     fi
 }
 
+setup_mirrors() {
+    log_header "配置镜像源"
+    local region=$(detect_region)
+
+    if [ "$region" = "china" ]; then
+        log_info "检测到中国地区，配置国内镜像..."
+
+        mkdir -p ~/.pip
+        cat > ~/.pip/pip.conf << 'EOF'
+[global]
+index-url = https://mirrors.aliyun.com/pypi/simple/
+timeout = 120
+[install]
+trusted-host = mirrors.aliyun.com
+EOF
+        log_success "pip 镜像: 阿里云"
+
+        npm config set registry https://registry.npmmirror.com 2>/dev/null || true
+        log_success "npm 镜像: npmmirror.com"
+    else
+        log_info "海外地区，使用官方源"
+    fi
+}
+
 install_termux_deps() {
-    log_header "安装 Termux 依赖"
+    log_header "安装系统依赖"
 
     if ! is_termux; then
         log_warning "未检测到 Termux 环境，跳过系统依赖安装"
@@ -81,11 +117,11 @@ install_termux_deps() {
         libjpeg-turbo \
         > /dev/null 2>&1 || true
 
-    log_success "Termux 依赖安装完成"
+    log_success "系统依赖安装完成"
 }
 
 create_directories() {
-    log_header "创建目录结构"
+    log_header "创建数据目录"
 
     for dir in books index static logs cache backups versions; do
         mkdir -p "$DATA_DIR/$dir"
@@ -293,6 +329,14 @@ show_status() {
     fi
 }
 
+show_logs() {
+    if [ -d "$DATA_DIR/logs" ]; then
+        tail -f "$DATA_DIR/logs"/*.log 2>/dev/null || echo "暂无日志"
+    else
+        echo "日志目录不存在"
+    fi
+}
+
 setup_global_commands() {
     log_header "配置全局命令"
 
@@ -331,18 +375,23 @@ Novel Reader - Android/Termux 部署脚本
 用法: bash deploy_termux.sh [command]
 
 命令:
-  install     安装所有依赖 (首次运行必须)
-  start       启动服务
+  install     完整安装所有依赖 (首次运行必须)
+  python      仅安装 Python 依赖
+  node        仅安装 Node.js 依赖
+  redis       安装 Redis (本地方式)
+  start       启动服务 (本地模式)
+  docker      启动服务 (Docker 模式)
   stop        停止服务
-  restart     重启服务
   status      查看服务状态
   logs        查看日志
+  mirror      配置镜像源
   global      配置全局命令 (readweb)
   help        显示帮助
 
 示例:
   bash deploy_termux.sh install    # 安装依赖
   bash deploy_termux.sh start      # 启动服务
+  bash deploy_termux.sh docker     # 启动 Docker 服务
 
 Termux 特别提示:
   1. 首次使用需要授予存储权限: termux-setup-storage
@@ -377,6 +426,7 @@ main() {
     case "$cmd" in
         install)
             termux_setup_storage
+            setup_mirrors
             install_termux_deps
             create_directories
             create_env_file
@@ -384,9 +434,19 @@ main() {
             install_node_deps
             setup_global_commands
             ;;
+        python)
+            install_python_deps
+            ;;
+        node)
+            install_node_deps
+            ;;
+        redis)
+            start_redis
+            ;;
         start)
             create_directories
             create_env_file
+            start_redis
             start_backend
             start_frontend
 
@@ -400,23 +460,21 @@ main() {
             echo ""
             echo -e "${YELLOW}提示: 如果在手机浏览器访问，使用 http://localhost:3000${NC}"
             ;;
+        docker)
+            log_error "Docker 模式在 Termux 上不可用"
+            log_info "请使用本地模式: bash deploy_termux.sh start"
+            ;;
         stop)
             stop_services
-            ;;
-        restart)
-            stop_services
-            sleep 2
-            $0 start
             ;;
         status)
             show_status
             ;;
         logs)
-            if [ -d "$DATA_DIR/logs" ]; then
-                tail -f "$DATA_DIR/logs"/*.log 2>/dev/null || echo "暂无日志"
-            else
-                echo "日志目录不存在"
-            fi
+            show_logs
+            ;;
+        mirror)
+            setup_mirrors
             ;;
         global)
             setup_global_commands
