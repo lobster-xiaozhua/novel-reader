@@ -38,7 +38,7 @@
     </template>
 
     <div v-else class="empty-state">
-      <div class="empty-icon">😕</div>
+      <div class="empty-icon">?</div>
       <div class="empty-text">章节内容加载失败</div>
     </div>
   </div>
@@ -85,6 +85,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   saveProgress()
   clearTimeout(saveTimer)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('scroll', scheduleSave)
+  }
 })
 
 watch(() => route.params.chapterId, async (newId) => {
@@ -106,6 +109,7 @@ async function loadChapter() {
     document.title = `${data.title} - 小说阅读器`
   } catch (e) {
     chapter.value = null
+    console.error('加载章节失败:', e)
   } finally {
     loading.value = false
   }
@@ -116,22 +120,22 @@ async function loadChapters() {
     const { data } = await api.get(`/api/books/${route.params.bookId}/chapters`)
     chapters.value = data.items || data || []
   } catch (e) {
-    // ignore
+    console.error('加载章节列表失败:', e)
   }
 }
 
 async function loadProgress() {
   try {
     const { data } = await api.get(`/api/reading-progress/book/${route.params.bookId}`)
-    if (data && data.chapter_number) {
+    if (data && data.chapter_id) {
       // If we're on the same chapter, restore scroll position
-      if (chapter.value && data.chapter_number === chapter.value.chapter_number && data.scroll_position) {
+      if (chapter.value && data.chapter_id === chapter.value.id && data.position) {
         await nextTick()
-        window.scrollTo({ top: data.scroll_position })
+        window.scrollTo({ top: data.position })
       }
     }
   } catch (e) {
-    // ignore
+    // ignore - no progress saved yet
   }
 }
 
@@ -139,9 +143,11 @@ function saveProgress() {
   if (!chapter.value) return
   const scrollPosition = window.scrollY
   api.post(`/api/reading-progress/book/${route.params.bookId}`, {
-    chapter_number: chapter.value.chapter_number,
-    scroll_position: scrollPosition
-  }).catch(() => {})
+    chapter_id: chapter.value.id,
+    position: scrollPosition
+  }).catch((e) => {
+    console.error('保存阅读进度失败:', e)
+  })
 }
 
 function scheduleSave() {
@@ -151,9 +157,6 @@ function scheduleSave() {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('scroll', scheduleSave)
-  onBeforeUnmount(() => {
-    window.removeEventListener('scroll', scheduleSave)
-  })
 }
 
 function goBack() {
@@ -168,7 +171,7 @@ function goPrev() {
 
 function goNext() {
   if (!hasNext.value) return
-  const next = chapters.value[currentIndex.value + 1]
+  const next = chapters.value[currentIndex.value - 1]
   router.push(`/reader/${route.params.bookId}/${next.id}`)
 }
 
@@ -222,6 +225,7 @@ function decreaseFontSize() {
 .toolbar-title {
   flex: 1;
   font-size: 15px;
+  font-weight: 500;
   color: var(--text-primary);
   text-align: center;
   overflow: hidden;
@@ -236,75 +240,95 @@ function decreaseFontSize() {
 }
 
 .font-size-display {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  min-width: 36px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 32px;
   text-align: center;
 }
 
 .reader-content {
+  padding: 80px 24px 40px;
   max-width: 720px;
   margin: 0 auto;
-  padding: 80px 24px 120px;
-  line-height: 1.9;
+  line-height: 1.8;
   color: var(--text-primary);
 }
 
 .chapter-title {
-  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'STSong', Georgia, serif;
-  font-size: 1.6em;
-  font-weight: 700;
-  text-align: center;
-  margin-bottom: 40px;
+  font-size: 1.5em;
+  font-weight: 600;
+  margin-bottom: 24px;
   color: var(--text-primary);
 }
 
-.chapter-body :deep(p) {
-  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'STSong', Georgia, serif;
+.chapter-body {
   text-indent: 2em;
+}
+
+.chapter-body :deep(p) {
   margin-bottom: 1em;
-  color: #cbd5e1;
-  line-height: 1.9;
+  text-indent: 2em;
 }
 
 .reader-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 64px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
   display: flex;
+  justify-content: center;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 32px;
-  z-index: 100;
+  gap: 20px;
+  padding: 24px;
+  border-top: 1px solid var(--border-color);
+  margin-top: 40px;
 }
 
 .nav-btn {
   padding: 10px 24px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 14px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
+  font-size: 14px;
   transition: all 0.2s;
 }
 
 .nav-btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
+  opacity: 0.9;
 }
 
 .nav-btn:disabled {
-  opacity: 0.3;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .nav-info {
   font-size: 14px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
+}
+
+.empty-icon {
+  font-size: 48px;
+}
+
+.empty-text {
+  font-size: 16px;
+  color: var(--text-secondary);
 }
 </style>

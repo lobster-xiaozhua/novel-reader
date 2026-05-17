@@ -344,7 +344,8 @@ class CrawlerService:
             return
 
         timeout = aiohttp.ClientTimeout(total=settings.CRAWLER_TIMEOUT)
-        connector = aiohttp.TCPConnector(limit=settings.CRAWLER_MAX_CONCURRENT, ssl=False)
+        ssl_context = False if settings.DEBUG else None
+        connector = aiohttp.TCPConnector(limit=settings.CRAWLER_MAX_CONCURRENT, ssl=ssl_context)
 
         async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
             base_delay = settings.CRAWLER_REQUEST_DELAY

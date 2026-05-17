@@ -1,4 +1,5 @@
 import secrets
+import warnings
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
@@ -7,7 +8,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _DATA_DIR = _PROJECT_ROOT / "data"
 _DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-_DEFAULT_SECRET_KEY = "your-secret-key-here-change-in-production"
+_DEFAULT_SECRET_KEY = secrets.token_hex(32)
 
 
 class Settings(BaseSettings):
@@ -65,18 +66,28 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = 10  # 连接池溢出
     REDIS_POOL_SIZE: int = 10  # Redis连接池大小
 
+    # CORS配置
+    CORS_ALLOW_ORIGINS: str = "*"  # 逗号分隔的域名列表，*表示允许所有
+
     @property
     def is_secret_key_default(self) -> bool:
         return self.SECRET_KEY == _DEFAULT_SECRET_KEY
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """解析CORS_ALLOW_ORIGINS为列表"""
+        origins = self.CORS_ALLOW_ORIGINS
+        if not origins or origins.strip() == "*":
+            return ["*"]
+        return [o.strip() for o in origins.split(",") if o.strip()]
 
 
 @lru_cache()
 def get_settings() -> Settings:
     settings = Settings()
     if settings.is_secret_key_default:
-        import warnings
         warnings.warn(
-            "SECRET_KEY 使用默认值，生产环境请务必通过环境变量设置安全的密钥",
+            "SECRET_KEY 使用自动生成的默认值，生产环境请务必通过环境变量设置固定的安全密钥",
             RuntimeWarning,
             stacklevel=2,
         )
