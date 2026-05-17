@@ -474,6 +474,35 @@ stop_tunnel() {
     fi
 }
 
+show_status() {
+    print_header "Service Status"
+    SYSTEM=$(detect_system)
+    echo "System: $SYSTEM"
+
+    pgrep -f "uvicorn" > /dev/null && print_success "App: running on :8000" || print_error "App: stopped"
+    echo ""
+    curl -s http://localhost:8000/api/health > /dev/null 2>&1 && print_success "API: responding" || print_error "API: not responding"
+}
+
+git_pull_with_retry() {
+    local max_retries=3
+    local timeout=30
+    local attempt=1
+
+    while [ $attempt -le $max_retries ]; do
+        print_info "Pull attempt $attempt/$max_retries (timeout: ${timeout}s)..."
+        if timeout $timeout git pull origin main 2>&1; then
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        if [ $attempt -le $max_retries ]; then
+            print_warning "Attempt failed, retrying in 3s..."
+            sleep 3
+        fi
+    done
+    return 1
+}
+
 update_repo() {
     print_header "Update Repository"
 
@@ -484,36 +513,38 @@ update_repo() {
         return 1
     fi
 
+    # Set git timeout globally
+    git config --global http.lowSpeedLimit 1000 2>/dev/null || true
+    git config --global http.lowSpeedTime 10 2>/dev/null || true
+
     # Detect region and setup mirror before pull
     setup_mirrors
 
     print_info "Fetching updates..."
-    if git pull origin main 2>&1; then
+    if git_pull_with_retry; then
         print_success "Repository updated"
-    else
-        print_error "Git pull failed"
-        print_info "Trying with mirror..."
-        # Force mirror and retry
-        git config --global url."https://ghproxy.com/https://github.com/".insteadOf "https://github.com/" 2>/dev/null || true
-        if git pull origin main 2>&1; then
-            print_success "Repository updated via mirror"
-        else
-            print_error "Update failed. Check network or run manually:"
-            print_info "  git fetch origin"
-            print_info "  git reset --hard origin/main"
-            return 1
-        fi
+        return 0
     fi
-}
 
-show_status() {
-    print_header "Service Status"
-    SYSTEM=$(detect_system)
-    echo "System: $SYSTEM"
+    print_warning "Direct pull failed, trying GitHub mirror..."
+    git config --global url."https://ghproxy.com/https://github.com/".insteadOf "https://github.com/" 2>/dev/null || true
+    if git_pull_with_retry; then
+        print_success "Repository updated via mirror"
+        return 0
+    fi
 
-    pgrep -f "uvicorn" > /dev/null && print_success "App: running on :8000" || print_error "App: stopped"
-    echo ""
-    curl -s http://localhost:8000/api/health > /dev/null 2>&1 && print_success "API: responding" || print_error "API: not responding"
+    print_warning "Mirror also failed, trying fetch + reset..."
+    if timeout 30 git fetch origin main 2>&1; then
+        git reset --hard origin/main 2>&1
+        print_success "Repository updated via fetch+reset"
+        return 0
+    fi
+
+    print_error "All methods failed. Try manually:"
+    print_info "  git config --global url.\"https://ghproxy.com/https://github.com/\".insteadOf \"https://github.com/\""
+    print_info "  git pull origin main"
+    print_info "  or: git fetch origin && git reset --hard origin/main"
+    return 1
 }
 
 show_help() {

@@ -292,11 +292,83 @@ function Show-Menu {
     return $choice
 }
 
+function Invoke-GitPull {
+    param([int]$MaxRetries = 3, [int]$TimeoutSec = 30)
+    $attempt = 1
+    while ($attempt -le $MaxRetries) {
+        Write-Info "Pull attempt $attempt/$MaxRetries (timeout: ${TimeoutSec}s)..."
+        try {
+            $job = Start-Job -ScriptBlock {
+                param($dir)
+                Set-Location $dir
+                git pull origin main 2>&1
+            } -ArgumentList $Script:ProjectRoot
+            $result = Wait-Job -Job $job -Timeout $TimeoutSec
+            if ($result) {
+                $output = Receive-Job -Job $job 2>&1
+                Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+                if ($LASTEXITCODE -eq 0 -or $output -notmatch "error|fatal|failed") {
+                    return $true
+                }
+                Write-Warn "Pull returned errors"
+            } else {
+                Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+                Write-Warn "Pull timed out after ${TimeoutSec}s"
+            }
+        } catch {
+            Write-Warn "Pull exception: $_"
+        }
+        $attempt++
+        if ($attempt -le $MaxRetries) {
+            Write-Info "Retrying in 3s..."
+            Start-Sleep 3
+        }
+    }
+    return $false
+}
+
 function Update-Project {
     Write-Sep "Check Updates"
     Set-Location $Script:ProjectRoot
+
+    # Set git timeout settings
+    git config --global http.lowSpeedLimit 1000 2>$null
+    git config --global http.lowSpeedTime 10 2>$null
+
+    # Setup mirror for China
+    $region = Get-Region
+    if ($region -eq "china") {
+        Write-Info "China detected, using GitHub mirror..."
+        git config --global url."https://ghproxy.com/https://github.com/".insteadOf "https://github.com/" 2>$null
+    }
+
     try {
-        git fetch origin main 2>$null
+        Write-Info "Fetching remote info..."
+        $fetchJob = Start-Job -ScriptBlock {
+            param($dir)
+            Set-Location $dir
+            git fetch origin main 2>&1
+        } -ArgumentList $Script:ProjectRoot
+        $fetchResult = Wait-Job -Job $fetchJob -Timeout 30
+        if (-not $fetchResult) {
+            Remove-Job -Job $fetchJob -Force -ErrorAction SilentlyContinue
+            Write-Warn "Fetch timed out, trying mirror..."
+            git config --global url."https://ghproxy.com/https://github.com/".insteadOf "https://github.com/" 2>$null
+            $fetchJob2 = Start-Job -ScriptBlock {
+                param($dir)
+                Set-Location $dir
+                git fetch origin main 2>&1
+            } -ArgumentList $Script:ProjectRoot
+            $fetchResult2 = Wait-Job -Job $fetchJob2 -Timeout 30
+            Remove-Job -Job $fetchJob2 -Force -ErrorAction SilentlyContinue
+            if (-not $fetchResult2) {
+                Write-Err "Cannot reach GitHub, check network"
+                return $false
+            }
+        } else {
+            Remove-Job -Job $fetchJob -Force -ErrorAction SilentlyContinue
+        }
+
         $local = git rev-parse HEAD 2>$null
         $remote = git rev-parse origin/main 2>$null
         if ($local -eq $remote) {
@@ -309,10 +381,42 @@ function Update-Project {
         Write-Host ""
         $confirm = Read-Host "Update? (y/n)"
         if ($confirm -ne "y" -and $confirm -ne "Y") { return $false }
+
         Write-Info "Updating..."
-        git pull origin main 2>&1
-        Write-OK "Update complete, restart services"
-        return $true
+        if (Invoke-GitPull) {
+            Write-OK "Update complete, restart services"
+            return $true
+        }
+
+        # Fallback: try mirror if not already using it
+        if ($region -ne "china") {
+            Write-Warn "Direct pull failed, trying GitHub mirror..."
+            git config --global url."https://ghproxy.com/https://github.com/".insteadOf "https://github.com/" 2>$null
+            if (Invoke-GitPull -MaxRetries 2) {
+                Write-OK "Updated via mirror"
+                return $true
+            }
+        }
+
+        # Last resort: fetch + reset
+        Write-Warn "Trying fetch + reset..."
+        $resetJob = Start-Job -ScriptBlock {
+            param($dir)
+            Set-Location $dir
+            git fetch origin main 2>&1
+            git reset --hard origin/main 2>&1
+        } -ArgumentList $Script:ProjectRoot
+        $resetResult = Wait-Job -Job $resetJob -Timeout 30
+        Remove-Job -Job $resetJob -Force -ErrorAction SilentlyContinue
+        if ($resetResult) {
+            Write-OK "Updated via fetch+reset"
+            return $true
+        }
+
+        Write-Err "All methods failed. Try manually:"
+        Write-Info '  git config --global url."https://ghproxy.com/https://github.com/".insteadOf "https://github.com/"'
+        Write-Info "  git pull origin main"
+        return $false
     } catch {
         Write-Warn "Update failed: $_"
         return $false
@@ -380,14 +484,28 @@ function Main {
     if (-not $SkipUpdate) {
         Write-Info "Checking updates..."
         try {
-            git fetch origin main 2>$null
-            $behind = git rev-list HEAD..origin/main --count 2>$null
-            if ($behind -gt 0) {
-                Write-Warn "Found $behind update(s)"
-                $u = Read-Host "Update now? (y/n)"
-                if ($u -eq "y" -or $u -eq "Y") { Update-Project }
+            git config --global http.lowSpeedLimit 1000 2>$null
+            git config --global http.lowSpeedTime 10 2>$null
+            $fetchJob = Start-Job -ScriptBlock {
+                param($dir)
+                Set-Location $dir
+                git fetch origin main 2>&1
+            } -ArgumentList $Script:ProjectRoot
+            $fetchDone = Wait-Job -Job $fetchJob -Timeout 15
+            Remove-Job -Job $fetchJob -Force -ErrorAction SilentlyContinue
+            if ($fetchDone) {
+                $behind = git rev-list HEAD..origin/main --count 2>$null
+                if ($behind -gt 0) {
+                    Write-Warn "Found $behind update(s)"
+                    $u = Read-Host "Update now? (y/n)"
+                    if ($u -eq "y" -or $u -eq "Y") { Update-Project }
+                }
+            } else {
+                Write-Warn "Update check timed out, skipping"
             }
-        } catch {}
+        } catch {
+            Write-Warn "Update check failed, skipping"
+        }
     }
     if ($Force) { Stop-All }
     while ($true) {
