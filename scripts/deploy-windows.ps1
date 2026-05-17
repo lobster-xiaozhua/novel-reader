@@ -322,6 +322,22 @@ function Show-Status {
     }
 }
 
+function Show-Logs {
+    Write-Header "查看日志"
+    $logDir = Join-Path $DATA_DIR "logs"
+    if (Test-Path $logDir) {
+        $logFiles = Get-ChildItem -Path $logDir -Filter "*.log" -ErrorAction SilentlyContinue
+        if ($logFiles) {
+            Write-Info "正在显示日志 (按 Ctrl+C 退出)..."
+            Get-Content -Path "$logDir\*.log" -Wait -Tail 50
+        } else {
+            Write-Warning "暂无日志文件"
+        }
+    } else {
+        Write-Warning "日志目录不存在"
+    }
+}
+
 function Show-Help {
     @"
 Novel Reader 跨平台部署脚本 (Windows PowerShell)
@@ -329,7 +345,7 @@ Novel Reader 跨平台部署脚本 (Windows PowerShell)
 用法: .\deploy.ps1 [command]
 
 命令:
-  install       完整安装所有依赖
+  install       完整安装所有依赖 (首次运行必须)
   python        仅安装 Python 依赖
   node          仅安装 Node.js 依赖
   redis         安装 Redis (Docker 方式)
@@ -337,6 +353,7 @@ Novel Reader 跨平台部署脚本 (Windows PowerShell)
   docker        启动服务 (Docker 模式)
   stop          停止 Docker 服务
   status        查看服务状态
+  logs          查看日志
   mirror        配置镜像源
   help          显示此帮助信息
 
@@ -368,6 +385,7 @@ switch ($Command.ToLower()) {
     "docker" { Start-Docker }
     "stop" { Stop-Docker }
     "status" { Show-Status }
+    "logs" { Show-Logs }
     "mirror" { Set-PipMirror; Set-NpmMirror }
     "help" { Show-Help }
     "" { Show-Help }
