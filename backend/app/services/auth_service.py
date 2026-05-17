@@ -35,7 +35,7 @@ class AuthService:
                 raise ValueError("用户名已存在")
 
             hashed = hash_password(password)
-            user = User(username=username, email=email, hashed_password=hashed)
+            user = User(username=username, password_hash=hashed)
             db.add(user)
             await db.commit()
             await db.refresh(user)
@@ -49,7 +49,7 @@ class AuthService:
             result = await db.execute(select(User).where(User.username == username))
             user = result.scalar_one_or_none()
 
-            if not user or not verify_password(password, user.hashed_password):
+            if not user or not verify_password(password, user.password_hash):
                 await self._record_failed_login(username)
                 raise ValueError("用户名或密码错误")
 
@@ -87,8 +87,8 @@ class AuthService:
         ttl = max(0, exp - int(time.time())) if exp else 3600 * 24 * 7
 
         try:
-            if cache_service.is_redis_available:
-                await cache_service.setex(f"blacklist:{token}", ttl, "1")
+            if cache_service.available:
+                await cache_service.set(f"blacklist:{token}", "1", expire=ttl)
             else:
                 self._token_blacklist.add(token)
         except RedisError:
@@ -99,7 +99,7 @@ class AuthService:
             return False
 
         try:
-            if cache_service.is_redis_available:
+            if cache_service.available:
                 val = await cache_service.get(f"blacklist:{token}")
                 return val is not None
             else:
@@ -111,7 +111,7 @@ class AuthService:
         async with self._local_lock:
             now = time.time()
             try:
-                if cache_service.is_redis_available:
+                if cache_service.available:
                     key = f"login_lock:{username}"
                     return bool(await cache_service.get(key))
                 else:
@@ -126,16 +126,16 @@ class AuthService:
             key = f"login_attempts:{username}"
             now = time.time()
             try:
-                if cache_service.is_redis_available:
+                if cache_service.available:
                     count = await cache_service.incr(key)
                     if count == 1:
                         await cache_service.expire(key, settings.LOGIN_RATE_LIMIT_WINDOW)
 
                     if count >= settings.LOGIN_RATE_LIMIT_MAX:
-                        await cache_service.setex(
+                        await cache_service.set(
                             f"login_lock:{username}",
-                            settings.LOGIN_RATE_LIMIT_WINDOW,
                             "1",
+                            expire=settings.LOGIN_RATE_LIMIT_WINDOW,
                         )
                 else:
                     attempts = self._local_attempts.get(username, 0) + 1
@@ -154,7 +154,7 @@ class AuthService:
     async def _clear_attempts(self, username: str):
         async with self._local_lock:
             try:
-                if cache_service.is_redis_available:
+                if cache_service.available:
                     await cache_service.delete(f"login_attempts:{username}")
                     await cache_service.delete(f"login_lock:{username}")
                 else:

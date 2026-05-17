@@ -141,8 +141,16 @@ class UpdateEngine:
 
         return results
 
+    def _validate_path(self, file_path: str) -> Path:
+        target = (self.project_root / file_path).resolve()
+        try:
+            target.relative_to(self.project_root)
+        except ValueError:
+            raise PermissionError(f"非法路径: {file_path}")
+        return target
+
     def update_file(self, file_path: str, new_content: str, create_if_missing: bool = True) -> bool:
-        target = self.project_root / file_path
+        target = self._validate_path(file_path)
         if not target.exists() and not create_if_missing:
             return False
 
@@ -152,7 +160,7 @@ class UpdateEngine:
         return True
 
     def patch_file(self, file_path: str, old_pattern: str, new_content: str, is_regex: bool = False) -> bool:
-        target = self.project_root / file_path
+        target = self._validate_path(file_path)
         if not target.exists():
             return False
 
@@ -172,7 +180,7 @@ class UpdateEngine:
         return True
 
     def delete_file(self, file_path: str) -> bool:
-        target = self.project_root / file_path
+        target = self._validate_path(file_path)
         if target.exists():
             if target.is_file():
                 target.unlink()
@@ -222,7 +230,7 @@ class UpdateEngine:
                             files_deleted.append(file_path)
 
                     elif action_type == "append":
-                        target = self.project_root / file_path
+                        target = self._validate_path(file_path)
                         if target.exists():
                             content = action.get("content", "")
                             with open(target, "a", encoding="utf-8") as f:

@@ -28,10 +28,12 @@ async def search_books(
         for book_id, relevance in results:
             book_result = await db.execute(select(Book).where(Book.id == book_id))
             book = book_result.scalar_one_or_none()
+            if not book:
+                continue
             search_results.append(SearchResult(
                 id=book_id,
-                title=book.title if book else "",
-                author=book.author if book else None,
+                title=book.title,
+                author=book.author,
                 relevance=relevance,
             ))
         return search_results

@@ -45,7 +45,7 @@ class TestSafeLogger:
         message = "user password=secret123"
         result = logger._sanitize(message)
         assert "secret123" not in result
-        assert "***" in result
+        assert "[REDACTED]" in result
 
     def test_sanitize_token(self):
         logger = SafeLogger("test")

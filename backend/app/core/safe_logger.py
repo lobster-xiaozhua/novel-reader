@@ -6,7 +6,7 @@ from typing import Any, Optional
 SENSITIVE_PATTERNS = [
     re.compile(r'(password|passwd|pwd)\s*[=:]\s*\S+', re.IGNORECASE),
     re.compile(r'(secret|token|api_key|apikey)\s*[=:]\s*\S+', re.IGNORECASE),
-    re.compile(r'(authorization)\s*[=:]\s*\S+', re.IGNORECASE),
+    re.compile(r'(authorization)\s*[=:]\s*\S+(?:\s+\S+)*', re.IGNORECASE),
     re.compile(r'(bearer)\s+\S+', re.IGNORECASE),
     re.compile(r'(jwt)\s+[=:]\s*\S+', re.IGNORECASE),
 ]
@@ -21,7 +21,20 @@ class SafeLogger:
     def _sanitize(self, message: str) -> str:
         result = str(message)
         for pattern in SENSITIVE_PATTERNS:
-            result = pattern.sub(lambda m: m.group(0).split('=')[0].split(':')[0] + '=***', result)
+            def redact_match(m):
+                full = m.group(0)
+                if '=' in full:
+                    key = full.split('=')[0]
+                    return f"{key}={REDACTED}"
+                elif ':' in full:
+                    key = full.split(':')[0]
+                    return f"{key}:{REDACTED}"
+                else:
+                    parts = full.split()
+                    if len(parts) >= 2:
+                        return f"{parts[0]} {REDACTED}"
+                    return REDACTED
+            result = pattern.sub(redact_match, result)
         return result
 
     def debug(self, message: str, *args: Any, **kwargs: Any):

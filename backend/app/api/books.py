@@ -25,7 +25,9 @@ DATA_DIR = Path(settings.DATA_DIR).resolve()
 
 def _validate_path(file_path: Path) -> Path:
     resolved = file_path.resolve()
-    if not str(resolved).startswith(str(DATA_DIR)):
+    try:
+        resolved.relative_to(DATA_DIR)
+    except ValueError:
         raise PermissionError("访问路径被拒绝")
     return resolved
 
