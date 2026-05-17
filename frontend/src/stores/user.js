@@ -10,23 +10,28 @@ export const useUserStore = defineStore('user', () => {
   const username = computed(() => user.value?.username || '')
 
   async function login(credentials) {
-    const { data } = await api.post('/api/login', credentials)
+    const formData = new URLSearchParams()
+    formData.append('username', credentials.username)
+    formData.append('password', credentials.password)
+    const { data } = await api.post('/api/auth/login', formData, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    })
     token.value = data.access_token
-    user.value = data.user
+    user.value = { username: credentials.username }
     localStorage.setItem('access_token', data.access_token)
     localStorage.setItem('refresh_token', data.refresh_token)
-    localStorage.setItem('user', JSON.stringify(data.user))
+    localStorage.setItem('user', JSON.stringify(user.value))
     return data
   }
 
   async function register(userData) {
-    const { data } = await api.post('/api/register', userData)
+    const { data } = await api.post('/api/auth/register', userData)
     return data
   }
 
   async function logout() {
     try {
-      await api.post('/api/logout')
+      await api.post('/api/auth/logout')
     } catch (e) {
       // ignore
     }
@@ -39,7 +44,7 @@ export const useUserStore = defineStore('user', () => {
 
   async function fetchUser() {
     try {
-      const { data } = await api.get('/api/me')
+      const { data } = await api.get('/api/auth/me')
       user.value = data
       localStorage.setItem('user', JSON.stringify(data))
     } catch (e) {
