@@ -1,12 +1,17 @@
+import logging
+import os
+import platform
+import resource
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from typing import Optional
 
 from app.database import get_db
 from app.core.config import get_settings
 from app.services.cache_service import cache_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/health", tags=["健康检查"])
 settings = get_settings()
 
@@ -18,13 +23,27 @@ def set_startup_report(report):
     _startup_report = report
 
 
+def _check_disk():
+    stat = os.statvfs('/')
+    free_percent = (stat.f_bavail * stat.f_frsize) / (stat.f_blocks * stat.f_frsize) * 100
+    return {
+        "ok": free_percent > 10,
+        "free_percent": f"{free_percent:.1f}%",
+        "free_gb": round((stat.f_bavail * stat.f_frsize) / (1024**3), 2),
+    }
+
+
+def _get_memory_usage():
+    try:
+        mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        return mem / 1024 if platform.system() != "Darwin" else mem
+    except Exception:
+        return 0
+
+
 @router.get("")
 async def health_check(db: AsyncSession = Depends(get_db)):
-    checks = {
-        "database": False,
-        "redis": False,
-        "disk": False,
-    }
+    checks = {"database": False, "redis": False, "disk": False}
 
     try:
         await db.execute(text("SELECT 1"))
@@ -35,21 +54,15 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     checks["redis"] = cache_service.available
 
     try:
-        import os
-        stat = os.statvfs('/')
-        free_percent = (stat.f_bavail * stat.f_frsize) / (stat.f_blocks * stat.f_frsize) * 100
-        checks["disk"] = free_percent > 10
-        checks["disk_free_percent"] = f"{free_percent:.1f}%"
+        disk = _check_disk()
+        checks["disk"] = disk["ok"]
+        checks["disk_free_percent"] = disk["free_percent"]
     except Exception as e:
         logger.warning(f"磁盘健康检查失败: {e}")
         checks["disk"] = True
 
     healthy = checks["database"] and checks["disk"]
-
-    return {
-        "status": "healthy" if healthy else "unhealthy",
-        "checks": checks,
-    }
+    return {"status": "healthy" if healthy else "unhealthy", "checks": checks}
 
 
 @router.get("/startup")
@@ -61,15 +74,7 @@ async def startup_report():
 
 @router.get("/detailed")
 async def detailed_health(db: AsyncSession = Depends(get_db)):
-    import platform
-    import os
-    import resource
-
-    checks = {
-        "database": False,
-        "redis": False,
-        "disk": False,
-    }
+    checks = {"database": False, "redis": False, "disk": False}
 
     try:
         await db.execute(text("SELECT 1"))
@@ -80,21 +85,12 @@ async def detailed_health(db: AsyncSession = Depends(get_db)):
     checks["redis"] = cache_service.available
 
     try:
-        stat = os.statvfs('/')
-        free_percent = (stat.f_bavail * stat.f_frsize) / (stat.f_blocks * stat.f_frsize) * 100
-        free_gb = (stat.f_bavail * stat.f_frsize) / (1024**3)
-        checks["disk"] = free_percent > 10
-        checks["disk_free_percent"] = f"{free_percent:.1f}%"
-        checks["disk_free_gb"] = round(free_gb, 2)
+        disk = _check_disk()
+        checks["disk"] = disk["ok"]
+        checks["disk_free_percent"] = disk["free_percent"]
+        checks["disk_free_gb"] = disk["free_gb"]
     except Exception as e:
         checks["disk_error"] = str(e)
-
-    try:
-        mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        if platform.system() != "Darwin":
-            mem = mem / 1024
-    except Exception:
-        mem = 0
 
     return {
         "status": "healthy" if all(checks[k] for k in ["database", "disk"]) else "unhealthy",
@@ -102,7 +98,7 @@ async def detailed_health(db: AsyncSession = Depends(get_db)):
         "system": {
             "platform": platform.platform(),
             "python_version": platform.python_version(),
-            "memory_usage_mb": round(mem, 2),
+            "memory_usage_mb": round(_get_memory_usage(), 2),
         },
         "app": {
             "name": settings.APP_NAME,

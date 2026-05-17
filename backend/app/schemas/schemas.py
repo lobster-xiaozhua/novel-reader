@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
@@ -12,14 +12,13 @@ class UserCreate(UserBase):
 
 
 class UserResponse(UserBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     is_admin: bool
     is_active: bool
     created_at: datetime
     last_login: Optional[datetime]
-
-    class Config:
-        from_attributes = True
 
 
 class TokenResponse(BaseModel):
@@ -40,13 +39,12 @@ class BookCreate(BookBase):
 
 
 class BookResponse(BookBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     total_chapters: int
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class BookListResponse(BaseModel):
@@ -58,26 +56,24 @@ class BookListResponse(BaseModel):
 
 
 class ChapterResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     book_id: int
     chapter_number: int
     title: str
     word_count: int
 
-    class Config:
-        from_attributes = True
-
 
 class ChapterContentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     book_id: int
     chapter_number: int
     title: str
     word_count: int
     content: str
-
-    class Config:
-        from_attributes = True
 
 
 class FavoriteCreate(BaseModel):
@@ -86,6 +82,8 @@ class FavoriteCreate(BaseModel):
 
 
 class FavoriteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     user_id: int
     book_id: int
@@ -93,9 +91,6 @@ class FavoriteResponse(BaseModel):
     notes: Optional[str]
     is_synced: bool
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class FavoriteFolderCreate(BaseModel):
@@ -105,14 +100,13 @@ class FavoriteFolderCreate(BaseModel):
 
 
 class FavoriteFolderResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     description: Optional[str]
     color: Optional[str]
     sort_order: int
-
-    class Config:
-        from_attributes = True
 
 
 class ReadingProgressUpdate(BaseModel):
@@ -122,14 +116,13 @@ class ReadingProgressUpdate(BaseModel):
 
 
 class ReadingProgressResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     book_id: int
     chapter_id: int
     position: int
     updated_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
 
 
 class CrawlerTaskCreate(BaseModel):
@@ -137,6 +130,8 @@ class CrawlerTaskCreate(BaseModel):
 
 
 class CrawlerTaskResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     url: str
     status: str
@@ -144,9 +139,6 @@ class CrawlerTaskResponse(BaseModel):
     downloaded_chapters: int
     created_at: datetime
     updated_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
 
 
 class SearchResult(BaseModel):

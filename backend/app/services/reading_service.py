@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -39,7 +39,7 @@ class ReadingService:
         if progress:
             progress.chapter_id = chapter_id
             progress.position = position
-            progress.updated_at = datetime.utcnow()
+            progress.updated_at = datetime.now(timezone.utc)
         else:
             progress = ReadingProgress(
                 user_id=user_id,

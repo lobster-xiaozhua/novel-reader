@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import get_db_session
 from app.models import User
@@ -64,7 +64,7 @@ async def login(
 
     await auth_service.reset_login_attempts(form_data.username)
 
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(timezone.utc)
     await db.commit()
 
     access_token = create_access_token(data={"sub": str(user.id)})

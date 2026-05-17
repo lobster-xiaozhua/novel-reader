@@ -1,10 +1,8 @@
 import logging
-import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import aiohttp
-from bs4 import BeautifulSoup
 from fastapi import APIRouter, Depends, BackgroundTasks, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,7 +95,7 @@ async def execute_crawl(task_id: int):
                 task.status = "failed"
                 task.error_message = str(e)
 
-            task.updated_at = datetime.utcnow()
+            task.updated_at = datetime.now(timezone.utc)
             await db.commit()
         except Exception as e:
             await db.rollback()
