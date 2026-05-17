@@ -1,6 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from app.database import Base
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
 
 
 class User(Base):
@@ -11,5 +15,5 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     is_admin = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utc_now)
     last_login = Column(DateTime, nullable=True)

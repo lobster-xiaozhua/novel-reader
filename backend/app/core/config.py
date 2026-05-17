@@ -1,13 +1,21 @@
+import secrets
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _DATA_DIR = _PROJECT_ROOT / "data"
 _DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+_DEFAULT_SECRET_KEY = "your-secret-key-here-change-in-production"
+
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+    )
+
     # 应用配置
     APP_NAME: str = "Novel Reader"
     APP_VERSION: str = "1.0.0"
@@ -20,7 +28,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379"
 
     # JWT配置
-    SECRET_KEY: str = "your-secret-key-here-change-in-production"
+    SECRET_KEY: str = _DEFAULT_SECRET_KEY
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
@@ -57,11 +65,19 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = 10  # 连接池溢出
     REDIS_POOL_SIZE: int = 10  # Redis连接池大小
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    @property
+    def is_secret_key_default(self) -> bool:
+        return self.SECRET_KEY == _DEFAULT_SECRET_KEY
 
 
 @lru_cache()
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    if settings.is_secret_key_default:
+        import warnings
+        warnings.warn(
+            "SECRET_KEY 使用默认值，生产环境请务必通过环境变量设置安全的密钥",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    return settings

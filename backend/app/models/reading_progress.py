@@ -1,6 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, DateTime, ForeignKey, UniqueConstraint
 from app.database import Base
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
 
 
 class ReadingProgress(Base):
@@ -11,7 +15,7 @@ class ReadingProgress(Base):
     book_id = Column(Integer, ForeignKey("books.id"), index=True, nullable=False)
     chapter_id = Column(Integer, ForeignKey("chapters.id"), nullable=False)
     position = Column(Integer, default=0)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utc_now, onupdate=_utc_now)
 
     __table_args__ = (
         UniqueConstraint('user_id', 'book_id', name='uix_user_book_progress'),

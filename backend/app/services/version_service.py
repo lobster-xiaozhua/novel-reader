@@ -5,7 +5,8 @@ import shutil
 import hashlib
 import difflib
 import logging
-from pathlib import Path
+import fnmatch
+from pathlib import PurePosixPath, Path
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -155,11 +156,18 @@ class VersionManager:
         files = []
         for item in self.project_root.rglob("*"):
             if item.is_file():
-                relative = str(item.relative_to(self.project_root))
+                relative = str(PurePosixPath(item.relative_to(self.project_root)))
                 should_exclude = False
                 for pattern in exclude_patterns:
-                    if pattern in relative or relative.endswith(pattern):
+                    if fnmatch.fnmatch(relative, pattern) or fnmatch.fnmatch(item.name, pattern):
                         should_exclude = True
+                        break
+                    parts = Path(relative).parts
+                    for part in parts:
+                        if fnmatch.fnmatch(part, pattern):
+                            should_exclude = True
+                            break
+                    if should_exclude:
                         break
                 if not should_exclude:
                     files.append(item)

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db_no_commit
+from app.database import get_db_session
 from app.models import ReadingProgress, Book, Chapter
 from app.schemas.schemas import ReadingProgressUpdate, ReadingProgressResponse
 from app.core.security import get_current_user_id
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/reading-progress", tags=["阅读进度"])
 @router.get("/book/{book_id}", response_model=ReadingProgressResponse)
 async def get_progress(
     book_id: int,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     """获取指定书籍的阅读进度。"""
@@ -39,7 +39,7 @@ async def get_progress(
 async def update_progress(
     book_id: int,
     data: ReadingProgressUpdate,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     """更新指定书籍的阅读进度。"""
@@ -86,7 +86,7 @@ async def update_progress(
 @router.delete("/book/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_progress(
     book_id: int,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     """删除指定书籍的阅读进度。"""

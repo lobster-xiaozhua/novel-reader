@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db_no_commit
+from app.database import get_db_session
 from app.models import Book, Chapter
 from app.schemas.schemas import BookCreate, BookResponse, BookListResponse, ChapterResponse
 from app.core.security import get_current_user_id
@@ -37,7 +37,7 @@ async def list_books(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     author: Optional[str] = None,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
 ):
     query = select(Book)
     count_query = select(func.count(Book.id))
@@ -64,7 +64,7 @@ async def list_books(
 
 
 @router.get("/{book_id}", response_model=BookResponse)
-async def get_book(book_id: int, db: AsyncSession = Depends(get_db_no_commit)):
+async def get_book(book_id: int, db: AsyncSession = Depends(get_db_session)):
     result = await db.execute(select(Book).where(Book.id == book_id))
     book = result.scalar_one_or_none()
     if not book:
@@ -75,7 +75,7 @@ async def get_book(book_id: int, db: AsyncSession = Depends(get_db_no_commit)):
 @router.post("", response_model=BookResponse, status_code=status.HTTP_201_CREATED)
 async def create_book(
     book_data: BookCreate,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     folder_path = _validate_path(Path(book_data.folder_path))
@@ -99,7 +99,7 @@ async def create_book(
 @router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_book(
     book_id: int,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     result = await db.execute(select(Book).where(Book.id == book_id))
@@ -121,7 +121,7 @@ async def delete_book(
 
 
 @router.get("/{book_id}/chapters", response_model=list[ChapterResponse])
-async def list_chapters(book_id: int, db: AsyncSession = Depends(get_db_no_commit)):
+async def list_chapters(book_id: int, db: AsyncSession = Depends(get_db_session)):
     result = await db.execute(
         select(Chapter)
         .where(Chapter.book_id == book_id)

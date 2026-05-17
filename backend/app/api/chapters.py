@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db_no_commit
+from app.database import get_db_session
 from app.models import Book, Chapter
 from app.schemas.schemas import ChapterContentResponse
 from app.core.security import get_current_user_id
@@ -33,7 +33,7 @@ def _validate_path(file_path: Path) -> Path:
 @router.get("/{chapter_id}", response_model=ChapterContentResponse)
 async def get_chapter(
     chapter_id: int,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
 ):
     result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
     chapter = result.scalar_one_or_none()
@@ -66,7 +66,7 @@ async def get_chapter(
 @router.get("/{chapter_id}/file")
 async def get_chapter_file(
     chapter_id: int,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
 ):
     result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
     chapter = result.scalar_one_or_none()

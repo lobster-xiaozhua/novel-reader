@@ -1,6 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from app.database import Base
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
 
 
 class CrawlerTask(Base):
@@ -15,5 +19,5 @@ class CrawlerTask(Base):
     downloaded_chapters = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)
     logs = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utc_now)
+    updated_at = Column(DateTime, default=_utc_now, onupdate=_utc_now)

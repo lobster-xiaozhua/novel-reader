@@ -1,7 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
 
 
 class Chapter(Base):
@@ -13,6 +17,6 @@ class Chapter(Base):
     title = Column(String(200), nullable=False)
     file_path = Column(String(500), nullable=False)
     word_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utc_now)
 
     book = relationship("Book", back_populates="chapters")

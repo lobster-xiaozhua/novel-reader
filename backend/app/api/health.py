@@ -29,8 +29,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(text("SELECT 1"))
         checks["database"] = True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"数据库健康检查失败: {e}")
 
     checks["redis"] = cache_service.available
 
@@ -40,7 +40,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         free_percent = (stat.f_bavail * stat.f_frsize) / (stat.f_blocks * stat.f_frsize) * 100
         checks["disk"] = free_percent > 10
         checks["disk_free_percent"] = f"{free_percent:.1f}%"
-    except Exception:
+    except Exception as e:
+        logger.warning(f"磁盘健康检查失败: {e}")
         checks["disk"] = True
 
     healthy = checks["database"] and checks["disk"]

@@ -1,6 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, UniqueConstraint
 from app.database import Base
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
 
 
 class Favorite(Base):
@@ -12,8 +16,8 @@ class Favorite(Base):
     folder_id = Column(Integer, ForeignKey("favorite_folders.id"), nullable=True)
     notes = Column(String(500), nullable=True)
     is_synced = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utc_now)
+    updated_at = Column(DateTime, default=_utc_now, onupdate=_utc_now)
 
     __table_args__ = (
         UniqueConstraint('user_id', 'book_id', name='uix_user_book'),
@@ -29,4 +33,4 @@ class FavoriteFolder(Base):
     description = Column(String(200), nullable=True)
     color = Column(String(7), nullable=True)
     sort_order = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utc_now)

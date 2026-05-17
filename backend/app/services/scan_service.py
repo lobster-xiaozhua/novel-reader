@@ -3,6 +3,8 @@ import logging
 from pathlib import Path
 from typing import List, Dict
 
+import aiofiles
+
 from app.core.config import get_settings
 from app.database import AsyncSessionLocal
 from app.models import Book, Chapter
@@ -95,13 +97,13 @@ class BookScanner:
 
     async def is_readable(self, path: Path) -> bool:
         try:
-            with open(path, 'r', encoding='utf-8') as f:
-                f.read(1024)
+            async with aiofiles.open(path, 'r', encoding='utf-8') as f:
+                await f.read(1024)
             return True
         except UnicodeDecodeError:
             try:
-                with open(path, 'r', encoding='gbk') as f:
-                    f.read(1024)
+                async with aiofiles.open(path, 'r', encoding='gbk') as f:
+                    await f.read(1024)
                 return True
             except Exception:
                 return False
@@ -140,7 +142,7 @@ class BookScanner:
 
                 book = Book(
                     title=book_name,
-                    author=self._detect_author(book_dir),
+                    author=await self._detect_author(book_dir),
                     folder_path=str(book_dir),
                     description="",
                     total_chapters=len(chapter_files),
@@ -149,8 +151,8 @@ class BookScanner:
                 await db.flush()
 
                 for idx, chapter_file in enumerate(chapter_files, 1):
-                    title = self._extract_chapter_title(chapter_file)
-                    word_count = self._count_words(chapter_file)
+                    title = await self._extract_chapter_title(chapter_file)
+                    word_count = await self._count_words(chapter_file)
                     chapter = Chapter(
                         book_id=book.id,
                         chapter_number=idx,
@@ -186,8 +188,8 @@ class BookScanner:
             if idx in existing_chapters:
                 continue
 
-            title = self._extract_chapter_title(chapter_file)
-            word_count = self._count_words(chapter_file)
+            title = await self._extract_chapter_title(chapter_file)
+            word_count = await self._count_words(chapter_file)
             chapter = Chapter(
                 book_id=book.id,
                 chapter_number=idx,
@@ -201,11 +203,12 @@ class BookScanner:
             book.total_chapters = current_count
             logger.info(f"更新书籍章节数: {book.title}, {current_count} 章")
 
-    def _detect_author(self, book_dir: Path) -> str:
+    async def _detect_author(self, book_dir: Path) -> str:
         info_file = book_dir / "info.txt"
         if info_file.exists():
             try:
-                content = info_file.read_text(encoding="utf-8", errors="replace")
+                async with aiofiles.open(info_file, 'r', encoding="utf-8", errors="replace") as f:
+                    content = await f.read()
                 for line in content.splitlines()[:5]:
                     if "作者" in line:
                         parts = line.split("：", 1)
@@ -218,19 +221,20 @@ class BookScanner:
                 pass
         return ""
 
-    def _extract_chapter_title(self, chapter_file: Path) -> str:
+    async def _extract_chapter_title(self, chapter_file: Path) -> str:
         try:
-            with open(chapter_file, 'r', encoding='utf-8', errors='replace') as f:
-                first_line = f.readline().strip()
+            async with aiofiles.open(chapter_file, 'r', encoding='utf-8', errors='replace') as f:
+                first_line = (await f.readline()).strip()
             if first_line and len(first_line) < 100:
                 return first_line
         except Exception:
             pass
         return chapter_file.stem
 
-    def _count_words(self, chapter_file: Path) -> int:
+    async def _count_words(self, chapter_file: Path) -> int:
         try:
-            content = chapter_file.read_text(encoding="utf-8", errors="replace")
+            async with aiofiles.open(chapter_file, 'r', encoding="utf-8", errors="replace") as f:
+                content = await f.read()
             return len(content)
         except Exception:
             return 0

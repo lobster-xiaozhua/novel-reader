@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db_no_commit
+from app.database import get_db_session
 from app.models import Favorite, FavoriteFolder, User
 from app.schemas.schemas import FavoriteCreate, FavoriteResponse, FavoriteFolderCreate, FavoriteFolderResponse
 from app.core.security import get_current_user_id
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/favorites", tags=["收藏"])
 
 @router.get("/folders", response_model=list[FavoriteFolderResponse])
 async def list_folders(
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     result = await db.execute(
@@ -31,7 +31,7 @@ async def list_folders(
 @router.post("/folders", response_model=FavoriteFolderResponse, status_code=status.HTTP_201_CREATED)
 async def create_folder(
     folder_data: FavoriteFolderCreate,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     folder = FavoriteFolder(
@@ -51,7 +51,7 @@ async def create_folder(
 @router.get("", response_model=list[FavoriteResponse])
 async def list_favorites(
     folder_id: int = Query(None),
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     query = select(Favorite).where(Favorite.user_id == current_user_id)
@@ -67,7 +67,7 @@ async def list_favorites(
 @router.post("", response_model=FavoriteResponse, status_code=status.HTTP_201_CREATED)
 async def create_favorite(
     favorite_data: FavoriteCreate,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     favorite = Favorite(
@@ -86,7 +86,7 @@ async def create_favorite(
 @router.delete("/{favorite_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_favorite(
     favorite_id: int,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     result = await db.execute(

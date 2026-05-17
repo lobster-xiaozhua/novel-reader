@@ -38,7 +38,7 @@ async def get_db() -> AsyncSession:
         yield session
 
 
-async def get_db_no_commit() -> AsyncSession:
+async def get_db_session() -> AsyncSession:
     session = AsyncSessionLocal()
     try:
         yield session

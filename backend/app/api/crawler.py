@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.database import get_db_no_commit
+from app.database import get_db_session
 from app.models import CrawlerTask
 from app.schemas.schemas import CrawlerTaskCreate, CrawlerTaskResponse
 from app.core.security import get_current_user_id
@@ -25,7 +25,7 @@ settings = get_settings()
 @router.get("/tasks", response_model=list[CrawlerTaskResponse])
 async def list_tasks(
     status_filter: Optional[str] = None,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     query = select(CrawlerTask).where(CrawlerTask.user_id == current_user_id).order_by(CrawlerTask.created_at.desc())
@@ -40,7 +40,7 @@ async def list_tasks(
 @router.get("/tasks/{task_id}", response_model=CrawlerTaskResponse)
 async def get_task(
     task_id: int,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     result = await db.execute(
@@ -56,7 +56,7 @@ async def get_task(
 async def create_task(
     task_data: CrawlerTaskCreate,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db_no_commit),
+    db: AsyncSession = Depends(get_db_session),
     current_user_id: int = Depends(get_current_user_id),
 ):
     task = CrawlerTask(
