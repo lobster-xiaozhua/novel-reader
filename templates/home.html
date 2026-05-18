@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}首页 - 小说阅读器{% endblock %}
+
+{% block content %}
+<h1 class="page-title">🏠 首页</h1>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon">📚</div>
+        <div class="stat-value">{{ stats.book_count }}</div>
+        <div class="stat-label">书籍总数</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">📖</div>
+        <div class="stat-value">{{ stats.reading_count }}</div>
+        <div class="stat-label">阅读中</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">⭐</div>
+        <div class="stat-value">{{ stats.favorite_count }}</div>
+        <div class="stat-label">收藏数</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <div class="stat-value">{{ stats.completed_count }}</div>
+        <div class="stat-label">已读完</div>
+    </div>
+</div>
+
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">最近阅读</h2>
+        <a href="{% url 'book_list' %}" class="section-link">查看全部 →</a>
+    </div>
+    {% if recent_books %}
+        <div class="books-grid">
+            {% for book in recent_books %}
+                <div class="book-card" onclick="location.href='{% url 'book_detail' book.id %}'">
+                    <div class="book-card-title">{{ book.title }}</div>
+                    {% if book.author %}
+                        <div class="book-card-author">作者：{{ book.author }}</div>
+                    {% endif %}
+                    {% if book.description %}
+                        <div class="book-card-desc">{{ book.description }}</div>
+                    {% endif %}
+                    <div class="book-card-meta">{{ book.total_chapters }} 章</div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📚</div>
+            <div class="empty-text">还没有阅读记录，去书架看看吧</div>
+        </div>
+    {% endif %}
+</section>
+
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">快速操作</h2>
+    </div>
+    <div class="quick-actions">
+        <a href="{% url 'search' %}" class="action-card">
+            <span class="action-icon">🔍</span>
+            <span class="action-text">搜索小说</span>
+        </a>
+        <a href="{% url 'crawler_tasks' %}" class="action-card">
+            <span class="action-icon">🕷️</span>
+            <span class="action-text">爬取小说</span>
+        </a>
+        <a href="{% url 'book_list' %}" class="action-card">
+            <span class="action-icon">📚</span>
+            <span class="action-text">浏览书架</span>
+        </a>
+    </div>
+</section>
+{% endblock %}

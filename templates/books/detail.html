@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ book.title }} - 小说阅读器{% endblock %}
+
+{% block content %}
+<div class="book-header">
+    <div class="book-cover-large">📖</div>
+    <div class="book-meta-info">
+        <h1 class="book-title">{{ book.title }}</h1>
+        {% if book.author %}
+            <p class="book-author">作者：{{ book.author }}</p>
+        {% endif %}
+        {% if book.description %}
+            <p class="book-desc">{{ book.description }}</p>
+        {% endif %}
+        <div class="book-stats">
+            <span>{{ book.total_chapters }} 章</span>
+        </div>
+        <div class="book-actions">
+            {% if chapters %}
+                <a href="{% url 'chapter_read' book.id chapters.0.id %}" class="btn btn-primary">开始阅读</a>
+            {% endif %}
+            <form method="post" action="{% url 'favorite_toggle' %}" style="display:inline;">
+                {% csrf_token %}
+                <input type="hidden" name="book_id" value="{{ book.id }}">
+                <button type="submit" class="btn btn-secondary">☆ 收藏</button>
+            </form>
+            <form method="post" action="{% url 'book_delete' book.id %}" style="display:inline;" onsubmit="return confirm('确定要删除这本书吗？')">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">删除</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<section class="chapters-section">
+    <h2 class="section-title">章节目录</h2>
+    {% if chapters %}
+        <div class="chapters-list">
+            {% for chapter in chapters %}
+                <a href="{% url 'chapter_read' book.id chapter.id %}" class="chapter-item">
+                    <span class="chapter-number">第{{ chapter.chapter_number }}章</span>
+                    <span class="chapter-title">{{ chapter.title }}</span>
+                    {% if chapter.word_count %}
+                        <span class="chapter-words">{{ chapter.word_count }}字</span>
+                    {% endif %}
+                </a>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📄</div>
+            <div class="empty-text">暂无章节</div>
+        </div>
+    {% endif %}
+</section>
+{% endblock %}

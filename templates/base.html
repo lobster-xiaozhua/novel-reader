@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}小说阅读器{% endblock %}</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <a href="{% url 'home' %}">📖 小说阅读器</a>
+        </div>
+        <div class="nav-links">
+            <a href="{% url 'home' %}" class="{% if request.path == '/' %}active{% endif %}">首页</a>
+            <a href="{% url 'book_list' %}" class="{% if '/books/' in request.path %}active{% endif %}">书架</a>
+            <a href="{% url 'favorite_list' %}" class="{% if '/favorites/' in request.path %}active{% endif %}">收藏</a>
+            <a href="{% url 'search' %}" class="{% if '/search/' in request.path %}active{% endif %}">搜索</a>
+            <a href="{% url 'crawler_tasks' %}" class="{% if '/crawler/' in request.path %}active{% endif %}">爬虫</a>
+        </div>
+        <div class="nav-user">
+            {% if user.is_authenticated %}
+                <span class="username">{{ user.username }}</span>
+                <a href="{% url 'logout' %}" class="btn btn-secondary btn-sm">退出</a>
+            {% else %}
+                <a href="{% url 'login' %}" class="btn btn-primary btn-sm">登录</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% if messages %}
+            <div class="messages">
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{% static 'js/app.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
