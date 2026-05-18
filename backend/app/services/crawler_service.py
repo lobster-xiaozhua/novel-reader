@@ -277,14 +277,24 @@ def validate_crawl_url(url: str) -> bool:
         return False
 
     try:
+        hostname_lower = hostname.lower()
+        if hostname_lower.startswith("localhost") or hostname_lower.endswith(".local"):
+            return False
+
         resolved_ips = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
         for family, _, _, _, sockaddr in resolved_ips:
             ip = sockaddr[0]
-            if ipaddress.ip_address(ip).is_private:
+            try:
+                ip_obj = ipaddress.ip_address(ip)
+                if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
+                    return False
+            except ValueError:
                 return False
             if ip in SSRF_BLOCKED_HOSTS:
                 return False
     except socket.gaierror:
+        return False
+    except Exception:
         return False
 
     return True

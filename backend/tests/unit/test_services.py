@@ -1,11 +1,16 @@
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, mock_open
 from pathlib import Path
+import json
+import time
 
 from app.services.cache_service import CacheService, cache_service
 from app.services.reading_service import ReadingService
 from app.services.search_service import SearchService
+from app.services.crawler_service import validate_crawl_url
+from app.services.auth_service import AuthService, _BLACKLIST_FILE
+from app.core.security import create_access_token
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -126,3 +131,66 @@ class TestSearchService:
             with patch.object(search_service, 'get_suggestions', return_value=["Test Book"]):
                 result = await search_service.get_suggestions("test")
         assert isinstance(result, list)
+
+
+class TestCrawlerSSRFProtection:
+    def test_validate_crawl_url_block_localhost(self):
+        assert validate_crawl_url("http://localhost:8080/test") is False
+        assert validate_crawl_url("http://localhost.localdomain/test") is False
+        assert validate_crawl_url("http://localhost6.local/test") is False
+
+    def test_validate_crawl_url_block_private_ips(self):
+        assert validate_crawl_url("http://192.168.1.1/test") is False
+        assert validate_crawl_url("http://10.0.0.1/test") is False
+        assert validate_crawl_url("http://172.16.0.1/test") is False
+        assert validate_crawl_url("http://127.0.0.1/test") is False
+        assert validate_crawl_url("http://::1/test") is False
+
+    def test_validate_crawl_url_block_link_local(self):
+        assert validate_crawl_url("http://169.254.169.254/test") is False
+        assert validate_crawl_url("http://fe80::1/test") is False
+
+    def test_validate_crawl_url_allow_valid_public(self):
+        assert validate_crawl_url("http://example.com/test") is True
+        assert validate_crawl_url("https://google.com/search") is True
+
+
+class TestAuthServiceBlacklist:
+    @pytest_asyncio.fixture
+    async def auth_service_no_cache(self):
+        with patch.object(cache_service, '_client', None):
+            service = AuthService()
+            service._token_blacklist = set()
+            return service
+
+    @pytest.mark.asyncio
+    async def test_blacklist_persistence(self, auth_service_no_cache):
+        test_token = create_access_token(data={"sub": "1"})
+        
+        await auth_service_no_cache.blacklist_token(test_token)
+        
+        assert test_token in auth_service_no_cache._token_blacklist
+        
+        assert _BLACKLIST_FILE.exists()
+        with open(_BLACKLIST_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            assert test_token in data.get("tokens", [])
+
+    @pytest.mark.asyncio
+    async def test_blacklist_reload(self, auth_service_no_cache):
+        test_token = create_access_token(data={"sub": "1"})
+        await auth_service_no_cache.blacklist_token(test_token)
+        
+        new_service = AuthService()
+        assert test_token in new_service._token_blacklist
+
+    @pytest.mark.asyncio
+    async def test_is_token_blacklisted(self, auth_service_no_cache):
+        test_token = create_access_token(data={"sub": "1"})
+        await auth_service_no_cache.blacklist_token(test_token)
+        
+        result = await auth_service_no_cache.is_token_blacklisted(test_token)
+        assert result is True
+        
+        result = await auth_service_no_cache.is_token_blacklisted(create_access_token(data={"sub": "2"}))
+        assert result is False

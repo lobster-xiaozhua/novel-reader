@@ -145,15 +145,25 @@ create_backup() {
     local timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="$backup_dir/pre_update_$timestamp.tar.gz"
 
-    tar -czf "$backup_file" \
+    if tar -czf "$backup_file" \
         -C data \
         books db.json settings.json \
         --exclude='books/cache' \
         --exclude='books/tmp' \
-        --exclude='*.pyc' \
-        2>/dev/null || true
-
-    log_success "备份已保存: $backup_file"
+        --exclude='*.pyc' 2>/dev/null; then
+        log_success "备份已保存: $backup_file"
+    else
+        log_error "备份创建失败!"
+        if [ "$AUTO_CONFIRM" = false ]; then
+            read -p "备份失败，是否继续更新? (y/N): " confirm
+            if [[ ! $confirm =~ ^[Yy]$ ]]; then
+                log_info "已取消更新"
+                exit 1
+            fi
+        else
+            log_warning "备份失败，继续更新..."
+        fi
+    fi
 }
 
 do_update() {

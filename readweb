@@ -643,18 +643,19 @@ cmd_backup() {
     local timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="$backup_dir/backup_$timestamp.tar.gz"
 
-    tar -czf "$backup_file" \
+    if tar -czf "$backup_file" \
         -C data \
         books db.json settings.json \
         --exclude='books/cache' \
-        --exclude='books/tmp' \
-        2>/dev/null || true
-
-    log_success "备份已保存: $backup_file"
-
-    cd "$backup_dir"
-    ls -t backup_*.tar.gz 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
-    cd - > /dev/null
+        --exclude='books/tmp' 2>/dev/null; then
+        log_success "备份已保存: $backup_file"
+        
+        cd "$backup_dir"
+        ls -t backup_*.tar.gz 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
+        cd - > /dev/null
+    else
+        log_error "备份失败!"
+    fi
 }
 
 cmd_restore() {

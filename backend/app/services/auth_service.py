@@ -1,5 +1,7 @@
 import asyncio
+import json
 import time
+from pathlib import Path
 from typing import Dict, Set
 
 from redis import RedisError
@@ -20,6 +22,8 @@ from app.core.security import (
 
 settings = get_settings()
 
+_BLACKLIST_FILE = Path(settings.DATA_DIR) / "token_blacklist.json"
+
 
 class AuthService:
     def __init__(self):
@@ -27,6 +31,24 @@ class AuthService:
         self._local_until: Dict[str, float] = {}
         self._token_blacklist: Set[str] = set()
         self._local_lock = asyncio.Lock()
+        self._load_blacklist()
+
+    def _load_blacklist(self):
+        if _BLACKLIST_FILE.exists():
+            try:
+                with open(_BLACKLIST_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self._token_blacklist = set(data.get("tokens", []))
+            except Exception:
+                self._token_blacklist = set()
+
+    def _save_blacklist(self):
+        try:
+            _BLACKLIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(_BLACKLIST_FILE, "w", encoding="utf-8") as f:
+                json.dump({"tokens": list(self._token_blacklist)}, f)
+        except Exception:
+            pass
 
     async def register_user(self, username: str, password: str, email: str = None) -> User:
         async with AsyncSessionLocal() as db:
@@ -91,8 +113,10 @@ class AuthService:
                 await cache_service.set(f"blacklist:{token}", "1", expire=ttl)
             else:
                 self._token_blacklist.add(token)
+                self._save_blacklist()
         except RedisError:
             self._token_blacklist.add(token)
+            self._save_blacklist()
 
     async def is_token_blacklisted(self, token: str) -> bool:
         if not token:
