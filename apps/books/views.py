@@ -68,7 +68,8 @@ def book_add(request):
     else:
         form = BookForm()
 
-    return render(request, 'books/list.html', {'form': form})
+    paginator = Paginator(Book.objects.all().order_by('-created_at'), 12)
+    return render(request, 'books/list.html', {'form': form, 'page_obj': paginator.get_page(1)})
 
 
 @login_required

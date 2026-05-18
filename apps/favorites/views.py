@@ -27,4 +27,10 @@ def favorite_toggle(request):
         messages.success(request, f'已收藏《{book.title}》')
 
     next_url = request.POST.get('next', 'book_list')
-    return redirect(next_url)
+    if next_url.startswith('/'):
+        from django.http import HttpResponseRedirect
+        return HttpResponseRedirect(next_url)
+    try:
+        return redirect(next_url)
+    except Exception:
+        return redirect('book_detail', pk=book_id)

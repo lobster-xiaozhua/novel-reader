@@ -12,7 +12,22 @@ from .models import Chapter
 def chapter_read(request, book_id, chapter_id):
     book = get_object_or_404(Book, pk=book_id)
     chapter = get_object_or_404(Chapter, pk=chapter_id, book=book)
-    chapters = list(book.chapters.all().values('id', 'chapter_number', 'title'))
+
+    all_chapters = list(book.chapters.all().values('id', 'chapter_number', 'title'))
+
+    # Find prev/next chapters
+    prev_chapter = None
+    next_chapter = None
+    for i, ch in enumerate(all_chapters):
+        if ch['id'] == chapter_id:
+            if i > 0:
+                prev_chapter = all_chapters[i - 1]
+            if i < len(all_chapters) - 1:
+                next_chapter = all_chapters[i + 1]
+            break
+
+    # Get reading progress
+    progress = ReadingProgress.objects.filter(user=request.user, book=book).first()
 
     # Get content
     content = ''
@@ -20,33 +35,19 @@ def chapter_read(request, book_id, chapter_id):
         try:
             with open(chapter.file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-        except:
+        except Exception:
             try:
                 with open(chapter.file_path, 'r', encoding='gbk') as f:
                     content = f.read()
-            except:
+            except Exception:
                 content = '章节内容读取失败'
     else:
         content = '章节文件不存在'
 
-    # Get reading progress
-    progress = ReadingProgress.objects.filter(user=request.user, book=book).first()
-
-    # Find prev/next chapters
-    prev_chapter = None
-    next_chapter = None
-    for i, ch in enumerate(chapters):
-        if ch['id'] == chapter.id:
-            if i > 0:
-                prev_chapter = chapters[i - 1]
-            if i < len(chapters) - 1:
-                next_chapter = chapters[i + 1]
-            break
-
     context = {
         'book': book,
         'chapter': chapter,
-        'chapters': chapters,
+        'chapters': all_chapters,
         'content': content,
         'progress': progress,
         'prev_chapter': prev_chapter,

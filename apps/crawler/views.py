@@ -43,7 +43,7 @@ def task_detail(request, pk):
     if task.logs:
         try:
             logs = json.loads(task.logs)
-        except:
+        except Exception:
             pass
     return JsonResponse({
         'id': task.id,
