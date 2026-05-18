@@ -1,92 +1,104 @@
-# Novel Reader
+# Novel Reader - Django 小说阅读器
 
-一个跨平台的小说阅读器应用，使用 FastAPI 后端和 Vue 3 前端。
+基于 Django 的本地小说阅读平台，支持书籍管理、章节阅读、爬虫抓取、收藏和搜索功能。
 
 ## 功能特性
 
-- FastAPI 异步后端
-- Vue 3 现代化 UI
-- 多平台部署支持（Windows、Linux、Android Termux）
-- Docker 部署支持
-- 完整的测试覆盖
-- 自适应代码更新系统 - 通过自然语言指令更新项目代码
-- 国内镜像源支持
+- 用户注册/登录/退出
+- 书籍管理（添加、查看、删除）
+- 章节阅读（字体调节、进度保存）
+- 收藏功能
+- 全文搜索
+- 网页爬虫（自动抓取小说章节）
+- 深色主题 + 响应式布局
+
+## 技术栈
+
+- **后端**: Django 4.2 + SQLite
+- **前端**: Django Templates + 原生 JavaScript + CSS3
+- **爬虫**: requests + BeautifulSoup4
 
 ## 快速开始
 
-### 使用 Docker 部署（推荐）
+### Linux/macOS
 
 ```bash
-docker-compose up
+./start.sh start
 ```
 
-### 一键部署脚本
+### Windows (CMD)
 
-此项目提供统一跨平台部署支持：
-
-#### 统一部署入口（自动检测平台）：
-```bash
-./deploy.sh
+```cmd
+start.bat start
 ```
 
-#### 各平台专用脚本：
+### Windows (PowerShell)
 
-- **Linux (Debian/Ubuntu/CentOS/Arch)**
-```bash
-./deploy_linux.sh
-```
-
-- **Android Termux**
-```bash
-./deploy_termux.sh
-```
-
-- **Windows**
 ```powershell
-# 使用 PowerShell
-.\start.ps1
+.\start.ps1 start
 ```
 
-### 传统一键启动脚本：
+启动后访问 http://localhost:8000
+
+默认账号: `admin / admin123`
+
+## 启动脚本命令
+
+所有启动脚本支持以下命令：
+
+| 命令 | 说明 |
+|------|------|
+| `start` | 启动服务（默认） |
+| `stop` | 停止服务 |
+| `restart` | 重启服务 |
+| `status` | 查看服务状态 |
+| `migrate` | 执行数据库迁移 |
+| `createsuperuser` | 创建超级用户 |
+| `shell` | 进入 Django shell |
+| `help` | 显示帮助 |
+
+## 项目结构
+
+```
+novel_reader/
+├── manage.py              # Django 管理命令
+├── novel_reader/          # 项目配置
+│   ├── settings.py
+│   ├── urls.py
+│   └── wsgi.py
+├── apps/                  # 应用模块
+│   ├── accounts/          # 用户认证
+│   ├── books/             # 书籍管理
+│   ├── chapters/          # 章节管理
+│   ├── reader/            # 阅读进度
+│   ├── favorites/         # 收藏功能
+│   ├── crawler/           # 爬虫任务
+│   └── search/            # 全文搜索
+├── templates/             # HTML 模板
+├── static/                # CSS/JS 静态文件
+├── utils/                 # 工具模块
+│   └── crawler_engine.py  # 爬虫引擎
+└── data/                  # 数据目录
+    ├── db.sqlite3         # SQLite 数据库
+    └── books/             # 书籍文件
+```
+
+## 手动运行
 
 ```bash
-# Linux / macOS / WSL
-./start.sh
+# 安装依赖
+pip install -r requirements.txt
 
-# Windows PowerShell
-.\start.ps1
+# 数据库迁移
+python manage.py migrate
+
+# 创建超级用户
+python manage.py createsuperuser
+
+# 启动服务
+python manage.py runserver
 ```
 
-## 跨平台兼容性
+## 许可证
 
-为了确保在所有平台上无障碍部署，我们做了以下优化：
-
-- **依赖降级**：移除了需要编译的依赖（cryptography、bcrypt、python-magic）
-- **纯 Python 加密**：使用 `hashlib.pbkdf2_hmac` 替代 bcrypt 进行密码加密
-- **轻量级依赖**：使用纯 Python 实现的功能替代方案
-- **镜像源支持**：自动检测地区并配置国内镜像（阿里云、npmmirror）
-
-## 支持的部署方式
-
-1. Docker Compose（推荐，适用于所有支持 Docker 的平台）
-2. 本地部署（适用于 Linux/macOS/WSL2）
-3. Android Termux（移动设备部署）
-4. Windows 本地或 WSL2
-
-## 全局命令
-
-配置全局命令后，可以在任意位置使用：
-
-```bash
-readweb start    # 启动项目
-readweb stop     # 停止服务
-readweb status   # 查看状态
-readweb update  # 更新项目
-```
-
-## 文档
-
-- [用户指南](docs/USER_GUIDE.md)
-- [部署指南](docs/DEPLOYMENT.md)
-
-
+MIT
