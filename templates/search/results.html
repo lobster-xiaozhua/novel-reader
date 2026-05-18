@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block title %}搜索 - 小说阅读器{% endblock %}
+
+{% block content %}
+<h1 class="page-title">🔍 搜索</h1>
+
+<div class="search-box">
+    <form method="get" action="{% url 'search' %}" style="display:flex;gap:12px;width:100%;">
+        <input type="text" name="q" class="input search-input" placeholder="搜索小说标题、作者..." value="{{ query }}" autocomplete="off">
+        <button type="submit" class="btn btn-primary">搜索</button>
+    </form>
+</div>
+
+{% if query %}
+    {% if results %}
+        <p class="results-count">找到 {{ results|length }} 个结果</p>
+        <div class="books-grid">
+            {% for book in results %}
+                <div class="book-card" onclick="location.href='{% url 'book_detail' book.id %}'">
+                    <div class="book-card-title">{{ book.title }}</div>
+                    {% if book.author %}
+                        <div class="book-card-author">作者：{{ book.author }}</div>
+                    {% endif %}
+                    {% if book.description %}
+                        <div class="book-card-desc">{{ book.description }}</div>
+                    {% endif %}
+                    <div class="book-card-meta">{{ book.total_chapters }} 章</div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <div class="empty-text">没有找到相关书籍</div>
+        </div>
+    {% endif %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}我的收藏 - 小说阅读器{% endblock %}
+
+{% block content %}
+<h1 class="page-title">⭐ 我的收藏</h1>
+
+{% if favorites %}
+    <div class="books-grid">
+        {% for fav in favorites %}
+            <div class="book-card" onclick="location.href='{% url 'book_detail' fav.book.id %}'">
+                <div class="book-card-title">{{ fav.book.title }}</div>
+                {% if fav.book.author %}
+                    <div class="book-card-author">作者：{{ fav.book.author }}</div>
+                {% endif %}
+                {% if fav.notes %}
+                    <div class="book-card-desc">{{ fav.notes }}</div>
+                {% endif %}
+                <div class="book-card-meta">{{ fav.book.total_chapters }} 章</div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state">
+        <div class="empty-icon">⭐</div>
+        <div class="empty-text">还没有收藏任何书籍</div>
+    </div>
+{% endif %}
+{% endblock %}

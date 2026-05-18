@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}注册 - 小说阅读器{% endblock %}
+
+{% block content %}
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-header">
+            <span class="login-icon">📖</span>
+            <h1 class="login-title">小说阅读器</h1>
+            <p class="login-subtitle">创建新账号</p>
+        </div>
+
+        <form method="post" class="login-form">
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="form-label">用户名</label>
+                {{ form.username }}
+            </div>
+            <div class="form-group">
+                <label class="form-label">邮箱（可选）</label>
+                {{ form.email }}
+            </div>
+            <div class="form-group">
+                <label class="form-label">密码</label>
+                {{ form.password1 }}
+            </div>
+            <div class="form-group">
+                <label class="form-label">确认密码</label>
+                {{ form.password2 }}
+            </div>
+            {% if form.errors %}
+                <div class="error-msg">
+                    {% for field, errors in form.errors.items %}
+                        {{ errors.0 }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+            <button type="submit" class="btn btn-primary btn-full">注册</button>
+        </form>
+
+        <div class="login-footer">
+            已有账号？
+            <a href="{% url 'login' %}">立即登录</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

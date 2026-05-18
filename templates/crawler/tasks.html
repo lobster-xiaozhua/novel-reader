@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}爬虫管理 - 小说阅读器{% endblock %}
+
+{% block content %}
+<h1 class="page-title">🕷️ 爬虫管理</h1>
+
+<div class="crawler-input">
+    <form method="post" action="{% url 'create_task' %}" style="display:flex;gap:12px;width:100%;">
+        {% csrf_token %}
+        <input type="url" name="url" class="input" placeholder="输入小说页面URL..." required>
+        <button type="submit" class="btn btn-primary">开始爬取</button>
+    </form>
+</div>
+
+<section class="tasks-section">
+    <h2 class="section-title">任务列表</h2>
+
+    {% if tasks %}
+        <div class="tasks-list" id="tasksList">
+            {% for task in tasks %}
+                <div class="task-card" data-task-id="{{ task.id }}">
+                    <div class="task-info">
+                        <div class="task-url">{{ task.url }}</div>
+                        <div class="task-meta">
+                            <span class="task-status status-{{ task.status }}">{{ task.get_status_display }}</span>
+                            <span class="task-time">{{ task.created_at|date:"Y-m-d H:i" }}</span>
+                        </div>
+                        {% if task.error_message %}
+                            <div class="task-detail">{{ task.error_message }}</div>
+                        {% endif %}
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="refreshTask({{ task.id }})">刷新</button>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">🕷️</div>
+            <div class="empty-text">暂无爬虫任务</div>
+        </div>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/crawler.js' %}"></script>
+{% endblock %}

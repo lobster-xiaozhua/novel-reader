@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ chapter.title }} - {{ book.title }}{% endblock %}
+
+{% block content %}
+<div class="reader-view">
+    <div class="reader-toolbar">
+        <a href="{% url 'book_detail' book.id %}" class="toolbar-btn">← 返回</a>
+        <span class="toolbar-title">{{ chapter.title }}</span>
+        <div class="toolbar-right">
+            <button class="toolbar-btn" onclick="decreaseFontSize()">A-</button>
+            <span class="font-size-display" id="fontSizeDisplay">18</span>
+            <button class="toolbar-btn" onclick="increaseFontSize()">A+</button>
+        </div>
+    </div>
+
+    <div class="reader-content" id="readerContent" style="font-size: 18px;">
+        <h1 class="chapter-title">{{ chapter.title }}</h1>
+        <div class="chapter-body">
+            {% for paragraph in content|splitlines %}
+                {% if paragraph.strip %}
+                    <p>{{ paragraph }}</p>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="reader-nav">
+        {% if prev_chapter %}
+            <a href="{% url 'chapter_read' book.id prev_chapter.id %}" class="nav-btn">← 上一章</a>
+        {% else %}
+            <button class="nav-btn" disabled>← 上一章</button>
+        {% endif %}
+        <span class="nav-info">第{{ chapter.chapter_number }}章</span>
+        {% if next_chapter %}
+            <a href="{% url 'chapter_read' book.id next_chapter.id %}" class="nav-btn">下一章 →</a>
+        {% else %}
+            <button class="nav-btn" disabled>下一章 →</button>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/reader.js' %}"></script>
+<script>
+    window.bookId = {{ book.id }};
+    window.chapterId = {{ chapter.id }};
+    window.chapters = {{ chapters|safe }};
+</script>
+{% endblock %}
