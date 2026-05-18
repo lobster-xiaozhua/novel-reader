@@ -21,6 +21,13 @@
                 <label class="form-label">密码</label>
                 {{ form.password }}
             </div>
+            {% if form.errors %}
+                <div class="error-msg">
+                    {% for field, errors in form.errors.items %}
+                        {{ errors.0 }}
+                    {% endfor %}
+                </div>
+            {% endif %}
             <button type="submit" class="btn btn-primary btn-full">登录</button>
         </form>
 

@@ -1,4 +1,5 @@
 import os
+import logging
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -6,6 +7,8 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from .models import Book
 from .forms import BookForm
+
+logger = logging.getLogger(__name__)
 
 
 @login_required
@@ -66,17 +69,19 @@ def book_add(request):
             book = form.save(commit=False)
             safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in book.title)
             book.folder_path = os.path.join('data/books', safe_name.strip())
-            os.makedirs(book.folder_path, exist_ok=True)
+            try:
+                os.makedirs(book.folder_path, exist_ok=True)
+            except OSError as e:
+                logger.error(f'创建书籍目录失败: {e}')
+                messages.error(request, '创建书籍目录失败，请检查书名')
+                return redirect('book_list')
             book.save()
             messages.success(request, f'书籍《{book.title}》已添加')
             return redirect('book_list')
         else:
             messages.error(request, '请填写正确的书名')
-    else:
-        form = BookForm()
-
-    paginator = Paginator(Book.objects.all().order_by('-created_at'), 12)
-    return render(request, 'books/list.html', {'form': form, 'page_obj': paginator.get_page(1)})
+            return redirect('book_list')
+    return redirect('book_list')
 
 
 @login_required

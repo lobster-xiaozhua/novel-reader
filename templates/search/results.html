@@ -13,10 +13,10 @@
 </div>
 
 {% if query %}
-    {% if results %}
-        <p class="results-count">找到 {{ results|length }} 个结果</p>
+    {% if page_obj %}
+        <p class="results-count">找到 {{ page_obj.paginator.count }} 个结果</p>
         <div class="books-grid">
-            {% for book in results %}
+            {% for book in page_obj %}
                 <div class="book-card" onclick="location.href='{% url 'book_detail' book.id %}'">
                     <div class="book-card-title">{{ book.title }}</div>
                     {% if book.author %}
@@ -29,6 +29,22 @@
                 </div>
             {% endfor %}
         </div>
+
+        {% if page_obj.has_other_pages %}
+            <div class="pagination">
+                {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}&q={{ query }}" class="btn btn-secondary btn-sm">上一页</a>
+                {% else %}
+                    <button class="btn btn-secondary btn-sm" disabled>上一页</button>
+                {% endif %}
+                <span class="page-info">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}&q={{ query }}" class="btn btn-secondary btn-sm">下一页</a>
+                {% else %}
+                    <button class="btn btn-secondary btn-sm" disabled>下一页</button>
+                {% endif %}
+            </div>
+        {% endif %}
     {% else %}
         <div class="empty-state">
             <div class="empty-icon">🔍</div>

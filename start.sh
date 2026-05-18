@@ -92,8 +92,11 @@ create_superuser() {
     python manage.py shell -c "
 from django.contrib.auth.models import User
 if not User.objects.filter(username='admin').exists():
-    User.objects.create_superuser('admin', 'admin@example.com', 'admin123')
-    print('Superuser created: admin / admin123')
+    import secrets, string
+    pwd = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))
+    User.objects.create_superuser('admin', 'admin@example.com', pwd)
+    print(f'Superuser created: admin / {pwd}')
+    print('请妥善保存此密码！')
 else:
     print('Superuser admin already exists')
 " 2>/dev/null || true

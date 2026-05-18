@@ -17,25 +17,3 @@ class Book(models.Model):
 
     def __str__(self):
         return self.title
-
-
-class Tag(models.Model):
-    name = models.CharField(max_length=50, unique=True, verbose_name='标签名')
-    color = models.CharField(max_length=7, blank=True, verbose_name='颜色')
-
-    class Meta:
-        verbose_name = '标签'
-        verbose_name_plural = '标签'
-
-    def __str__(self):
-        return self.name
-
-
-class BookTag(models.Model):
-    book = models.ForeignKey(Book, on_delete=models.CASCADE, verbose_name='书籍')
-    tag = models.ForeignKey(Tag, on_delete=models.CASCADE, verbose_name='标签')
-
-    class Meta:
-        unique_together = ['book', 'tag']
-        verbose_name = '书籍标签'
-        verbose_name_plural = '书籍标签'

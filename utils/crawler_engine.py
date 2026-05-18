@@ -159,14 +159,15 @@ class CrawlerEngine:
     def run(self, task):
         import os
         import sys
+        import django
         from pathlib import Path
 
         project_root = Path(__file__).resolve().parent.parent
         if str(project_root) not in sys.path:
             sys.path.insert(0, str(project_root))
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'novel_reader.settings')
-        import django
-        django.setup()
+        if not django.conf.settings.configured:
+            django.setup()
 
         from apps.books.models import Book
         from apps.chapters.models import Chapter

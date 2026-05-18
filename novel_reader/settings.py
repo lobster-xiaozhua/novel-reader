@@ -3,11 +3,17 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dev-key-change-in-production')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dev-key-change-in-production-!@#$%^&*()')
 
 DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'False').lower() == 'true'
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0'))
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -116,3 +122,6 @@ LOGOUT_REDIRECT_URL = '/accounts/login/'
 BOOKS_DIR = BASE_DIR / 'data' / 'books'
 LOGS_DIR = BASE_DIR / 'data' / 'logs'
 CACHE_DIR = BASE_DIR / 'data' / 'cache'
+
+for _d in [BOOKS_DIR, LOGS_DIR, CACHE_DIR]:
+    _d.mkdir(parents=True, exist_ok=True)

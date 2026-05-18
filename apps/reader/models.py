@@ -7,7 +7,7 @@ from apps.chapters.models import Chapter
 class ReadingProgress(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='用户')
     book = models.ForeignKey(Book, on_delete=models.CASCADE, verbose_name='书籍')
-    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, verbose_name='章节')
+    chapter = models.ForeignKey(Chapter, on_delete=models.SET_NULL, null=True, verbose_name='章节')
     position = models.PositiveIntegerField(default=0, verbose_name='阅读位置')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 

@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 from .forms import LoginForm, RegisterForm
 
 
@@ -49,6 +50,7 @@ def register_view(request):
 
 
 @login_required
+@require_POST
 def logout_view(request):
     logout(request)
     messages.success(request, '已退出登录')
