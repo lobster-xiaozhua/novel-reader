@@ -10,14 +10,19 @@ from .forms import BookForm
 
 @login_required
 def home(request):
+    from apps.reader.models import ReadingProgress
+    from apps.favorites.models import Favorite
+
     recent_books = Book.objects.all()[:6]
     book_count = Book.objects.count()
+    reading_count = ReadingProgress.objects.filter(user=request.user).count()
+    favorite_count = Favorite.objects.filter(user=request.user).count()
     context = {
         'recent_books': recent_books,
         'stats': {
             'book_count': book_count,
-            'reading_count': 0,
-            'favorite_count': 0,
+            'reading_count': reading_count,
+            'favorite_count': favorite_count,
             'completed_count': 0,
         }
     }
@@ -65,6 +70,8 @@ def book_add(request):
             book.save()
             messages.success(request, f'书籍《{book.title}》已添加')
             return redirect('book_list')
+        else:
+            messages.error(request, '请填写正确的书名')
     else:
         form = BookForm()
 

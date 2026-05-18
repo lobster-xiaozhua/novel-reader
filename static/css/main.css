@@ -743,7 +743,7 @@ textarea.input {
     color: var(--text-primary);
 }
 
-.chapter-title {
+.reader-chapter-title {
     font-family: 'Noto Serif SC', 'Source Han Serif SC', 'STSong', Georgia, serif;
     font-size: 1.6em;
     font-weight: 700;

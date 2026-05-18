@@ -26,10 +26,8 @@ def create_task(request):
 
     task = CrawlerTask.objects.create(user=request.user, url=url)
 
-    # Start crawler in background thread
-    engine = CrawlerEngine(task.id, settings.BOOKS_DIR)
-    thread = threading.Thread(target=engine.run, args=(task,))
-    thread.daemon = True
+    engine = CrawlerEngine(task.id, str(settings.BOOKS_DIR))
+    thread = threading.Thread(target=engine.run, args=(task,), daemon=True)
     thread.start()
 
     messages.success(request, '爬虫任务已创建')

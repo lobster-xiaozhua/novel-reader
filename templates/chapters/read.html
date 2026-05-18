@@ -1,6 +1,5 @@
 {% extends 'base.html' %}
 {% load static %}
-{% load custom_filters %}
 
 {% block title %}{{ chapter.title }} - {{ book.title }}{% endblock %}
 
@@ -17,7 +16,7 @@
     </div>
 
     <div class="reader-content" id="readerContent" style="font-size: 18px;">
-        <h1 class="chapter-title">{{ chapter.title }}</h1>
+        <h1 class="reader-chapter-title">{{ chapter.title }}</h1>
         <div class="chapter-body">
             {{ content|linebreaks }}
         </div>
@@ -37,6 +36,7 @@
         {% endif %}
     </div>
 </div>
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
 {% endblock %}
 
 {% block extra_js %}
