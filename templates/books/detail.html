@@ -23,6 +23,7 @@
             <form method="post" action="{% url 'favorite_toggle' %}" style="display:inline;">
                 {% csrf_token %}
                 <input type="hidden" name="book_id" value="{{ book.id }}">
+                <input type="hidden" name="next" value="book_detail">
                 <button type="submit" class="btn btn-secondary">☆ 收藏</button>
             </form>
             <form method="post" action="{% url 'book_delete' book.id %}" style="display:inline;" onsubmit="return confirm('确定要删除这本书吗？')">
