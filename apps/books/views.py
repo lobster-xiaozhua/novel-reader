@@ -4,31 +4,33 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Q, Count
+from django.core.cache import cache
 from .models import Book
 from .forms import BookForm
+from apps.reader.models import ReadingProgress
+from apps.favorites.models import Favorite
 
 logger = logging.getLogger(__name__)
 
 
 def home(request):
     try:
-        from apps.reader.models import ReadingProgress
-        from apps.favorites.models import Favorite
+        recent_books = Book.objects.prefetch_related('chapters').order_by('-created_at')[:6]
+        stats = Book.objects.aggregate(
+            book_count=Count('id'),
+        )
 
-        recent_books = Book.objects.all()[:6]
-        book_count = Book.objects.count()
-        
         if request.user.is_authenticated:
             reading_count = ReadingProgress.objects.filter(user=request.user).count()
             favorite_count = Favorite.objects.filter(user=request.user).count()
         else:
             reading_count = 0
             favorite_count = 0
-        
+
         context = {
             'recent_books': recent_books,
-            'total_books': book_count,
+            'total_books': stats['book_count'],
             'reading_count': reading_count,
             'favorite_count': favorite_count,
             'completed_count': 0,
@@ -42,13 +44,13 @@ def home(request):
             'favorite_count': 0,
             'completed_count': 0,
         }
-    
+
     return render(request, 'home.html', context)
 
 
 def book_list(request):
     query = request.GET.get('q', '')
-    books = Book.objects.all()
+    books = Book.objects.prefetch_related('chapters').all()
     if query:
         books = books.filter(Q(title__icontains=query) | Q(author__icontains=query))
 
@@ -65,17 +67,22 @@ def book_list(request):
 
 
 def book_detail(request, pk):
-    book = get_object_or_404(Book, pk=pk)
+    book = get_object_or_404(
+        Book.objects.prefetch_related('chapters'),
+        pk=pk
+    )
     chapters = book.chapters.all()
-    
+
     is_favorited = False
     if request.user.is_authenticated:
-        try:
-            from apps.favorites.models import Favorite
+        cache_key = f'fav:{request.user.id}:{book.id}'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            is_favorited = cached
+        else:
             is_favorited = Favorite.objects.filter(user=request.user, book=book).exists()
-        except Exception:
-            pass
-    
+            cache.set(cache_key, is_favorited, 60)
+
     context = {
         'book': book,
         'chapters': chapters,

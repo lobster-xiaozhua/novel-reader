@@ -14,6 +14,11 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = 'DENY'
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -86,6 +91,21 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'novelreader-cache',
+        'OPTIONS': {
+            'MAX_ENTRIES': 5000,
+            'CULL_FREQUENCY': 3,
+        }
+    }
+}
+
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 1209600
+SESSION_SAVE_EVERY_REQUEST = True
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -102,8 +122,8 @@ LOGGING = {
         'file': {
             'class': 'logging.handlers.RotatingFileHandler',
             'filename': BASE_DIR / 'data' / 'logs' / 'app.log',
-            'maxBytes': 1024 * 1024,
-            'backupCount': 3,
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 5,
             'formatter': 'verbose',
             'level': 'WARNING',
         },
@@ -118,7 +138,6 @@ LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
-# Custom settings
 BOOKS_DIR = BASE_DIR / 'data' / 'books'
 LOGS_DIR = BASE_DIR / 'data' / 'logs'
 CACHE_DIR = BASE_DIR / 'data' / 'cache'
