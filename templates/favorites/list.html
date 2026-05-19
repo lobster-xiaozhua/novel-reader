@@ -3,20 +3,33 @@
 {% block title %}我的收藏 - 小说阅读器{% endblock %}
 
 {% block content %}
-<h1 class="page-title">⭐ 我的收藏</h1>
+<div class="page-header">
+    <h1 class="page-title">⭐ 我的收藏</h1>
+    <span class="stat-badge">{{ favorites|length }} 本书籍</span>
+</div>
 
 {% if favorites %}
     <div class="books-grid">
         {% for fav in favorites %}
-            <div class="book-card" onclick="location.href='{% url 'book_detail' fav.book.id %}'">
-                <div class="book-card-title">{{ fav.book.title }}</div>
-                {% if fav.book.author %}
-                    <div class="book-card-author">作者：{{ fav.book.author }}</div>
-                {% endif %}
-                {% if fav.notes %}
-                    <div class="book-card-desc">{{ fav.notes }}</div>
-                {% endif %}
-                <div class="book-card-meta">{{ fav.book.total_chapters }} 章</div>
+            <div class="book-card fade-in stagger-{{ forloop.counter }}" data-fav-id="{{ fav.id }}">
+                <a href="{% url 'book_detail' fav.book.id %}" class="book-card-link">
+                    <div class="book-card-cover" style="background:{{ fav.book.title|book_gradient|first }}">
+                        <span class="cover-char">{{ fav.book.title.0 }}</span>
+                    </div>
+                    <div class="book-card-body">
+                        <div class="book-card-title">{{ fav.book.title }}</div>
+                        {% if fav.book.author %}
+                            <div class="book-card-author">{{ fav.book.author }}</div>
+                        {% endif %}
+                        {% if fav.notes %}
+                            <div class="book-card-desc">{{ fav.notes }}</div>
+                        {% endif %}
+                        <div class="book-card-footer">
+                            <div class="book-card-meta">{{ fav.book.total_chapters }} 章</div>
+                        </div>
+                    </div>
+                </a>
+                <button class="fav-remove-btn" onclick="removeFavorite({{ fav.id }}, this)" title="取消收藏">✕</button>
             </div>
         {% endfor %}
     </div>
@@ -24,6 +37,102 @@
     <div class="empty-state">
         <div class="empty-icon">⭐</div>
         <div class="empty-text">还没有收藏任何书籍</div>
+        <div class="empty-action">
+            <a href="{% url 'book_list' %}" class="btn btn-primary">去书架逛逛</a>
+        </div>
     </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function removeFavorite(favId, btn) {
+    const card = btn.closest('.book-card');
+    card.style.transition = 'all 0.35s ease';
+    card.style.transform = 'scale(0.9)';
+    card.style.opacity = '0';
+
+    fetch('{% url "favorite_toggle" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': '{{ csrf_token }}' },
+        body: `book_id=${card.querySelector('.book-card-link').href.match(/\/books\/(\d+)/)[1]}&action=remove`
+    }).then(r => r.json()).then(d => {
+        if (d.success) {
+            setTimeout(() => {
+                card.style.height = card.offsetHeight + 'px';
+                requestAnimationFrame(() => {
+                    card.style.height = '0';
+                    card.style.margin = '0';
+                    card.style.padding = '0';
+                    card.style.overflow = 'hidden';
+                });
+            }, 150);
+            setTimeout(() => {
+                card.remove();
+                const count = document.querySelectorAll('.book-card').length;
+                document.querySelector('.stat-badge').textContent = count + ' 本书籍';
+                if (count === 0) location.reload();
+            }, 500);
+            showToast('已取消收藏', 'success');
+        } else {
+            card.style.transform = '';
+            card.style.opacity = '';
+            showToast(d.error || '操作失败', 'error');
+        }
+    }).catch(() => {
+        card.style.transform = '';
+        card.style.opacity = '';
+        showToast('网络异常，请重试', 'error');
+    });
+}
+</script>
+
+<style>
+.stat-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 16px;
+    background: var(--accent-light);
+    border: 1px solid rgba(245,158,11,0.25);
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+}
+.book-card { position: relative; }
+.book-card-link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+}
+.fav-remove-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    color: #fff;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: all 0.25s ease;
+    z-index: 2;
+    cursor: pointer;
+    border: none;
+}
+.book-card:hover .fav-remove-btn {
+    opacity: 1;
+    transform: scale(1);
+}
+.fav-remove-btn:hover {
+    background: var(--danger);
+    transform: scale(1.1) !important;
+}
+</style>
 {% endblock %}

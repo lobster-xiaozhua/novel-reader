@@ -4,46 +4,239 @@
 {% block title %}{{ chapter.title }} - {{ book.title }}{% endblock %}
 
 {% block content %}
-<div class="reader-view">
-    <div class="reader-toolbar">
+<div class="reader-view" id="readerView">
+    <div class="reader-toolbar" id="readerToolbar">
         <a href="{% url 'book_detail' book.id %}" class="toolbar-btn">← 返回</a>
-        <span class="toolbar-title">{{ chapter.title }}</span>
+        <span class="toolbar-title">{{ book.title }} · {{ chapter.title }}</span>
         <div class="toolbar-right">
-            <button class="toolbar-btn" onclick="decreaseFontSize()">A-</button>
-            <span class="font-size-display" id="fontSizeDisplay">18</span>
-            <button class="toolbar-btn" onclick="increaseFontSize()">A+</button>
+            <span class="font-size-display" id="fontSizeDisplay">中</span>
+            <button class="toolbar-btn" id="settingsBtn" type="button">⚙ 设置</button>
         </div>
     </div>
 
-    <div class="reader-content" id="readerContent" style="font-size: 18px;">
+    <div class="reader-content reader-theme-dark font-medium" id="readerContent">
         <h1 class="reader-chapter-title">{{ chapter.title }}</h1>
-        <div class="chapter-body">
-            {{ content|linebreaks }}
-        </div>
+        <div class="chapter-body">{{ content|linebreaks }}</div>
     </div>
 
-    <div class="reader-nav">
+    <div class="reader-nav" id="readerNav">
         {% if prev_chapter %}
             <a href="{% url 'chapter_read' book.id prev_chapter.id %}" class="nav-btn">← 上一章</a>
         {% else %}
-            <button class="nav-btn" disabled>← 上一章</button>
+            <span class="nav-btn" style="opacity:.3;cursor:not-allowed;">← 上一章</span>
         {% endif %}
-        <span class="nav-info">第{{ chapter.chapter_number }}章</span>
+        <span class="nav-info">第{{ chapter.chapter_number }}章 / 共{{ book.total_chapters }}章</span>
         {% if next_chapter %}
             <a href="{% url 'chapter_read' book.id next_chapter.id %}" class="nav-btn">下一章 →</a>
         {% else %}
-            <button class="nav-btn" disabled>下一章 →</button>
+            <span class="nav-btn" style="opacity:.3;cursor:not-allowed;">下一章 →</span>
         {% endif %}
     </div>
+
+    <div class="reader-settings-panel" id="settingsPanel">
+        <div class="settings-row">
+            <span class="settings-label">主题</span>
+            <div class="theme-options">
+                <button class="theme-option dark active" data-theme="dark" type="button" title="暗色"></button>
+                <button class="theme-option sepia" data-theme="sepia" type="button" title="护眼"></button>
+                <button class="theme-option light" data-theme="light" type="button" title="亮色"></button>
+                <button class="theme-option green" data-theme="green" type="button" title="绿色"></button>
+            </div>
+        </div>
+        <div class="settings-row">
+            <span class="settings-label">字号</span>
+            <div class="font-options">
+                <button class="font-option" data-size="small" type="button">小</button>
+                <button class="font-option active" data-size="medium" type="button">中</button>
+                <button class="font-option" data-size="large" type="button">大</button>
+                <button class="font-option" data-size="xlarge" type="button">超大</button>
+            </div>
+        </div>
+    </div>
+
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
 </div>
-<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/reader.js' %}"></script>
 <script>
-    window.bookId = {{ book.id }};
-    window.chapterId = {{ chapter.id }};
-    window.chapters = {{ chapters|safe }};
+(function() {
+    const STORAGE_KEY = 'reader_settings';
+    const PROGRESS_KEY = 'reader_progress';
+    const FONT_MAP = { small: { label: '小', px: 15 }, medium: { label: '中', px: 17 }, large: { label: '大', px: 20 }, xlarge: { label: '超大', px: 24 } };
+    const THEME_LIST = ['dark', 'sepia', 'light', 'green'];
+
+    let settings = {};
+    let toolbarVisible = true;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let saveTimer = null;
+
+    const $ = (s) => document.querySelector(s);
+    const view = $('#readerView');
+    const toolbar = $('#readerToolbar');
+    const content = $('#readerContent');
+    const nav = $('#readerNav');
+    const panel = $('#settingsPanel');
+    const fontSizeDisplay = $('#fontSizeDisplay');
+
+    function loadSettings() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            settings = raw ? JSON.parse(raw) : { theme: 'dark', fontSize: 'medium' };
+        } catch (e) {
+            console.warn('[Reader] 加载设置失败:', e);
+            settings = { theme: 'dark', fontSize: 'medium' };
+        }
+    }
+
+    function saveSettings() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+        } catch (e) {
+            console.warn('[Reader] 保存设置失败:', e);
+        }
+    }
+
+    function applyTheme(theme) {
+        THEME_LIST.forEach(t => content.classList.remove('reader-theme-' + t));
+        content.classList.add('reader-theme-' + theme);
+        document.querySelectorAll('.theme-option').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.theme === theme);
+        });
+        settings.theme = theme;
+        saveSettings();
+        console.log('[Reader] 主题切换:', theme);
+    }
+
+    function applyFontSize(size) {
+        FONT_MAP.small && Object.keys(FONT_MAP).forEach(s => content.classList.remove('font-' + s));
+        content.classList.add('font-' + size);
+        document.querySelectorAll('.font-option').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.size === size);
+        });
+        fontSizeDisplay.textContent = FONT_MAP[size]?.label || size;
+        settings.fontSize = size;
+        saveSettings();
+        console.log('[Reader] 字号切换:', size, FONT_MAP[size]?.px + 'px');
+    }
+
+    function toggleToolbar(show) {
+        toolbarVisible = show;
+        toolbar.classList.toggle('hidden', !show);
+        nav.classList.toggle('hidden', !show);
+        if (!show) panel.classList.remove('show');
+    }
+
+    function togglePanel() {
+        const showing = panel.classList.contains('show');
+        panel.classList.toggle('show', !showing);
+        console.log('[Reader] 设置面板:', !showing ? '打开' : '关闭');
+    }
+
+    function saveProgress() {
+        if (typeof window.chapterId === 'undefined') return;
+        const pos = window.scrollY;
+        const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+        const pct = Math.min(100, Math.round((pos / max) * 100));
+        try {
+            const progress = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}');
+            progress[window.bookId] = { chapterId: window.chapterId, position: pos, percent: pct, ts: Date.now() };
+            localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress));
+        } catch (e) {}
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+        if (csrfToken) {
+            fetch(`/chapters/${window.bookId}/save-progress/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `chapter_id=${window.chapterId}&position=${pos}`
+            }).catch(() => {});
+        }
+    }
+
+    function scheduleSave() {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(saveProgress, 2000);
+    }
+
+    function restorePosition() {
+        try {
+            const progress = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}');
+            const p = progress[window.bookId];
+            if (p && p.chapterId === window.chapterId && p.position > 0) {
+                window.scrollTo(0, p.position);
+                console.log('[Reader] 恢复阅读位置:', p.percent + '%');
+            }
+        } catch (e) {}
+    }
+
+    function handleTouchStart(e) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+    }
+
+    function handleTouchEnd(e) {
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        const dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
+        if (Math.abs(dx) < 40 || dy > Math.abs(dx)) return;
+        const prevLink = nav.querySelector('a[href*="chapter_read"]');
+        const links = nav.querySelectorAll('a[href*="chapter_read"]');
+        if (dx > 50 && links[0]) {
+            console.log('[Reader] 触控翻页 → 上一章');
+            window.location.href = links[0].href;
+        } else if (dx < -50 && links[1]) {
+            console.log('[Reader] 触控翻页 → 下一章');
+            window.location.href = links[1].href;
+        }
+    }
+
+    function handleCenterTap(e) {
+        if (e.target.closest('.reader-toolbar') || e.target.closest('.reader-nav') || e.target.closest('.reader-settings-panel') || e.target.closest('a') || e.target.closest('button')) return;
+        toggleToolbar(!toolbarVisible);
+    }
+
+    function init() {
+        loadSettings();
+        applyTheme(settings.theme);
+        applyFontSize(settings.fontSize);
+
+        view.addEventListener('touchstart', handleTouchStart, { passive: true });
+        view.addEventListener('touchend', handleTouchEnd, { passive: true });
+        view.addEventListener('click', handleCenterTap);
+
+        $('#settingsBtn').addEventListener('click', (e) => { e.stopPropagation(); togglePanel(); });
+
+        document.querySelectorAll('.theme-option').forEach(btn => {
+            btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
+        });
+
+        document.querySelectorAll('.font-option').forEach(btn => {
+            btn.addEventListener('click', () => applyFontSize(btn.dataset.size));
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.reader-settings-panel') && !e.target.closest('#settingsBtn')) {
+                panel.classList.remove('show');
+            }
+        });
+
+        window.addEventListener('scroll', scheduleSave, { passive: true });
+        window.addEventListener('beforeunload', saveProgress);
+
+        restorePosition();
+
+        window.bookId = {{ book.id }};
+        window.chapterId = {{ chapter.id }};
+        window.chapters = {{ chapters_json|safe }};
+
+        console.log('[Reader] 初始化完成 · 书籍:', {{ book.id }}, '章节:', {{ chapter.id }}, '主题:', settings.theme, '字号:', settings.fontSize);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
 </script>
 {% endblock %}

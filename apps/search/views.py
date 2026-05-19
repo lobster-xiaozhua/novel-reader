@@ -5,11 +5,11 @@ from django.db.models import Q
 from apps.books.models import Book
 
 
-@login_required
 def search(request):
     query = request.GET.get('q', '')
     results = []
     suggestions = []
+    page_obj = None
 
     if query:
         results = Book.objects.filter(
@@ -25,7 +25,9 @@ def search(request):
 
     context = {
         'query': query,
-        'page_obj': page_obj if query else None,
+        'results': results if query else [],
+        'total': len(results) if query else 0,
+        'page_obj': page_obj,
         'suggestions': suggestions,
     }
     return render(request, 'search/results.html', context)

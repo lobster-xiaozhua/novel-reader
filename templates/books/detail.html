@@ -4,47 +4,57 @@
 
 {% block content %}
 <div class="book-header">
-    <div class="book-cover-large">📖</div>
+    <div class="book-cover-large"><span>{{ book.title|slice:":1" }}</span></div>
     <div class="book-meta-info">
         <h1 class="book-title">{{ book.title }}</h1>
         {% if book.author %}
-            <p class="book-author">作者：{{ book.author }}</p>
+            <p class="book-author">✍ {{ book.author }}</p>
         {% endif %}
         {% if book.description %}
             <p class="book-desc">{{ book.description }}</p>
         {% endif %}
         <div class="book-stats">
-            <span>{{ book.total_chapters }} 章</span>
+            <span>📖 {{ book.total_chapters }} 章</span>
+            <span>📝 {{ chapters|length }} 已入库</span>
+            <span id="totalWords">🔤 -- 字</span>
+            <span>🕐 {{ book.updated_at|date:"Y-m-d H:i" }}</span>
+            <span class="progress-ring-wrap" title="阅读进度">
+                <svg viewBox="0 0 44 44" style="width:44px;height:44px;transform:rotate(-90deg)">
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="var(--border-color)" stroke-width="4"/>
+                    <circle id="progressRing" cx="22" cy="22" r="18" fill="none" stroke="var(--accent)" stroke-width="4"
+                        stroke-linecap="round" stroke-dasharray="113.1" stroke-dashoffset="113.1"
+                        style="transition:stroke-dashoffset .8s ease"/>
+                </svg>
+                <span id="progressText" class="progress-ring-text">0%</span>
+            </span>
         </div>
         <div class="book-actions">
             {% if chapters %}
-                <a href="{% url 'chapter_read' book.id chapters.0.id %}" class="btn btn-primary">开始阅读</a>
+                <a href="{% url 'chapter_read' book.id chapters.0.id %}" class="btn btn-primary" style="font-size:15px;padding:14px 32px;box-shadow:0 4px 20px var(--accent-glow)">▶ 开始阅读</a>
             {% endif %}
             <form method="post" action="{% url 'favorite_toggle' %}" style="display:inline;">
                 {% csrf_token %}
                 <input type="hidden" name="book_id" value="{{ book.id }}">
-                <input type="hidden" name="next" value="book_detail">
-                <button type="submit" class="btn btn-secondary">☆ 收藏</button>
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" class="btn btn-primary">{% if is_favorited %}★ 已收藏{% else %}☆ 收藏{% endif %}</button>
             </form>
-            <form method="post" action="{% url 'book_delete' book.id %}" style="display:inline;" onsubmit="return confirm('确定要删除这本书吗？')">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-danger">删除</button>
-            </form>
+            <button class="btn btn-secondary" onclick="shareBook()" title="分享书籍">↗ 分享</button>
         </div>
     </div>
 </div>
 
 <section class="chapters-section">
-    <h2 class="section-title">章节目录</h2>
+    <div class="chapters-toolbar">
+        <input type="text" id="chapterSearch" class="input chapters-search" placeholder="🔍 搜索章节标题..." oninput="filterChapters()">
+        <span id="searchResult" style="font-size:13px;color:var(--text-tertiary);align-self:center;white-space:nowrap"></span>
+    </div>
     {% if chapters %}
-        <div class="chapters-list">
+        <div class="chapters-list" id="chaptersList">
             {% for chapter in chapters %}
-                <a href="{% url 'chapter_read' book.id chapter.id %}" class="chapter-item">
+                <a href="{% url 'chapter_read' book.id chapter.id %}" class="chapter-item" data-title="{{ chapter.title }}">
                     <span class="chapter-number">第{{ chapter.chapter_number }}章</span>
                     <span class="chapter-title">{{ chapter.title }}</span>
-                    {% if chapter.word_count %}
-                        <span class="chapter-words">{{ chapter.word_count }}字</span>
-                    {% endif %}
+                    {% if chapter.word_count %}<span class="chapter-words">{{ chapter.word_count }}字</span>{% endif %}
                 </a>
             {% endfor %}
         </div>
@@ -55,4 +65,67 @@
         </div>
     {% endif %}
 </section>
+
+<script>
+(function(){
+    const items = document.querySelectorAll('.chapter-item');
+    const totalWordsEl = document.getElementById('totalWords');
+    const progressRing = document.getElementById('progressRing');
+    const progressText = document.getElementById('progressText');
+
+    let totalWords = 0;
+    items.forEach(el => {
+        const wordsMatch = el.querySelector('.chapter-words');
+        if (wordsMatch) {
+            const w = parseInt(wordsMatch.textContent) || 0;
+            totalWords += w;
+            el.dataset.words = w;
+        }
+    });
+    totalWordsEl.textContent = `🔤 ${totalWords.toLocaleString()} 字`;
+
+    const circumference = 2 * Math.PI * 18;
+    let readCount = 0;
+    try {
+        const readKey = `read_${{{ book.id }}}`;
+        const readChapters = JSON.parse(localStorage.getItem(readKey) || '[]');
+        readCount = readChapters.length || 0;
+        items.forEach(el => {
+            const href = el.getAttribute('href') || '';
+            const cid = href.match(/\/(\d+)\/?$/);
+            if (cid && readChapters.includes(parseInt(cid[1]))) el.classList.add('reading');
+        });
+    } catch(e){ console.warn('[Detail] 读取进度失败:', e.message); }
+
+    const pct = items.length ? Math.round((readCount / items.length) * 100) : 0;
+    const offset = circumference - (pct / 100) * circumference;
+    progressRing.setAttribute('stroke-dashoffset', Math.max(0, offset));
+    progressText.textContent = pct + '%';
+
+    window.filterChapters = function() {
+        const kw = document.getElementById('chapterSearch').value.trim().toLowerCase();
+        let visible = 0;
+        items.forEach(el => {
+            const match = !kw || (el.dataset.title || '').toLowerCase().includes(kw);
+            el.style.display = match ? '' : 'none';
+            if (match) visible++;
+        });
+        const resultEl = document.getElementById('searchResult');
+        resultEl.textContent = kw ? `匹配 ${visible}/${items.length}` : '';
+    };
+
+    window.shareBook = function() {
+        const url = location.href;
+        if (navigator.share) {
+            navigator.share({title:'{{ book.title|escapejs }}',text:'{{ book.author|default:""|escapejs }}',url}).catch(()=>{});
+        } else {
+            navigator.clipboard.writeText(url).then(()=>{
+                showToast('链接已复制到剪贴板','success');
+            }).catch(()=>{
+                prompt('复制分享链接:', url);
+            });
+        }
+    };
+})();
+</script>
 {% endblock %}

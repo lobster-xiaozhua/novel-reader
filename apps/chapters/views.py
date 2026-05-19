@@ -11,7 +11,6 @@ from .models import Chapter
 logger = logging.getLogger(__name__)
 
 
-@login_required
 def chapter_read(request, book_id, chapter_id):
     book = get_object_or_404(Book, pk=book_id)
     chapter = get_object_or_404(Chapter, pk=chapter_id, book=book)
@@ -28,7 +27,9 @@ def chapter_read(request, book_id, chapter_id):
                 next_chapter = all_chapters[i + 1]
             break
 
-    progress = ReadingProgress.objects.filter(user=request.user, book=book).select_related('chapter').first()
+    progress = None
+    if request.user.is_authenticated:
+        progress = ReadingProgress.objects.filter(user=request.user, book=book).select_related('chapter').first()
 
     content = ''
     if os.path.exists(chapter.file_path):

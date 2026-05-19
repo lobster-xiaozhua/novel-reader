@@ -8,47 +8,81 @@
     <button class="btn btn-primary" onclick="document.getElementById('addModal').style.display='flex'">+ 添加书籍</button>
 </div>
 
-<div class="search-bar">
-    <form method="get" action="{% url 'book_list' %}">
-        <input type="text" name="q" class="input" placeholder="搜索书架中的书籍..." value="{{ query }}">
+<div class="search-box" style="margin-bottom:20px">
+    <form method="get" action="{% url 'book_list' %}" style="display:flex;gap:12px;width:100%">
+        <input type="text" name="q" class="input search-input" placeholder="搜索书架中的书籍..." value="{{ search_query }}">
     </form>
 </div>
 
+<div class="filter-bar">
+    <select class="filter-select" id="sortField" onchange="applySort()">
+        <option value="title" {% if request.GET.sort == 'title' or not request.GET.sort %}selected{% endif %}>按标题</option>
+        <option value="author" {% if request.GET.sort == 'author' %}selected{% endif %}>按作者</option>
+        <option value="chapters" {% if request.GET.sort == 'chapters' %}selected{% endif %}>按章节数</option>
+    </select>
+    <select class="filter-select" id="sortOrder" onchange="applySort()">
+        <option value="asc" {% if request.GET.order == 'asc' or not request.GET.order %}selected{% endif %}>升序</option>
+        <option value="desc" {% if request.GET.order == 'desc' %}selected{% endif %}>降序</option>
+    </select>
+</div>
+
+<div class="category-pills">
+    <a href="{% url 'book_list' %}" class="category-pill {% if not request.GET.cat %}active{% endif %}">全部</a>
+    <a href="?cat=fantasy{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}" class="category-pill {% if request.GET.cat == 'fantasy' %}active{% endif %}">玄幻</a>
+    <a href="?cat=romance{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}" class="category-pill {% if request.GET.cat == 'romance' %}active{% endif %}">言情</a>
+    <a href="?cat=xianxia{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}" class="category-pill {% if request.GET.cat == 'xianxia' %}active{% endif %}">仙侠</a>
+    <a href="?cat=action{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}" class="category-pill {% if request.GET.cat == 'action' %}active{% endif %}">都市</a>
+</div>
+
 {% if page_obj %}
-    <div class="books-grid">
+    <div class="books-grid" id="booksGrid">
         {% for book in page_obj %}
-            <div class="book-card" onclick="location.href='{% url 'book_detail' book.id %}'">
-                <div class="book-card-title">{{ book.title }}</div>
-                {% if book.author %}
-                    <div class="book-card-author">作者：{{ book.author }}</div>
-                {% endif %}
-                {% if book.description %}
-                    <div class="book-card-desc">{{ book.description }}</div>
-                {% endif %}
-                <div class="book-card-meta">{{ book.total_chapters }} 章</div>
+            <div class="book-card fade-in stagger-{{ forloop.counter }}" onclick="location.href='{% url 'book_detail' book.id %}'">
+                <div class="book-card-cover" style="background:{{ book.title|book_gradient|first }}">
+                    <span class="cover-char">{{ book.title.0 }}</span>
+                </div>
+                <div class="book-card-body">
+                    <div class="book-card-title">{{ book.title }}</div>
+                    {% if book.author %}
+                        <div class="book-card-author">{{ book.author }}</div>
+                    {% endif %}
+                    {% if book.description %}
+                        <div class="book-card-desc">{{ book.description }}</div>
+                    {% endif %}
+                    <div class="book-card-footer">
+                        <div class="book-book-meta">{{ book.total_chapters }} 章</div>
+                        {% if book.category %}
+                            <span class="book-card-tag tag-{{ book.category|default:'default' }}">{{ book.get_category_display|default:book.category }}</span>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         {% endfor %}
     </div>
 
-    {% if page_obj.has_other_pages %}
+    {% if is_paginated and page_obj.paginator.num_pages > 1 %}
         <div class="pagination">
             {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}" class="btn btn-secondary btn-sm">上一页</a>
+                <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}{% if request.GET.cat %}&cat={{ request.GET.cat }}{% endif %}" class="btn btn-secondary btn-sm">上一页</a>
             {% else %}
                 <button class="btn btn-secondary btn-sm" disabled>上一页</button>
             {% endif %}
             <span class="page-info">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
             {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}" class="btn btn-secondary btn-sm">下一页</a>
+                <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}{% if request.GET.cat %}&cat={{ request.GET.cat }}{% endif %}" class="btn btn-secondary btn-sm">下一页</a>
             {% else %}
                 <button class="btn btn-secondary btn-sm" disabled>下一页</button>
             {% endif %}
         </div>
     {% endif %}
 {% else %}
-    <div class="empty-state">
+    <div class="empty-state" id="emptyState">
         <div class="empty-icon">📚</div>
-        <div class="empty-text">书架还是空的，添加一本书吧</div>
+        <div class="empty-text">书架空空如也，看看这些推荐吧</div>
+        <div class="books-grid" id="demoGrid"></div>
+        <div class="empty-action">
+            <button class="btn btn-primary" onclick="document.getElementById('addModal').style.display='flex'">+ 添加第一本书</button>
+        </div>
     </div>
 {% endif %}
 
@@ -77,4 +111,42 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function applySort() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('sort', document.getElementById('sortField').value);
+    params.set('order', document.getElementById('sortOrder').value);
+    window.location.search = params.toString();
+}
+
+(function() {
+    const demoBooks = [
+        { t: '斗破苍穹', a: '天蚕土豆', d: '这里是斗气的世界，没有花俏艳丽的魔法，有的，仅仅是繁衍到巅峰的斗气！', c: 1645, cat: 'xianxia' },
+        { t: '完美世界', a: '辰东', d: '一粒尘可填海，一根草斩尽日月星辰，弹指间天翻地覆。', c: 1908, cat: 'fantasy' },
+        { t: '遮天', a: '辰东', d: '冰冷与黑暗并存的宇宙深处，九具庞大的龙尸拉着一口青铜古棺，亘古长存。', c: 1856, cat: 'fantasy' },
+        { t: '凡人修仙传', a: '忘语', d: '一个普通山村小子，偶然之下进入到当地江湖小门派，虽然资质平庸，但依靠自身努力和合理算计修炼成仙。', c: 2446, cat: 'xianxia' },
+        { t: '全职高手', a: '蝴蝶蓝', d: '网游荣耀中被誉为教科书级别的顶尖高手叶修，因为种种原因遭到俱乐部的驱逐。', c: 1728, cat: 'action' },
+        { t: '庆余年', a: '猫腻', d: '积善之家，必有余庆，留余庆，留余庆，忽遇恩人；幸娘亲，幸娘亲，积得阴功。', c: 746, cat: 'action' },
+        { t: '琅琊榜', a: '海宴', d: '麒麟才子江左梅郎，搅动风云，为七万赤焰忠魂洗雪污名。', c: 360, cat: 'action' },
+        { t: '三体', a: '刘慈欣', d: '文化大革命如火如荼进行的同时，军方探寻外星文明的绝秘计划"红岸工程"取得了突破性进展。', c: 289, cat: 'fantasy' }
+    ];
+
+    const demoGrid = document.getElementById('demoGrid');
+    if (!demoGrid) return;
+
+    const tagMap = { fantasy: '玄幻', romance: '言情', xianxia: '仙侠', action: '都市' };
+
+    demoBooks.forEach((b, i) => {
+        const g = getBookGradient(b.t);
+        const card = document.createElement('div');
+        card.className = `book-card fade-in`;
+        card.style.animationDelay = `${i * 0.08}s`;
+        card.innerHTML = `<div class="book-card-cover" style="background:${g[0]}"><span class="cover-char">${b.t[0]}</span></div><div class="book-card-body"><div class="book-card-title">${b.t}</div><div class="book-card-author">${b.a}</div><div class="book-card-desc">${b.d}</div><div class="book-card-footer"><div class="book-card-meta">${b.c} 章</div><span class="book-card-tag tag-${b.cat}">${tagMap[b.cat]||'其他'}</span></div></div>`;
+        demoGrid.appendChild(card);
+    });
+})();
+</script>
 {% endblock %}

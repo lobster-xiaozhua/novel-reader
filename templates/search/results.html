@@ -1,55 +1,140 @@
 {% extends 'base.html' %}
 
-{% block title %}搜索 - 小说阅读器{% endblock %}
+{% block title %}{{ query|default:'搜索' }} - 小说阅读器{% endblock %}
 
 {% block content %}
-<h1 class="page-title">🔍 搜索</h1>
-
-<div class="search-box">
-    <form method="get" action="{% url 'search' %}" style="display:flex;gap:12px;width:100%;">
-        <input type="text" name="q" class="input search-input" placeholder="搜索小说标题、作者..." value="{{ query }}" autocomplete="off">
-        <button type="submit" class="btn btn-primary">搜索</button>
+<div class="search-hero hero-section hero-gradient-1">
+    <div class="hero-badge">🔍 书库检索</div>
+    <h1 class="hero-title">发现你的下一本好书</h1>
+    <p class="hero-subtitle">搜索小说标题、作者名，探索海量书库</p>
+    <form method="get" action="{% url 'search' %}" class="search-box" style="margin-bottom:0;margin-top:24px;max-width:560px;width:100%;">
+        <input type="text" name="q" class="input search-input" placeholder="输入关键词搜索..." value="{{ query }}" autocomplete="off" style="padding:16px 20px;font-size:15px;border-radius:var(--radius-lg);background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1);">
+        <button type="submit" class="btn btn-primary" style="padding:16px 32px;font-size:15px;border-radius:var(--radius-lg);white-space:nowrap;">
+            🔍 搜索
+        </button>
     </form>
 </div>
 
-{% if query %}
-    {% if page_obj %}
-        <p class="results-count">找到 {{ page_obj.paginator.count }} 个结果</p>
-        <div class="books-grid">
-            {% for book in page_obj %}
-                <div class="book-card" onclick="location.href='{% url 'book_detail' book.id %}'">
-                    <div class="book-card-title">{{ book.title }}</div>
-                    {% if book.author %}
-                        <div class="book-card-author">作者：{{ book.author }}</div>
-                    {% endif %}
-                    {% if book.description %}
-                        <div class="book-card-desc">{{ book.description }}</div>
-                    {% endif %}
-                    <div class="book-card-meta">{{ book.total_chapters }} 章</div>
-                </div>
-            {% endfor %}
-        </div>
+<div class="search-tags category-pills fade-in stagger-1" id="searchTags"></div>
 
-        {% if page_obj.has_other_pages %}
-            <div class="pagination">
-                {% if page_obj.has_previous %}
-                    <a href="?page={{ page_obj.previous_page_number }}&q={{ query }}" class="btn btn-secondary btn-sm">上一页</a>
-                {% else %}
-                    <button class="btn btn-secondary btn-sm" disabled>上一页</button>
-                {% endif %}
-                <span class="page-info">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
-                {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}&q={{ query }}" class="btn btn-secondary btn-sm">下一页</a>
-                {% else %}
-                    <button class="btn btn-secondary btn-sm" disabled>下一页</button>
-                {% endif %}
-            </div>
-        {% endif %}
-    {% else %}
-        <div class="empty-state">
-            <div class="empty-icon">🔍</div>
-            <div class="empty-text">没有找到相关书籍</div>
+{% if query %}
+<div class="results-count fade-in stagger-2" id="resultsCount"></div>
+
+<div class="books-grid" id="resultsGrid">
+    {% for book in results %}
+    <a href="{% url 'book_detail' book.id %}" class="book-card fade-in stagger-{% cycle '3' '4' '5' '6' %}">
+        <div class="book-card-cover" data-title="{{ book.title }}">
+            <span class="cover-char">{{ book.title.0 }}</span>
         </div>
-    {% endif %}
+        <div class="book-card-body">
+            <div class="book-card-title">{{ book.title }}</div>
+            {% if book.author %}<div class="book-card-author">{{ book.author }}</div>{% endif %}
+            {% if book.description %}<div class="book-card-desc">{{ book.description|truncatewords:20 }}</div>{% endif %}
+            <div class="book-card-footer">
+                <span class="book-card-meta">📖 {{ book.total_chapters|default:0 }} 章</span>
+            </div>
+        </div>
+    </a>
+    {% empty %}
+    <div class="empty-state" style="grid-column:1/-1;padding:60px 24px;" id="emptyState">
+        <div class="empty-icon">📭</div>
+        <div class="empty-text" style="font-size:16px;">未找到与 "<strong style="color:var(--accent)">{{ query }}</strong>" 相关的书籍</div>
+        <div class="empty-action" style="margin-top:16px;">
+            <span style="color:var(--text-tertiary);font-size:13px;">为你推荐以下书籍 👇</span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if not results %}
+<div class="books-grid" id="recommendGrid" style="margin-top:12px;"></div>
 {% endif %}
+{% else %}
+<div class="empty-state fade-in stagger-2" style="padding:60px 24px;">
+    <div class="empty-icon">🔎</div>
+    <div class="empty-text" style="font-size:16px;">在上方搜索框中输入关键词开始搜索</div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+    const HOT_TAGS = ['玄幻', '修仙', '都市', '言情', '科幻', '悬疑', '历史', '武侠', '网游', '灵异'];
+    const RECOMMEND_TITLES = [
+        {t:'星辰变', a:'我吃西红柿', c:680},
+        {t:'斗破苍穹', a:'天蚕土豆',c:1642},
+        {t:'完美世界', a:'辰东', c:1899},
+        {t:'遮天', a:'辰东', c:1548},
+        {t:'凡人修仙传', a:'忘语', c:2446},
+        {t:'诡秘之主', a:'爱潜水的乌贼', c:1432},
+        {t:'大道朝天', a:'猫腻', c:964},
+        {t:'剑来', a:'烽火戏诸侯', c:2240},
+    ];
+
+    function renderTags() {
+        const el = document.getElementById('searchTags');
+        if (!el) return;
+        const history = JSON.parse(localStorage.getItem('search_history') || '[]');
+        let html = '';
+        history.slice(0, 5).forEach(q => {
+            html += `<a href="{% url 'search' %}?q=${encodeURIComponent(q)}" class="category-pill">🕐 ${q}</a>`;
+        });
+        HOT_TAGS.forEach(tag => {
+            html += `<a href="{% url 'search' %}?q=${encodeURIComponent(tag)}" class="category-pill"># ${tag}</a>`;
+        });
+        el.innerHTML = html;
+    }
+
+    function renderResultsCount() {
+        const el = document.getElementById('resultsCount');
+        if (!el) return;
+        const total = {{ total|default:0 }};
+        const q = '{{ query|escapejs }}';
+        if (total > 0) {
+            el.innerHTML = `📋 找到 <strong style="color:var(--accent)">${total}</strong> 个关于 "${q}" 的结果`;
+        }
+    }
+
+    function renderRecommendations() {
+        const grid = document.getElementById('recommendGrid');
+        if (!grid) return;
+        grid.innerHTML = RECOMMEND_TITLES.map((b, i) => {
+            const g = getBookGradient(b.t);
+            return `<a href="#" class="book-card fade-in" style="animation-delay:${i * 0.06}s">
+                <div class="book-card-cover" style="background:${g[0]};">
+                    <span class="cover-char">${b.t[0]}</span>
+                </div>
+                <div class="book-card-body">
+                    <div class="book-card-title">${b.t}</div>
+                    <div class="book-card-author">${b.a}</div>
+                    <div class="book-card-footer"><span class="book-card-meta">📖 ${b.c} 章</span></div>
+                </div>
+            </a>`;
+        }).join('');
+    }
+
+    function applyCoverGradients() {
+        document.querySelectorAll('.book-card-cover[data-title]').forEach(el => {
+            const g = getBookGradient(el.dataset.title || '');
+            el.style.background = g[0];
+        });
+    }
+
+    if ('{{ query }}') {
+        try {
+            const history = JSON.parse(localStorage.getItem('search_history') || '[]');
+            const q = '{{ query|escapejs }}';
+            const filtered = history.filter(h => h !== q);
+            filtered.unshift(q);
+            localStorage.setItem('search_history', JSON.stringify(filtered.slice(0, 10)));
+        } catch(e) {}
+    }
+
+    renderTags();
+    renderResultsCount();
+    applyCoverGradients();
+    renderRecommendations();
+})();
+</script>
 {% endblock %}

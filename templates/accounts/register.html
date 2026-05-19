@@ -6,13 +6,20 @@
 <div class="login-page">
     <div class="login-card">
         <div class="login-header">
-            <span class="login-icon">📖</span>
+            <div class="login-icon">📖</div>
             <h1 class="login-title">小说阅读器</h1>
             <p class="login-subtitle">创建新账号</p>
         </div>
 
+        {% if error %}
+            <div class="error-msg">{{ error }}</div>
+        {% endif %}
+
         <form method="post" class="login-form">
             {% csrf_token %}
+            {% if next %}
+                <input type="hidden" name="next" value="{{ next }}">
+            {% endif %}
             <div class="form-group">
                 <label class="form-label">用户名</label>
                 {{ form.username }}
@@ -31,18 +38,55 @@
             </div>
             {% if form.errors %}
                 <div class="error-msg">
-                    {% for field, errors in form.errors.items %}
-                        {{ errors.0 }}
-                    {% endfor %}
+                    {% for field, errors in form.errors.items %}{{ errors.0 }}{% endfor %}
                 </div>
             {% endif %}
-            <button type="submit" class="btn btn-primary btn-full">注册</button>
+            <button type="submit" class="btn btn-primary btn-full">注 册</button>
         </form>
 
         <div class="login-footer">
-            已有账号？
-            <a href="{% url 'login' %}">立即登录</a>
+            已有账号？<a href="{% url 'login' %}{% if next %}?next={{ next }}{% endif %}">立即登录 →</a>
         </div>
     </div>
 </div>
 {% endblock %}
+
+<style>
+.login-page { padding-top: var(--nav-height); }
+.login-icon {
+    width: 68px;
+    height: 68px;
+    margin: 0 auto 18px;
+    background: linear-gradient(135deg, var(--accent), var(--purple), var(--pink));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    box-shadow: 0 8px 32px rgba(245,158,11,0.35), 0 0 60px rgba(139,92,246,0.15);
+}
+.login-form .input {
+    width: 100%;
+    padding: 14px 18px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 14px;
+    transition: all 0.25s ease;
+}
+.login-form .input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+    background: rgba(255,255,255,0.06);
+}
+.login-form .input::placeholder { color: var(--text-tertiary); }
+.error-msg {
+    animation: shake 0.4s ease;
+}
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+}
+</style>
