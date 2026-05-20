@@ -12,15 +12,15 @@ def run_crawler_task(self, task_id):
     try:
         task = CrawlerTask.objects.get(id=task_id)
     except CrawlerTask.DoesNotExist:
-        logger.error(f'任务 {task_id} 不存在')
+        logger.error(f"任务 {task_id} 不存在")
         return
 
     engine = CrawlerEngine(task.id, str(settings.BOOKS_DIR))
     try:
         engine.run(task)
     except Exception as e:
-        logger.error(f'任务 {task_id} 执行失败: {e}')
-        task.status = 'failed'
+        logger.error(f"任务 {task_id} 执行失败: {e}")
+        task.status = "failed"
         task.error_message = str(e)[:500]
         task.save()
         raise self.retry(exc=e, countdown=60)

@@ -2,22 +2,22 @@ from django.db import models
 
 
 class Book(models.Model):
-    title = models.CharField(max_length=200, db_index=True, verbose_name='书名')
-    author = models.CharField(max_length=100, db_index=True, blank=True, verbose_name='作者')
-    category = models.CharField(max_length=50, blank=True, db_index=True, verbose_name='分类')
-    folder_path = models.CharField(max_length=500, unique=True, verbose_name='文件夹路径')
-    description = models.TextField(blank=True, verbose_name='简介')
-    total_chapters = models.PositiveIntegerField(default=0, verbose_name='总章节数')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+    title = models.CharField(max_length=200, db_index=True, verbose_name="书名")
+    author = models.CharField(max_length=100, db_index=True, blank=True, verbose_name="作者")
+    category = models.CharField(max_length=50, blank=True, db_index=True, verbose_name="分类")
+    folder_path = models.CharField(max_length=500, unique=True, verbose_name="文件夹路径")
+    description = models.TextField(blank=True, verbose_name="简介")
+    total_chapters = models.PositiveIntegerField(default=0, verbose_name="总章节数")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
 
     class Meta:
-        verbose_name = '书籍'
-        verbose_name_plural = '书籍'
-        ordering = ['-created_at']
+        verbose_name = "书籍"
+        verbose_name_plural = "书籍"
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['author', 'created_at'], name='book_author_created_idx'),
-            models.Index(fields=['category', 'created_at'], name='book_category_created_idx'),
+            models.Index(fields=["author", "created_at"], name="book_author_created_idx"),
+            models.Index(fields=["category", "created_at"], name="book_category_created_idx"),
         ]
 
     def __str__(self):
@@ -26,14 +26,14 @@ class Book(models.Model):
     @property
     def cover_gradient(self):
         colors = [
-            ('#667eea', '#764ba2'),
-            ('#f093fb', '#f5576c'),
-            ('#4facfe', '#00f2fe'),
-            ('#43e97b', '#38f9d7'),
-            ('#fa709a', '#fee140'),
-            ('#30cfd0', '#330867'),
-            ('#a8edea', '#fed6e3'),
-            ('#ff9a9e', '#fecfef'),
+            ("#667eea", "#764ba2"),
+            ("#f093fb", "#f5576c"),
+            ("#4facfe", "#00f2fe"),
+            ("#43e97b", "#38f9d7"),
+            ("#fa709a", "#fee140"),
+            ("#30cfd0", "#330867"),
+            ("#a8edea", "#fed6e3"),
+            ("#ff9a9e", "#fecfef"),
         ]
         idx = self.id % len(colors) if self.id else 0
         return colors[idx]

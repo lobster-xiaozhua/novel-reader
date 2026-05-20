@@ -1,6 +1,7 @@
 from django.apps import AppConfig
 
+
 class ChaptersConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'apps.chapters'
-    verbose_name = '章节管理'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.chapters"
+    verbose_name = "章节管理"

@@ -14,24 +14,24 @@ logger = logging.getLogger(__name__)
 @login_required
 def crawler_tasks(request):
     tasks = CrawlerTask.objects.filter(user=request.user)
-    return render(request, 'crawler/tasks.html', {'tasks': tasks})
+    return render(request, "crawler/tasks.html", {"tasks": tasks})
 
 
 @login_required
 @require_POST
 def create_task(request):
-    url = request.POST.get('url', '').strip()
+    url = request.POST.get("url", "").strip()
     if not url:
-        messages.error(request, '请输入URL')
-        return redirect('crawler_tasks')
+        messages.error(request, "请输入URL")
+        return redirect("crawler_tasks")
 
     task = CrawlerTask.objects.create(user=request.user, url=url)
-    logger.info(f'创建爬虫任务: {task.id} - {url}')
+    logger.info(f"创建爬虫任务: {task.id} - {url}")
 
     run_crawler_task.delay(task.id)
 
-    messages.success(request, '爬虫任务已创建')
-    return redirect('crawler_tasks')
+    messages.success(request, "爬虫任务已创建")
+    return redirect("crawler_tasks")
 
 
 @login_required
@@ -42,12 +42,14 @@ def task_detail(request, pk):
         try:
             logs = json.loads(task.logs)
         except Exception as e:
-            logger.warning(f'解析任务日志失败: {e}')
-    return JsonResponse({
-        'id': task.id,
-        'status': task.status,
-        'total_chapters': task.total_chapters,
-        'downloaded_chapters': task.downloaded_chapters,
-        'error_message': task.error_message,
-        'logs': logs,
-    })
+            logger.warning(f"解析任务日志失败: {e}")
+    return JsonResponse(
+        {
+            "id": task.id,
+            "status": task.status,
+            "total_chapters": task.total_chapters,
+            "downloaded_chapters": task.downloaded_chapters,
+            "error_message": task.error_message,
+            "logs": logs,
+        }
+    )

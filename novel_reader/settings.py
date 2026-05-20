@@ -35,6 +35,8 @@ INSTALLED_APPS = [
     'apps.favorites',
     'apps.crawler',
     'apps.search',
+    'apps.notes',
+    'apps.reviews',
 ]
 
 MIDDLEWARE = [

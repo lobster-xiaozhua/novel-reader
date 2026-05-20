@@ -13,7 +13,7 @@ class CrawlerConfigTest(TestCase):
     def test_get_config_for_url(self):
         config = get_config_for_url("https://example.com/some/path")
         self.assertEqual(config.name, "Example Novel Site")
-        
+
         config2 = get_config_for_url("https://unknown-site.com")
         self.assertEqual(config2.name, "default")
 
@@ -30,16 +30,16 @@ class IntelligentParserTest(TestCase):
         self.config = SiteConfig(
             name="test",
             domain="test.com",
-            content_selectors=["#test-content"],
-            chapter_list_selectors=["#chapter-list"]
+            content_selectors=["#novel-content"],
+            chapter_list_selectors=["#chapter-list"],
         )
         self.parser = IntelligentParser(self.config)
 
     def test_clean_content(self):
         html = """
-        <div id="test-content">
-            <p>第一段</p>
-            <p>第二段</p>
+        <div id="novel-content">
+            <p>第一段这是一个比较长的内容</p>
+            <p>第二段这也是一个比较长的内容</p>
             <script>alert('test')</script>
         </div>
         """
