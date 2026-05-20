@@ -1,13 +1,14 @@
 import json
-import threading
+import logging
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from .models import CrawlerTask
-from utils.crawler_engine import CrawlerEngine
-from django.conf import settings
+from .tasks import run_crawler_task
+
+logger = logging.getLogger(__name__)
 
 
 @login_required
@@ -25,10 +26,9 @@ def create_task(request):
         return redirect('crawler_tasks')
 
     task = CrawlerTask.objects.create(user=request.user, url=url)
+    logger.info(f'创建爬虫任务: {task.id} - {url}')
 
-    engine = CrawlerEngine(task.id, str(settings.BOOKS_DIR))
-    thread = threading.Thread(target=engine.run, args=(task,), daemon=True)
-    thread.start()
+    run_crawler_task.delay(task.id)
 
     messages.success(request, '爬虫任务已创建')
     return redirect('crawler_tasks')
@@ -41,8 +41,8 @@ def task_detail(request, pk):
     if task.logs:
         try:
             logs = json.loads(task.logs)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f'解析任务日志失败: {e}')
     return JsonResponse({
         'id': task.id,
         'status': task.status,

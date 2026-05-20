@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.core.paginator import Paginator
-from django.db.models import Q
+from haystack.query import SearchQuerySet
 from apps.books.models import Book
 
 
@@ -12,12 +12,14 @@ def search(request):
     total = 0
 
     if query:
-        results = Book.objects.filter(
-            Q(title__icontains=query) | Q(author__icontains=query)
-        ).prefetch_related('chapters')
-        total = results.count()
-        paginator = Paginator(results, 12)
-        page_obj = paginator.get_page(request.GET.get('page', 1))
+        sqs = SearchQuerySet().models(Book).filter(content=query)
+        total = sqs.count()
+        
+        paginator = Paginator(sqs, 12)
+        page = request.GET.get('page', 1)
+        page_obj = paginator.get_page(page)
+        
+        results = [result.object for result in page_obj.object_list]
 
     if len(query) >= 2:
         suggestions = Book.objects.filter(
@@ -26,7 +28,7 @@ def search(request):
 
     context = {
         'query': query,
-        'results': page_obj.object_list if page_obj else [],
+        'results': results,
         'total': total,
         'page_obj': page_obj,
         'suggestions': suggestions,
