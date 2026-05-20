@@ -50,10 +50,13 @@ class SearchViewsTest(TestCase):
         self.assertIn(self.book1, response.context['results'])
 
     def test_search_case_insensitive(self):
-        """测试搜索不区分大小写"""
-        response = self.client.get(reverse('search') + '?q=DOU')
+        """测试搜索不区分大小写（拉丁字母）"""
+        Book.objects.create(title='Harry Potter', author='JK Rowling', folder_path='data/books/hp')
+        response = self.client.get(reverse('search') + '?q=harry')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['total'], 2)
+        self.assertEqual(response.context['total'], 1)
+        response2 = self.client.get(reverse('search') + '?q=HARRY')
+        self.assertEqual(response2.context['total'], 1)
 
     def test_search_with_whitespace(self):
         """测试搜索自动去除空白"""
@@ -74,18 +77,19 @@ class SearchViewsTest(TestCase):
         self.assertIsNotNone(response.context['page_obj'])
 
     def test_search_suggestions(self):
-        """测试搜索建议"""
-        response = self.client.get(reverse('search') + '?q=斗')
+        """测试搜索建议（需2字以上查询）"""
+        response = self.client.get(reverse('search') + '?q=斗破')
         self.assertEqual(response.status_code, 200)
         suggestions = list(response.context['suggestions'])
         self.assertTrue(len(suggestions) <= 10)
         self.assertIn('斗破苍穹', suggestions)
-        self.assertIn('斗罗大陆', suggestions)
 
     def test_search_no_suggestions_for_short_query(self):
         """测试短查询不返回建议"""
         response = self.client.get(reverse('search') + '?q=斗')
         self.assertEqual(response.status_code, 200)
+        suggestions = list(response.context['suggestions'])
+        self.assertEqual(len(suggestions), 0)
 
     def test_search_empty_query(self):
         """测试空查询"""
