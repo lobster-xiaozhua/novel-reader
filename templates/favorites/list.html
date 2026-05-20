@@ -13,7 +13,7 @@
         {% for fav in favorites %}
             <div class="book-card fade-in stagger-{{ forloop.counter }}" data-fav-id="{{ fav.id }}">
                 <a href="{% url 'book_detail' fav.book.id %}" class="book-card-link">
-                    <div class="book-card-cover" style="background:{{ fav.book.title|book_gradient|first }}">
+                    <div class="book-card-cover" data-book-title="{{ fav.book.title }}">
                         <span class="cover-char">{{ fav.book.title.0 }}</span>
                     </div>
                     <div class="book-card-body">
@@ -46,6 +46,11 @@
 
 {% block extra_js %}
 <script>
+document.querySelectorAll('[data-book-title]').forEach(el => {
+    const g = getBookGradient(el.dataset.bookTitle);
+    el.style.background = g[0];
+});
+
 function removeFavorite(favId, btn) {
     const card = btn.closest('.book-card');
     card.style.transition = 'all 0.35s ease';
