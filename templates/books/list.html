@@ -38,7 +38,7 @@
     <div class="books-grid" id="booksGrid">
         {% for book in page_obj %}
             <div class="book-card fade-in stagger-{{ forloop.counter }}" onclick="location.href='{% url 'book_detail' book.id %}'">
-                <div class="book-card-cover" style="background:{{ book.title|book_gradient|first }}">
+                <div class="book-card-cover" style="background:{{ book.cover_gradient.0 }}">
                     <span class="cover-char">{{ book.title.0 }}</span>
                 </div>
                 <div class="book-card-body">

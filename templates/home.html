@@ -80,7 +80,7 @@
     </div>
     <div class="books-grid">
         {% for book in recent_books %}
-        <a href="{% url 'books:detail' book.pk %}" class="book-card fade-in stagger-{{ forloop.counter|default:1 }}" style="animation-delay: {{ forloop.counter|add:3 }}0ms;">
+        <a href="{% url 'book_detail' book.pk %}" class="book-card fade-in stagger-{{ forloop.counter|default:1 }}" style="animation-delay: {{ forloop.counter|add:3 }}0ms;">
             <div class="book-card-cover" id="cover-{{ book.pk }}">
                 <span class="cover-char">{{ book.title.0 }}</span>
             </div>

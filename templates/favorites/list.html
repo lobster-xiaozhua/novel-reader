@@ -13,7 +13,7 @@
         {% for fav in favorites %}
             <div class="book-card fade-in stagger-{{ forloop.counter }}" data-fav-id="{{ fav.id }}">
                 <a href="{% url 'book_detail' fav.book.id %}" class="book-card-link">
-                    <div class="book-card-cover" style="background:{{ fav.book.title|book_gradient|first }}">
+                    <div class="book-card-cover" style="background:{{ fav.book.cover_gradient.0 }}">
                         <span class="cover-char">{{ fav.book.title.0 }}</span>
                     </div>
                     <div class="book-card-body">
