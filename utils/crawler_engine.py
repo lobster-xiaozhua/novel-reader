@@ -2,74 +2,74 @@ import re
 import time
 import json
 import socket
+import logging
+import random
 import ipaddress
-import threading
-import requests
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+import requests
+from django.conf import settings
+from apps.books.models import Book
+from apps.chapters.models import Chapter
+from .crawler_config import get_config_for_url, SiteConfig
 
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-]
+logger = logging.getLogger(__name__)
 
 
 class IntelligentParser:
-    CHAPTER_PATTERNS = [
-        re.compile(r'^第[零一二三四五六七八九十百千万\d]+章', re.MULTILINE),
-        re.compile(r'^第\d+章', re.MULTILINE),
-        re.compile(r'^Chapter\s+\d+', re.MULTILINE | re.IGNORECASE),
-    ]
+    def __init__(self, config: SiteConfig):
+        self.config = config
 
-    CONTENT_SELECTORS = [
-        {"id": "content"},
-        {"id": "bookContent"},
-        {"class_": "content"},
-        {"class_": "chapter-content"},
-        {"class_": "read-content"},
-    ]
-
-    def parse_chapter_list(self, html, base_url):
+    def parse_chapter_list(self, html: str, base_url: str):
         soup = BeautifulSoup(html, "html.parser")
-        list_containers = soup.find_all(["div", "dl", "ul", "ol"], class_=re.compile(r"(list|chapter|catalog|menu|directory)", re.I))
-        if not list_containers:
-            list_containers = soup.find_all("dl")
-
         chapters = []
         seen_urls = set()
 
-        for container in list_containers:
-            links = container.find_all("a", href=True)
-            for link in links:
-                href = link.get("href", "")
-                title = link.get_text(strip=True)
-                if not title or not href:
-                    continue
-                if any(skip in title.lower() for skip in ["首页", "末页", "上一页", "下一页", "返回", "目录"]):
-                    continue
-                full_url = urljoin(base_url, href)
-                if full_url in seen_urls:
-                    continue
-                seen_urls.add(full_url)
-                chapters.append({"title": title, "url": full_url})
+        for selector in self.config.chapter_list_selectors:
+            try:
+                containers = soup.select(selector)
+                for container in containers:
+                    links = container.select(self.config.link_selector)
+                    for link in links:
+                        href = link.get("href", "")
+                        title = link.get_text(strip=True)
+                        
+                        if not title or not href:
+                            continue
+                        if any(skip in title.lower() for skip in self.config.skip_keywords):
+                            continue
+                            
+                        full_url = urljoin(base_url, href)
+                        if full_url in seen_urls:
+                            continue
+                            
+                        seen_urls.add(full_url)
+                        chapters.append({"title": title, "url": full_url})
+                
+                if chapters:
+                    break
+            except Exception as e:
+                logger.warning(f"选择器 {selector} 解析失败: {e}")
+                continue
 
         return chapters
 
-    def parse_chapter_content(self, html):
+    def parse_chapter_content(self, html: str):
         soup = BeautifulSoup(html, "html.parser")
-        for sel in self.CONTENT_SELECTORS:
-            kwargs = {}
-            if "id" in sel:
-                kwargs = {"id": sel["id"]}
-            elif "class_" in sel:
-                kwargs = {"class_": sel["class_"]}
-            element = soup.find("div", **kwargs)
-            if element:
-                content = self._clean_content(element)
-                if len(content) > 50:
-                    return {"title": "", "content": content}
+        
+        for selector in self.config.content_selectors:
+            try:
+                element = soup.select_one(selector)
+                if element:
+                    content = self._clean_content(element)
+                    if len(content) > 50:
+                        return {"title": "", "content": content}
+            except Exception as e:
+                logger.warning(f"内容选择器 {selector} 解析失败: {e}")
+                continue
+                
         return {"title": "", "content": ""}
 
     def _clean_content(self, element):
@@ -83,12 +83,30 @@ class IntelligentParser:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         return "\n\n".join(lines)
 
-    def parse_book_info(self, html):
+    def parse_book_info(self, html: str):
         soup = BeautifulSoup(html, "html.parser")
         info = {"title": "", "author": "", "description": ""}
-        title_tag = soup.find("h1")
-        if title_tag:
-            info["title"] = title_tag.get_text(strip=True)
+        
+        if self.config.title_selector:
+            title_tag = soup.select_one(self.config.title_selector)
+            if title_tag:
+                info["title"] = title_tag.get_text(strip=True)
+        
+        if not info["title"]:
+            title_tag = soup.find("h1")
+            if title_tag:
+                info["title"] = title_tag.get_text(strip=True)
+                
+        if self.config.author_selector:
+            author_tag = soup.select_one(self.config.author_selector)
+            if author_tag:
+                info["author"] = author_tag.get_text(strip=True)
+                
+        if self.config.description_selector:
+            desc_tag = soup.select_one(self.config.description_selector)
+            if desc_tag:
+                info["description"] = desc_tag.get_text(strip=True)
+                
         return info
 
 
@@ -97,7 +115,7 @@ SSRF_BLOCKED_HOSTS = {
 }
 
 
-def validate_crawl_url(url):
+def validate_crawl_url(url: str) -> bool:
     try:
         parsed = urlparse(url)
     except Exception:
@@ -122,12 +140,13 @@ class CrawlerEngine:
     def __init__(self, task_id, books_dir):
         self.task_id = task_id
         self.books_dir = Path(books_dir)
-        self.parser = IntelligentParser()
+        self.config = None
+        self.parser = None
         self._ua_index = 0
         self._stop = False
 
     def _get_ua(self):
-        ua = USER_AGENTS[self._ua_index % len(USER_AGENTS)]
+        ua = self.config.user_agents[self._ua_index % len(self.config.user_agents)]
         self._ua_index += 1
         return ua
 
@@ -136,9 +155,8 @@ class CrawlerEngine:
     def _fetch_page(self, session, url):
         headers = {"User-Agent": self._get_ua()}
         resp = session.get(url, headers=headers, timeout=30)
-        if resp.status_code == 200:
-            return resp.text
-        return None
+        resp.raise_for_status()
+        return resp.text
 
     def _safe_filename(self, name):
         name = re.sub(r'[\\/:*?"<>|]', '_', name)
@@ -148,35 +166,28 @@ class CrawlerEngine:
     def _append_log(self, task, message):
         from apps.crawler.models import CrawlerTask
         try:
-            task = CrawlerTask.objects.get(id=task.id)
+            task.refresh_from_db()
             logs = json.loads(task.logs) if task.logs else []
             logs.append({"time": time.time(), "msg": message})
             task.logs = json.dumps(logs, ensure_ascii=False)
             task.save(update_fields=['logs'])
-        except Exception:
-            pass
+            logger.info(f"任务 {task.id}: {message}")
+        except Exception as e:
+            logger.error(f"添加日志失败: {e}")
 
     def run(self, task):
-        import os
-        import sys
-        import django
-        from pathlib import Path
-
-        project_root = Path(__file__).resolve().parent.parent
-        if str(project_root) not in sys.path:
-            sys.path.insert(0, str(project_root))
-        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'novel_reader.settings')
-        if not django.conf.settings.configured:
-            django.setup()
-
-        from apps.books.models import Book
-        from apps.chapters.models import Chapter
         from apps.crawler.models import CrawlerTask
+        
+        self.config = get_config_for_url(task.url)
+        self.parser = IntelligentParser(self.config)
+        
+        logger.info(f"开始执行任务 {task.id}, 站点: {self.config.name}")
 
         if not validate_crawl_url(task.url):
             task.status = 'failed'
-            task.error_message = '目标 URL 不合法或指向内网/元数据地址，禁止访问'
+            task.error_message = '目标URL不合法或指向内网/元数据地址，禁止访问'
             task.save()
+            logger.error(f"任务 {task.id} URL验证失败")
             return
 
         task.status = 'running'
@@ -187,12 +198,7 @@ class CrawlerEngine:
 
         try:
             html = self._fetch_page(session, task.url)
-            if not html:
-                task.status = 'failed'
-                task.error_message = '无法获取目录页'
-                task.save()
-                return
-
+            
             book_info = self.parser.parse_book_info(html)
             chapter_list = self.parser.parse_chapter_list(html, task.url)
 
@@ -200,6 +206,7 @@ class CrawlerEngine:
                 task.status = 'failed'
                 task.error_message = '无法解析章节列表'
                 task.save()
+                self._append_log(task, '无法解析章节列表')
                 return
 
             task.total_chapters = len(chapter_list)
@@ -229,6 +236,7 @@ class CrawlerEngine:
                     return
 
                 try:
+                    time.sleep(self.config.request_delay)
                     chapter_html = self._fetch_page(session, chapter_info["url"])
                     if chapter_html:
                         parsed = self.parser.parse_chapter_content(chapter_html)
@@ -253,7 +261,12 @@ class CrawlerEngine:
 
                             task.downloaded_chapters = i + 1
                             task.save()
+                            
+                            if (i + 1) % 10 == 0:
+                                self._append_log(task, f'已下载 {i + 1}/{len(chapter_list)} 章')
+                                
                 except Exception as e:
+                    logger.error(f"第 {i + 1} 章处理异常: {e}")
                     self._append_log(task, f'第 {i + 1} 章处理异常: {e}')
 
             book.total_chapters = task.downloaded_chapters
@@ -263,6 +276,7 @@ class CrawlerEngine:
             task.save()
 
         except Exception as e:
+            logger.error(f"任务 {task.id} 失败: {e}")
             task.status = 'failed'
             task.error_message = str(e)[:500]
             self._append_log(task, f'任务失败: {e}')

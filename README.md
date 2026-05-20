@@ -8,63 +8,106 @@
 - 书籍管理（添加、查看、删除）
 - 章节阅读（字体调节、进度保存）
 - 收藏功能
-- 全文搜索
-- 网页爬虫（自动抓取小说章节）
+- 全文搜索（基于 Haystack + Whoosh）
+- 网页爬虫（自动抓取小说章节，支持可配置解析规则）
+- 任务队列（Celery + Redis）
 - 深色主题 + 响应式布局
+- Docker 部署支持
 
 ## 技术栈
 
 - **后端**: Django 4.2 + SQLite
+- **任务队列**: Celery + Redis
+- **搜索**: Django Haystack + Whoosh
 - **前端**: Django Templates + 原生 JavaScript + CSS3
 - **爬虫**: requests + BeautifulSoup4
+- **部署**: Docker + Gunicorn
+- **测试**: pytest
 
 ## 快速开始
 
-### Linux/macOS
+### 使用 Docker（推荐）
 
 ```bash
+# 启动所有服务
+docker-compose up -d
+
+# 初始化搜索索引
+docker-compose exec web python manage.py rebuild_index
+```
+
+访问 http://localhost:8000
+
+默认账号: `admin` / `admin123`
+
+### 传统方式
+
+```bash
+# 安装依赖
+pip install -r requirements.txt
+
+# 数据库迁移
+python manage.py migrate
+
+# 初始化搜索索引
+python manage.py rebuild_index
+
+# 创建超级用户
+python manage.py createsuperuser
+
+# 启动 Celery worker（另一个终端）
+celery -A novel_reader worker --loglevel=info
+
+# 启动开发服务器
+python manage.py runserver
+```
+
+或者使用提供的启动脚本：
+
+```bash
+# Linux/macOS
 ./start.sh start
-```
 
-### Windows (CMD)
-
-```cmd
-start.bat start
-```
-
-### Windows (PowerShell)
-
-```powershell
+# Windows (PowerShell)
 .\start.ps1 start
 ```
 
-启动后访问 http://localhost:8000
+## 配置爬虫站点
 
-默认账号: `admin / admin123`
+在 `utils/crawler_config.py` 中添加或修改站点配置：
 
-## 启动脚本命令
+```python
+SITE_CONFIGS = {
+    "your-site.com": SiteConfig(
+        name="Your Novel Site",
+        domain="your-site.com",
+        chapter_list_selectors=["#chapter-list"],
+        content_selectors=["#novel-content"],
+        title_selector="h1.title",
+        request_delay=1.0,
+    ),
+}
+```
 
-所有启动脚本支持以下命令：
+## 测试
 
-| 命令 | 说明 |
-|------|------|
-| `start` | 启动服务（默认） |
-| `stop` | 停止服务 |
-| `restart` | 重启服务 |
-| `status` | 查看服务状态 |
-| `migrate` | 执行数据库迁移 |
-| `createsuperuser` | 创建超级用户 |
-| `shell` | 进入 Django shell |
-| `help` | 显示帮助 |
+```bash
+# 运行测试
+pytest
+
+# 带覆盖率报告
+pytest --cov=apps
+```
 
 ## 项目结构
 
 ```
 novel_reader/
-├── manage.py              # Django 管理命令
+├── manage.py
 ├── novel_reader/          # 项目配置
 │   ├── settings.py
 │   ├── urls.py
+│   ├── celery.py
 │   └── wsgi.py
 ├── apps/                  # 应用模块
 │   ├── accounts/          # 用户认证
@@ -77,26 +120,13 @@ novel_reader/
 ├── templates/             # HTML 模板
 ├── static/                # CSS/JS 静态文件
 ├── utils/                 # 工具模块
-│   └── crawler_engine.py  # 爬虫引擎
-└── data/                  # 数据目录
-    ├── db.sqlite3         # SQLite 数据库
-    └── books/             # 书籍文件
-```
-
-## 手动运行
-
-```bash
-# 安装依赖
-pip install -r requirements.txt
-
-# 数据库迁移
-python manage.py migrate
-
-# 创建超级用户
-python manage.py createsuperuser
-
-# 启动服务
-python manage.py runserver
+│   ├── crawler_engine.py  # 爬虫引擎
+│   └── crawler_config.py  # 爬虫配置
+├── tests/                 # 测试文件
+├── data/                  # 数据目录
+├── Dockerfile
+├── docker-compose.yml
+└── requirements.txt
 ```
 
 ## 许可证
