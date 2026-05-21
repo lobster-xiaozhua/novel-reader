@@ -8,7 +8,6 @@ import ipaddress
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import requests
 from django.conf import settings
 from apps.books.models import Book
@@ -143,20 +142,59 @@ class CrawlerEngine:
         self.config = None
         self.parser = None
         self._ua_index = 0
+        self._proxy_index = 0
+        self._cookie_index = 0
         self._stop = False
 
     def _get_ua(self):
-        ua = self.config.user_agents[self._ua_index % len(self.config.user_agents)]
-        self._ua_index += 1
-        return ua
+        pool = self.config.user_agents
+        if not pool:
+            from .crawler_config import UA_POOL
+            pool = UA_POOL
+        return random.choice(pool)
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10),
-           retry=retry_if_exception_type((requests.RequestException,)), reraise=True)
+    def _get_proxy(self):
+        if not self.config.use_proxy or not self.config.proxy_url:
+            return None
+        return {"http": self.config.proxy_url, "https": self.config.proxy_url}
+
+    def _delay(self):
+        wait = self.config.request_delay * random.uniform(0.5, 1.5)
+        time.sleep(wait)
+
     def _fetch_page(self, session, url):
-        headers = {"User-Agent": self._get_ua()}
-        resp = session.get(url, headers=headers, timeout=30)
-        resp.raise_for_status()
-        return resp.text
+        max_retries = self.config.max_retries
+        last_exc = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                self._delay()
+                headers = {
+                    "User-Agent": self._get_ua(),
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "Connection": "keep-alive",
+                    "Upgrade-Insecure-Requests": "1",
+                }
+                proxies = self._get_proxy()
+                cookies = self.config.cookies or None
+                resp = session.get(
+                    url, headers=headers, timeout=30,
+                    proxies=proxies, cookies=cookies,
+                )
+                resp.raise_for_status()
+                return resp.text
+            except requests.RequestException as e:
+                last_exc = e
+                jitter = random.uniform(0, 1)
+                backoff = self.config.retry_delay * (2 ** (attempt - 1)) + jitter
+                logger.warning(
+                    f"请求失败 (第{attempt}/{max_retries}次): {url} - {e}, "
+                    f"{backoff:.1f}s后重试"
+                )
+                if attempt < max_retries:
+                    time.sleep(backoff)
+        raise last_exc
 
     def _safe_filename(self, name):
         name = re.sub(r'[\\/:*?"<>|]', '_', name)
@@ -236,7 +274,6 @@ class CrawlerEngine:
                     return
 
                 try:
-                    time.sleep(self.config.request_delay)
                     chapter_html = self._fetch_page(session, chapter_info["url"])
                     if chapter_html:
                         parsed = self.parser.parse_chapter_content(chapter_html)
