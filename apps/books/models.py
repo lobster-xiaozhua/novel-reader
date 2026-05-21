@@ -2,7 +2,7 @@ from django.db import models
 
 
 class Tag(models.Model):
-    name = models.CharField(max_length=30, unique=True, verbose_name='标签名')
+    name = models.CharField(max_length=30, unique=True, db_index=True, verbose_name='标签名')
     color = models.CharField(max_length=7, default='#f59e0b', verbose_name='颜色')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
 
@@ -24,7 +24,7 @@ class Book(models.Model):
     tags = models.ManyToManyField(Tag, blank=True, related_name='books', verbose_name='标签')
     total_chapters = models.PositiveIntegerField(default=0, verbose_name='总章节数')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+    updated_at = models.DateTimeField(auto_now=True, db_index=True, verbose_name='更新时间')
 
     class Meta:
         verbose_name = '书籍'

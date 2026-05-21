@@ -233,5 +233,54 @@ function uploadFiles(files) {
         showToast('导入失败，请重试', 'error');
     });
 }
+
+(function(){
+    let loading = false;
+    let page = {{ page_obj.number|default:1 }};
+    const totalPages = {{ page_obj.paginator.num_pages|default:1 }};
+    const container = document.getElementById('booksGrid');
+    const sentinel = document.createElement('div');
+    sentinel.id = 'scrollSentinel';
+    sentinel.style.cssText = 'height:20px;margin:20px 0;';
+    if (container) container.after(sentinel);
+
+    if ('IntersectionObserver' in window && totalPages > 1) {
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && !loading && page < totalPages) {
+                loadMore();
+            }
+        }, {rootMargin: '200px'});
+        observer.observe(sentinel);
+    }
+
+    function loadMore() {
+        loading = true;
+        page++;
+        const params = new URLSearchParams(window.location.search);
+        params.set('page', page);
+        fetch(window.location.pathname + '?' + params.toString(), {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        })
+        .then(r => r.text())
+        .then(html => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const newCards = doc.querySelectorAll('.book-card');
+            newCards.forEach((card, i) => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                container.appendChild(card);
+                requestAnimationFrame(() => {
+                    card.style.transition = 'all .4s ease';
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                });
+            });
+            loading = false;
+            if (page >= totalPages && sentinel) sentinel.style.display = 'none';
+        })
+        .catch(() => { loading = false; });
+    }
+})();
 </script>
 {% endblock %}

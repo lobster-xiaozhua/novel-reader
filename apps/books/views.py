@@ -8,6 +8,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q, Count
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
+from django.views.decorators.cache import cache_page
 from django.core.cache import cache
 from django.utils import timezone
 from .models import Book, Tag
@@ -18,6 +19,7 @@ from apps.favorites.models import Favorite
 logger = logging.getLogger(__name__)
 
 
+@cache_page(60)
 def home(request):
     try:
         recent_books = Book.objects.prefetch_related('chapters', 'tags').order_by('-created_at')[:6]
@@ -78,6 +80,7 @@ def _calc_streak(user):
     return streak
 
 
+@cache_page(30)
 def book_list(request):
     query = request.GET.get('q', '')
     tag = request.GET.get('tag', '')
@@ -117,7 +120,7 @@ def book_list(request):
 
 
 def book_detail(request, pk):
-    book = get_object_or_404(Book.objects.prefetch_related('chapters', 'tags'), pk=pk)
+    book = get_object_or_404(Book.objects.select_related().prefetch_related('chapters', 'tags'), pk=pk)
     chapters = book.chapters.all()
 
     is_favorited = False

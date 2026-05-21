@@ -1912,6 +1912,11 @@ textarea.input {
 }
 .ranking-stat { font-size: 12px; color: var(--text-tertiary); }
 
+/* ========== Lazy Loading ========== */
+.lazy-img{opacity:0;transition:opacity .4s ease;will-change:opacity}
+.lazy-img.loaded{opacity:1}
+.lazy-placeholder{background:linear-gradient(90deg,var(--bg-card) 25%,var(--bg-hover) 50%,var(--bg-card) 75%);background-size:200% 100%;animation:skeleton-shimmer 1.5s ease-in-out infinite}
+
 /* ========== Filter Bar ========== */
 .filter-bar {
     display: flex;

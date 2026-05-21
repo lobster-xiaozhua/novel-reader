@@ -12,15 +12,15 @@ class CrawlerTask(models.Model):
         ('cancelled', '已取消'),
     ]
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='用户')
-    url = models.URLField(max_length=500, verbose_name='目标URL')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='状态')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, db_index=True, verbose_name='用户')
+    url = models.URLField(db_index=True, verbose_name='URL')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True, verbose_name='状态')
     book = models.ForeignKey(Book, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='关联书籍')
     total_chapters = models.PositiveIntegerField(default=0, verbose_name='总章节数')
     downloaded_chapters = models.PositiveIntegerField(default=0, verbose_name='已下载章节数')
     error_message = models.TextField(blank=True, verbose_name='错误信息')
     logs = models.TextField(blank=True, verbose_name='日志')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 
     class Meta:

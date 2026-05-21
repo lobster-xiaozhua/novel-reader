@@ -4,11 +4,11 @@ from apps.books.models import Book
 
 class Chapter(models.Model):
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='chapters', verbose_name='书籍', db_index=True)
-    chapter_number = models.PositiveIntegerField(verbose_name='章节号', db_index=True)
-    title = models.CharField(max_length=200, verbose_name='标题', db_index=True)
+    chapter_number = models.PositiveIntegerField(db_index=True, verbose_name='章节号')
+    title = models.CharField(max_length=200, db_index=True, verbose_name='章节标题')
     file_path = models.CharField(max_length=500, verbose_name='文件路径')
-    word_count = models.PositiveIntegerField(default=0, verbose_name='字数')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    word_count = models.PositiveIntegerField(default=0, db_index=True, verbose_name='字数')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='创建时间')
 
     class Meta:
         verbose_name = '章节'

@@ -109,6 +109,31 @@
         });
     </script>
 
+<script>
+(function(){
+    if ('IntersectionObserver' in window) {
+        const imgObserver = new IntersectionObserver((entries, obs) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    if (img.dataset.src) {
+                        img.src = img.dataset.src;
+                        img.onload = () => img.classList.add('loaded');
+                    }
+                    obs.unobserve(img);
+                }
+            });
+        }, {rootMargin: '100px'});
+        document.querySelectorAll('img[data-src]').forEach(img => imgObserver.observe(img));
+    } else {
+        document.querySelectorAll('img[data-src]').forEach(img => {
+            img.src = img.dataset.src;
+            img.classList.add('loaded');
+        });
+    }
+})();
+</script>
+
     {% block extra_js %}{% endblock %}
 </body>
 </html>
