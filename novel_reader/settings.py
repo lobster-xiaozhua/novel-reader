@@ -32,6 +32,11 @@ if not DEBUG:
     X_FRAME_OPTIONS = 'DENY'
 
 INSTALLED_APPS = [
+    'unfold',
+    'unfold.contrib.filters',
+    'unfold.contrib.forms',
+    'unfold.contrib.inlines',
+    'unfold.contrib.import_export',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -245,6 +250,105 @@ HAYSTACK_SEARCH_RESULTS_PER_PAGE = 12
 # Ninja API
 NINJA_PAGINATION_PER_PAGE = 20
 NINJA_PAGINATION_MAX_LIMIT = 100
+
+# Unfold Admin Theme
+UNFOLD = {
+    "SITE_TITLE": "小说阅读器管理后台",
+    "SITE_HEADER": "📖 小说阅读器",
+    "SITE_SYMBOL": "menu_book",
+    "DASHBOARD_CALLBACK": "apps.books.admin.dashboard_callback",
+    "THEME": "dark",
+    "COLORS": {
+        "primary": {
+            "50": "255 251 235",
+            "100": "254 243 199",
+            "200": "253 230 138",
+            "300": "252 211 77",
+            "400": "251 191 36",
+            "500": "245 158 11",
+            "600": "217 119 6",
+            "700": "180 83 9",
+            "800": "146 64 14",
+            "900": "120 53 15",
+            "950": "69 26 3",
+        },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": True,
+        "navigation": [
+            {
+                "title": "数据概览",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Dashboard",
+                        "icon": "dashboard",
+                        "link": "/admin/",
+                    },
+                ],
+            },
+            {
+                "title": "内容管理",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "书籍",
+                        "icon": "menu_book",
+                        "link": "/admin/books/book/",
+                    },
+                    {
+                        "title": "章节",
+                        "icon": "article",
+                        "link": "/admin/chapters/chapter/",
+                    },
+                    {
+                        "title": "标签",
+                        "icon": "label",
+                        "link": "/admin/books/tag/",
+                    },
+                ],
+            },
+            {
+                "title": "用户与阅读",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "用户",
+                        "icon": "people",
+                        "link": "/admin/auth/user/",
+                    },
+                    {
+                        "title": "阅读进度",
+                        "icon": "bookmark",
+                        "link": "/admin/reader/readingprogress/",
+                    },
+                    {
+                        "title": "阅读统计",
+                        "icon": "analytics",
+                        "link": "/admin/reader/readingstats/",
+                    },
+                    {
+                        "title": "收藏",
+                        "icon": "favorite",
+                        "link": "/admin/favorites/favorite/",
+                    },
+                ],
+            },
+            {
+                "title": "系统",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "爬虫任务",
+                        "icon": "spider",
+                        "link": "/admin/crawler/crawlertask/",
+                    },
+                ],
+            },
+        ],
+    },
+}
 
 # Debug Toolbar
 if DEBUG:
