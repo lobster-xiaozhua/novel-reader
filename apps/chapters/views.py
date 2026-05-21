@@ -1,12 +1,14 @@
 import os
+import json
 import logging
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.core.cache import cache
+from django.utils import timezone
 from apps.books.models import Book
-from apps.reader.models import ReadingProgress
+from apps.reader.models import ReadingProgress, ReadingStats
 from .models import Chapter
 
 logger = logging.getLogger(__name__)
@@ -60,11 +62,13 @@ def chapter_read(request, book_id, chapter_id):
         ).select_related('chapter').first()
 
     content = _read_chapter_content(chapter)
+    chapters_json = json.dumps(all_chapters, ensure_ascii=False)
 
     context = {
         'book': book,
         'chapter': chapter,
         'chapters': all_chapters,
+        'chapters_json': chapters_json,
         'content': content,
         'progress': progress,
         'prev_chapter': prev_chapter,
@@ -91,4 +95,38 @@ def save_progress(request, book_id):
         defaults={'chapter': chapter, 'position': position}
     )
 
+    return JsonResponse({'status': 'ok'})
+
+
+@login_required
+@require_POST
+def track_stats(request):
+    try:
+        seconds = int(request.POST.get('seconds', 0))
+        chapter_id = request.POST.get('chapter_id', '0')
+    except (ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': '参数错误'}, status=400)
+
+    if seconds < 5:
+        return JsonResponse({'status': 'ok'})
+
+    today = timezone.now().date()
+    words = 0
+    try:
+        ch = Chapter.objects.get(pk=int(chapter_id))
+        words = ch.word_count or 0
+    except (Chapter.DoesNotExist, ValueError):
+        pass
+
+    stats, _ = ReadingStats.objects.get_or_create(
+        user=request.user, date=today,
+        defaults={'read_seconds': seconds, 'chapters_read': 1, 'words_read': words}
+    )
+    if not _:
+        stats.read_seconds += seconds
+        stats.chapters_read += 1
+        stats.words_read += words
+        stats.save(update_fields=['read_seconds', 'chapters_read', 'words_read'])
+
+    logger.info(f'[Stats] {request.user.username} 阅读 {seconds}s 章节{chapter_id}')
     return JsonResponse({'status': 'ok'})

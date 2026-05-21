@@ -1,11 +1,16 @@
 {% extends 'base.html' %}
+{% load book_tags %}
 
 {% block title %}书架 - 小说阅读器{% endblock %}
 
 {% block content %}
+<div x-data="{showAdd: false, showImport: false, dragging: false, importing: false, result: null}">
 <div class="page-header">
     <h1 class="page-title">📚 书架</h1>
-    <button class="btn btn-primary" onclick="document.getElementById('addModal').style.display='flex'">+ 添加书籍</button>
+    <div style="display:flex;gap:10px;">
+        <button class="btn btn-secondary" @click="showImport=true">📥 批量导入</button>
+        <button class="btn btn-primary" @click="showAdd=true">+ 添加书籍</button>
+    </div>
 </div>
 
 <div class="search-box" style="margin-bottom:20px">
@@ -16,23 +21,36 @@
 
 <div class="filter-bar">
     <select class="filter-select" id="sortField" onchange="applySort()">
-        <option value="title" {% if request.GET.sort == 'title' or not request.GET.sort %}selected{% endif %}>按标题</option>
+        <option value="created_at" {% if request.GET.sort == 'created_at' or not request.GET.sort %}selected{% endif %}>按时间</option>
+        <option value="title" {% if request.GET.sort == 'title' %}selected{% endif %}>按标题</option>
         <option value="author" {% if request.GET.sort == 'author' %}selected{% endif %}>按作者</option>
-        <option value="chapters" {% if request.GET.sort == 'chapters' %}selected{% endif %}>按章节数</option>
+        <option value="total_chapters" {% if request.GET.sort == 'total_chapters' %}selected{% endif %}>按章节数</option>
     </select>
     <select class="filter-select" id="sortOrder" onchange="applySort()">
-        <option value="asc" {% if request.GET.order == 'asc' or not request.GET.order %}selected{% endif %}>升序</option>
-        <option value="desc" {% if request.GET.order == 'desc' %}selected{% endif %}>降序</option>
+        <option value="desc" {% if request.GET.order == 'desc' or not request.GET.order %}selected{% endif %}>降序</option>
+        <option value="asc" {% if request.GET.order == 'asc' %}selected{% endif %}>升序</option>
     </select>
 </div>
 
 <div class="category-pills">
-    <a href="{% url 'book_list' %}" class="category-pill {% if not request.GET.cat %}active{% endif %}">全部</a>
-    <a href="?cat=fantasy{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}" class="category-pill {% if request.GET.cat == 'fantasy' %}active{% endif %}">玄幻</a>
-    <a href="?cat=romance{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}" class="category-pill {% if request.GET.cat == 'romance' %}active{% endif %}">言情</a>
-    <a href="?cat=xianxia{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}" class="category-pill {% if request.GET.cat == 'xianxia' %}active{% endif %}">仙侠</a>
-    <a href="?cat=action{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}" class="category-pill {% if request.GET.cat == 'action' %}active{% endif %}">都市</a>
+    <a href="{% url 'book_list' %}" class="category-pill {% if not current_cat %}active{% endif %}">全部</a>
+    <a href="?cat=fantasy" class="category-pill {% if current_cat == 'fantasy' %}active{% endif %}">玄幻</a>
+    <a href="?cat=romance" class="category-pill {% if current_cat == 'romance' %}active{% endif %}">言情</a>
+    <a href="?cat=xianxia" class="category-pill {% if current_cat == 'xianxia' %}active{% endif %}">仙侠</a>
+    <a href="?cat=action" class="category-pill {% if current_cat == 'action' %}active{% endif %}">都市</a>
+    <a href="?cat=suspense" class="category-pill {% if current_cat == 'suspense' %}active{% endif %}">悬疑</a>
+    <a href="?cat=game" class="category-pill {% if current_cat == 'game' %}active{% endif %}">网游</a>
 </div>
+
+{% if all_tags %}
+<div class="category-pills" style="margin-top:-10px;margin-bottom:24px;">
+    {% for tag in all_tags %}
+    <a href="?tag={{ tag.name }}" class="category-pill {% if current_tag == tag.name %}active{% endif %}" style="border-color:{{ tag.color }};{% if current_tag == tag.name %}background:{{ tag.color }}20;color:{{ tag.color }}{% endif %}">
+        # {{ tag.name }} <span style="opacity:.6;font-size:11px;">({{ tag.book_count }})</span>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
 
 {% if page_obj %}
     <div class="books-grid" id="booksGrid">
@@ -50,26 +68,33 @@
                         <div class="book-card-desc">{{ book.description }}</div>
                     {% endif %}
                     <div class="book-card-footer">
-                        <div class="book-book-meta">{{ book.total_chapters }} 章</div>
+                        <div class="book-card-meta">{{ book.total_chapters }} 章</div>
                         {% if book.category %}
-                            <span class="book-card-tag tag-{{ book.category|default:'default' }}">{{ book.get_category_display|default:book.category }}</span>
+                            <span class="book-card-tag tag-{{ book.category|default:'default' }}">{{ book.category }}</span>
                         {% endif %}
                     </div>
+                    {% if book.tags.all %}
+                    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;">
+                        {% for tag in book.tags.all %}
+                        <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:{{ tag.color }}20;color:{{ tag.color }};">#{{ tag.name }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         {% endfor %}
     </div>
 
-    {% if is_paginated and page_obj.paginator.num_pages > 1 %}
+    {% if page_obj.paginator.num_pages > 1 %}
         <div class="pagination">
             {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}{% if request.GET.cat %}&cat={{ request.GET.cat }}{% endif %}" class="btn btn-secondary btn-sm">上一页</a>
+                <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}{% if current_cat %}&cat={{ current_cat }}{% endif %}{% if current_tag %}&tag={{ current_tag }}{% endif %}" class="btn btn-secondary btn-sm">上一页</a>
             {% else %}
                 <button class="btn btn-secondary btn-sm" disabled>上一页</button>
             {% endif %}
             <span class="page-info">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
             {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}{% if request.GET.cat %}&cat={{ request.GET.cat }}{% endif %}" class="btn btn-secondary btn-sm">下一页</a>
+                <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.order %}&order={{ request.GET.order }}{% endif %}{% if current_cat %}&cat={{ current_cat }}{% endif %}{% if current_tag %}&tag={{ current_tag }}{% endif %}" class="btn btn-secondary btn-sm">下一页</a>
             {% else %}
                 <button class="btn btn-secondary btn-sm" disabled>下一页</button>
             {% endif %}
@@ -78,17 +103,16 @@
 {% else %}
     <div class="empty-state" id="emptyState">
         <div class="empty-icon">📚</div>
-        <div class="empty-text">书架空空如也，看看这些推荐吧</div>
-        <div class="books-grid" id="demoGrid"></div>
+        <div class="empty-text">书架空空如也，拖拽txt文件到下方导入吧</div>
         <div class="empty-action">
-            <button class="btn btn-primary" onclick="document.getElementById('addModal').style.display='flex'">+ 添加第一本书</button>
+            <button class="btn btn-primary" @click="showImport=true">📥 批量导入</button>
         </div>
     </div>
 {% endif %}
 
 <!-- Add Book Modal -->
-<div id="addModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
-    <div class="modal">
+<div id="addModal" class="modal-overlay" style="display:none;" x-show="showAdd" @click.self="showAdd=false">
+    <div class="modal" @click.stop>
         <h2 class="modal-title">添加书籍</h2>
         <form method="post" action="{% url 'book_add' %}">
             {% csrf_token %}
@@ -101,15 +125,63 @@
                 <input type="text" name="author" class="input" placeholder="输入作者">
             </div>
             <div class="form-group">
+                <label class="form-label">分类</label>
+                <input type="text" name="category" class="input" placeholder="如：玄幻、言情">
+            </div>
+            <div class="form-group">
                 <label class="form-label">简介</label>
                 <textarea name="description" class="input" rows="3" placeholder="输入简介"></textarea>
             </div>
+            <div class="form-group">
+                <label class="form-label">标签</label>
+                <input type="text" name="tags_input" class="input" placeholder="标签，用逗号分隔">
+            </div>
             <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" onclick="document.getElementById('addModal').style.display='none'">取消</button>
+                <button type="button" class="btn btn-secondary" @click="showAdd=false">取消</button>
                 <button type="submit" class="btn btn-primary">添加</button>
             </div>
         </form>
     </div>
+</div>
+
+<!-- Batch Import Modal -->
+<div id="importModal" class="modal-overlay" style="display:none;" x-show="showImport" @click.self="showImport=false;result=null">
+    <div class="modal" style="max-width:540px;" @click.stop>
+        <h2 class="modal-title">📥 批量导入</h2>
+        <div class="drop-zone" id="dropZone"
+             @dragover.prevent="dragging=true" @dragleave.prevent="dragging=false"
+             @drop.prevent="handleDrop($event)"
+             :class="{'drop-zone-active': dragging}"
+             style="border:2px dashed var(--border-color);border-radius:var(--radius-lg);padding:40px 24px;text-align:center;cursor:pointer;transition:all .25s;">
+            <div style="font-size:48px;margin-bottom:12px;">📄</div>
+            <div style="color:var(--text-secondary);font-size:14px;margin-bottom:8px;">拖拽 txt 文件到此处</div>
+            <div style="color:var(--text-tertiary);font-size:12px;margin-bottom:16px;">支持多个文件，自动识别章节</div>
+            <label class="btn btn-secondary btn-sm" style="cursor:pointer;">
+                选择文件
+                <input type="file" multiple accept=".txt" style="display:none;" @change="handleFiles($event.target.files)">
+            </label>
+        </div>
+        <div x-show="importing" style="text-align:center;padding:20px;">
+            <div class="spinner" style="margin:0 auto 12px;"></div>
+            <span style="color:var(--text-secondary);font-size:13px;">正在导入...</span>
+        </div>
+        <div x-show="result && !importing" style="margin-top:16px;">
+            <div style="padding:12px 16px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);border-radius:8px;color:var(--success);margin-bottom:8px;">
+                ✅ 成功导入 <span x-text="result?.imported || 0"></span> / <span x-text="result?.total || 0"></span> 本
+            </div>
+            <template x-if="result?.errors?.length">
+                <div style="padding:12px 16px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:8px;color:var(--danger);font-size:12px;">
+                    <template x-for="err in result.errors">
+                        <div x-text="err" style="margin-bottom:4px;"></div>
+                    </template>
+                </div>
+            </template>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" @click="showImport=false;result=null">关闭</button>
+        </div>
+    </div>
+</div>
 </div>
 {% endblock %}
 
@@ -122,31 +194,44 @@ function applySort() {
     window.location.search = params.toString();
 }
 
-(function() {
-    const demoBooks = [
-        { t: '斗破苍穹', a: '天蚕土豆', d: '这里是斗气的世界，没有花俏艳丽的魔法，有的，仅仅是繁衍到巅峰的斗气！', c: 1645, cat: 'xianxia' },
-        { t: '完美世界', a: '辰东', d: '一粒尘可填海，一根草斩尽日月星辰，弹指间天翻地覆。', c: 1908, cat: 'fantasy' },
-        { t: '遮天', a: '辰东', d: '冰冷与黑暗并存的宇宙深处，九具庞大的龙尸拉着一口青铜古棺，亘古长存。', c: 1856, cat: 'fantasy' },
-        { t: '凡人修仙传', a: '忘语', d: '一个普通山村小子，偶然之下进入到当地江湖小门派，虽然资质平庸，但依靠自身努力和合理算计修炼成仙。', c: 2446, cat: 'xianxia' },
-        { t: '全职高手', a: '蝴蝶蓝', d: '网游荣耀中被誉为教科书级别的顶尖高手叶修，因为种种原因遭到俱乐部的驱逐。', c: 1728, cat: 'action' },
-        { t: '庆余年', a: '猫腻', d: '积善之家，必有余庆，留余庆，留余庆，忽遇恩人；幸娘亲，幸娘亲，积得阴功。', c: 746, cat: 'action' },
-        { t: '琅琊榜', a: '海宴', d: '麒麟才子江左梅郎，搅动风云，为七万赤焰忠魂洗雪污名。', c: 360, cat: 'action' },
-        { t: '三体', a: '刘慈欣', d: '文化大革命如火如荼进行的同时，军方探寻外星文明的绝秘计划"红岸工程"取得了突破性进展。', c: 289, cat: 'fantasy' }
-    ];
+function handleDrop(e) {
+    const dt = e.dataTransfer;
+    if (dt.files.length) uploadFiles(dt.files);
+}
 
-    const demoGrid = document.getElementById('demoGrid');
-    if (!demoGrid) return;
+function handleFiles(files) {
+    if (files.length) uploadFiles(files);
+}
 
-    const tagMap = { fantasy: '玄幻', romance: '言情', xianxia: '仙侠', action: '都市' };
+function uploadFiles(files) {
+    const formData = new FormData();
+    for (const f of files) {
+        if (f.name.endsWith('.txt')) formData.append('files', f);
+    }
+    if (!formData.has('files')) { showToast('请选择txt文件', 'error'); return; }
 
-    demoBooks.forEach((b, i) => {
-        const g = getBookGradient(b.t);
-        const card = document.createElement('div');
-        card.className = `book-card fade-in`;
-        card.style.animationDelay = `${i * 0.08}s`;
-        card.innerHTML = `<div class="book-card-cover" style="background:${g[0]}"><span class="cover-char">${b.t[0]}</span></div><div class="book-card-body"><div class="book-card-title">${b.t}</div><div class="book-card-author">${b.a}</div><div class="book-card-desc">${b.d}</div><div class="book-card-footer"><div class="book-card-meta">${b.c} 章</div><span class="book-card-tag tag-${b.cat}">${tagMap[b.cat]||'其他'}</span></div></div>`;
-        demoGrid.appendChild(card);
+    const importModal = document.getElementById('importModal');
+    const alpine = importModal.__x?.$data;
+    if (alpine) alpine.importing = true;
+
+    const csrf = document.querySelector('[name=csrfmiddlewaretoken]')?.value || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    fetch('{% url "batch_import" %}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrf},
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (alpine) { alpine.importing = false; alpine.result = data; }
+        if (data.imported > 0) {
+            showToast(`成功导入 ${data.imported} 本书`, 'success');
+            setTimeout(() => location.reload(), 1500);
+        }
+    })
+    .catch(() => {
+        if (alpine) alpine.importing = false;
+        showToast('导入失败，请重试', 'error');
     });
-})();
+}
 </script>
 {% endblock %}

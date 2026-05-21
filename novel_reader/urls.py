@@ -14,6 +14,7 @@ urlpatterns = [
     path('favorites/', include('apps.favorites.urls')),
     path('crawler/', include('apps.crawler.urls')),
     path('search/', include('apps.search.urls')),
+    path('api/v1/', include('apps.api_urls')),
 ]
 
 if settings.DEBUG:
