@@ -1,8 +1,8 @@
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
-from django.conf.urls.static import static
 from apps.books.views import home
+from apps.ninja_api import api
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -14,8 +14,8 @@ urlpatterns = [
     path('favorites/', include('apps.favorites.urls')),
     path('crawler/', include('apps.crawler.urls')),
     path('search/', include('apps.search.urls')),
-    path('api/v1/', include('apps.api_urls')),
+    path('api/v1/', api.urls),
 ]
 
 if settings.DEBUG:
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += [path('__debug__/', include('debug_toolbar.urls'))]

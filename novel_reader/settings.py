@@ -1,19 +1,30 @@
-import os
+import environ
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dev-key-change-in-production-!@#$%^&*()')
+env = environ.Env(
+    DEBUG=(bool, True),
+    SECURE_SSL_REDIRECT=(bool, False),
+    SECURE_HSTS_SECONDS=(int, 0),
+    CONN_MAX_AGE=(int, 60),
+    CACHE_BACKEND=(str, 'django.core.cache.backends.locmem.LocMemCache'),
+    CACHE_LOCATION=(str, 'novelreader-cache'),
+    CELERY_BROKER_URL=(str, 'redis://localhost:6379/0'),
+    CELERY_RESULT_BACKEND=(str, 'redis://localhost:6379/0'),
+    DEFAULT_BOOK_PATH=(str, ''),
+)
+environ.Env.read_env(BASE_DIR / '.env')
 
-DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
-
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+SECRET_KEY = env('SECRET_KEY', default='django-insecure-dev-key-change-in-production-!@#$%^&*()')
+DEBUG = env('DEBUG')
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
 if not DEBUG:
-    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'False').lower() == 'true'
+    SECURE_SSL_REDIRECT = env('SECURE_SSL_REDIRECT')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0'))
+    SECURE_HSTS_SECONDS = env('SECURE_HSTS_SECONDS')
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -35,18 +46,21 @@ INSTALLED_APPS = [
     'apps.favorites',
     'apps.crawler',
     'apps.search',
-    'rest_framework',
-    'rest_framework.authtoken',
+    'ninja',
+    'django_htmx',
+    'django_cotton',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django_htmx.middleware.HtmxMiddleware',
 ]
 
 ROOT_URLCONF = 'novel_reader.urls'
@@ -62,6 +76,10 @@ TEMPLATES = [
                     'django.template.loaders.app_directories.Loader',
                 ]),
             ],
+            'builtins': [
+                'django.templatetags.static',
+                'django_cotton.templatetags.cotton',
+            ],
             'context_processors': [
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
@@ -75,11 +93,11 @@ TEMPLATES = [
 WSGI_APPLICATION = 'novel_reader.wsgi.application'
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'data' / 'db.sqlite3',
-    }
+    'default': env.db_url(
+        default=f'sqlite:///{BASE_DIR / "data" / "db.sqlite3"}'
+    )
 }
+DATABASES['default']['CONN_MAX_AGE'] = env('CONN_MAX_AGE')
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -96,17 +114,19 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+WHITENOISE_MAX_AGE = 31536000
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CACHES = {
     'default': {
-        'BACKEND': os.environ.get('CACHE_BACKEND', 'django.core.cache.backends.locmem.LocMemCache'),
-        'LOCATION': os.environ.get('CACHE_LOCATION', 'novelreader-cache'),
+        'BACKEND': env('CACHE_BACKEND'),
+        'LOCATION': env('CACHE_LOCATION'),
         'OPTIONS': {
             'MAX_ENTRIES': 5000,
             'CULL_FREQUENCY': 3,
-        } if os.environ.get('CACHE_BACKEND', '') == 'django.core.cache.backends.locmem.LocMemCache' else {},
+        } if env('CACHE_BACKEND') == 'django.core.cache.backends.locmem.LocMemCache' else {},
     }
 }
 
@@ -120,6 +140,10 @@ LOGGING = {
     'formatters': {
         'simple': {'format': '[%(levelname)s] %(name)s: %(message)s'},
         'verbose': {'format': '[%(asctime)s] [%(levelname)s] %(name)s:%(lineno)d: %(message)s'},
+        'json': {
+            'class': 'pythonjsonlogger.jsonlogger.JsonFormatter',
+            'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
+        },
     },
     'handlers': {
         'console': {
@@ -177,6 +201,11 @@ LOGGING = {
             'level': 'DEBUG',
             'propagate': False,
         },
+        'ninja': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
 
@@ -191,19 +220,19 @@ CACHE_DIR = BASE_DIR / 'data' / 'cache'
 for _d in [BOOKS_DIR, LOGS_DIR, CACHE_DIR]:
     _d.mkdir(parents=True, exist_ok=True)
 
-# Celery 配置
-CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+# Celery
+CELERY_BROKER_URL = env('CELERY_BROKER_URL')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 30 * 60  # 30分钟
+CELERY_TASK_TIME_LIMIT = 30 * 60
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_ACKS_LATE = True
 
-# Haystack 全文搜索配置
+# Haystack
 HAYSTACK_CONNECTIONS = {
     'default': {
         'ENGINE': 'haystack.backends.whoosh_backend.WhooshEngine',
@@ -213,39 +242,18 @@ HAYSTACK_CONNECTIONS = {
 HAYSTACK_SIGNAL_PROCESSOR = 'haystack.signals.RealtimeSignalProcessor'
 HAYSTACK_SEARCH_RESULTS_PER_PAGE = 12
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.TokenAuthentication',
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticatedOrReadOnly',
-    ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20,
-    'DEFAULT_FILTER_BACKENDS': [
-        'rest_framework.filters.SearchFilter',
-        'rest_framework.filters.OrderingFilter',
-    ],
-    'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle',
-    ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '30/hour',
-        'user': '100/hour',
-    },
-}
+# Ninja API
+NINJA_PAGINATION_PER_PAGE = 20
+NINJA_PAGINATION_MAX_LIMIT = 100
 
-# Static files - Manifest for cache busting
-STORAGES = {
-    'default': {
-        'BACKEND': 'django.core.files.storage.FileSystemStorage',
-    },
-    'staticfiles': {
-        'BACKEND': 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage',
-    },
-}
-
-# Database connection pooling
-DATABASES['default']['CONN_MAX_AGE'] = 60
+# Debug Toolbar
+if DEBUG:
+    INSTALLED_APPS.insert(0, 'debug_toolbar')
+    MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+    INTERNAL_IPS = ['127.0.0.1', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']
+    DEBUG_TOOLBAR_CONFIG = {
+        'SHOW_TOOLBAR_CALLBACK': lambda request: True,
+        'DISABLE_PANELS': {
+            'debug_toolbar.panels.redirects.RedirectsPanel',
+        },
+    }
