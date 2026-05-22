@@ -52,8 +52,6 @@ INSTALLED_APPS = [
     'apps.crawler',
     'apps.search',
     'ninja',
-    'django_htmx',
-    'django_cotton',
 ]
 
 MIDDLEWARE = [
@@ -65,7 +63,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django_htmx.middleware.HtmxMiddleware',
 ]
 
 ROOT_URLCONF = 'novel_reader.urls'
@@ -83,7 +80,6 @@ TEMPLATES = [
             ],
             'builtins': [
                 'django.templatetags.static',
-                'django_cotton.templatetags.cotton',
             ],
             'context_processors': [
                 'django.template.context_processors.debug',
@@ -216,9 +212,9 @@ LOGGING = {
     },
 }
 
-LOGIN_URL = '/accounts/login/'
+LOGIN_URL = '/login'
 LOGIN_REDIRECT_URL = '/'
-LOGOUT_REDIRECT_URL = '/accounts/login/'
+LOGOUT_REDIRECT_URL = '/login'
 
 BOOKS_DIR = BASE_DIR / 'data' / 'books'
 LOGS_DIR = BASE_DIR / 'data' / 'logs'

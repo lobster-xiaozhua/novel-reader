@@ -12,7 +12,6 @@ import Favorites from './views/Favorites'
 import Crawler from './views/Crawler'
 import Login from './views/Login'
 import ErrorPage from './views/ErrorPage'
-import MarkdownDemo from './views/MarkdownDemo'
 
 function App() {
   return (
@@ -33,7 +32,6 @@ function App() {
           <Route path="stats" element={<Stats />} />
           <Route path="favorites" element={<Favorites />} />
           <Route path="crawler" element={<Crawler />} />
-          <Route path="markdown" element={<MarkdownDemo />} />
           <Route path="*" element={<ErrorPage code={404} />} />
         </Route>
       </Routes>

@@ -6,7 +6,7 @@ import { useUserStore } from '@/stores/userStore'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { setUser } = useUserStore()
+  const { login: loginUser } = useUserStore()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -21,14 +21,14 @@ export default function Login() {
     setLoading(true)
 
     try {
-      const endpoint = mode === 'login' ? '/accounts/login/' : '/accounts/register/'
+      const endpoint = mode === 'login' ? '/auth/login/' : '/auth/register/'
       const payload: Record<string, string> = { username, password }
       if (mode === 'register' && email) payload.email = email
 
       const res = await post<{ success: boolean; user?: { id: number; username: string; email: string; is_staff: boolean }; error?: string }>(endpoint, payload)
 
       if (res.success && res.user) {
-        setUser(res.user)
+        loginUser(res.user)
         navigate('/dashboard')
       } else {
         setError(res.error || '操作失败')

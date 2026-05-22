@@ -8,3 +8,7 @@ export function fetchCrawlerTasks(params?: { page?: number }) {
 export function createCrawlerTask(url: string) {
   return post<CrawlerTask>('/crawler/', { url })
 }
+
+export function fetchCrawlerTask(id: number) {
+  return get<CrawlerTask>(`/crawler/${id}/`)
+}

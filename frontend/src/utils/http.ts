@@ -1,9 +1,9 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios'
-import { ApiResponse } from '@/types'
 
 const http: AxiosInstance = axios.create({
   baseURL: '/api/v1',
   timeout: 30000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
@@ -12,30 +12,18 @@ const http: AxiosInstance = axios.create({
 
 http.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
     return config
   },
   (error) => Promise.reject(error)
 )
 
 http.interceptors.response.use(
-  (response) => {
-    const data = response.data as ApiResponse<unknown>
-    if (data.code !== 0 && data.code !== undefined) {
-      console.error(`API Error: ${data.message}`)
-      return Promise.reject(new Error(data.message))
-    }
-    return response
-  },
+  (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
       window.location.href = '/login'
     }
-    const msg = (error.response?.data as { message?: string })?.message || error.message || '请求失败'
+    const msg = (error.response?.data as { detail?: string })?.detail || error.message || '请求失败'
     console.error(`HTTP Error: ${msg}`)
     return Promise.reject(error)
   }

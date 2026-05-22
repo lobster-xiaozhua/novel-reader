@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Users as UsersIcon, Shield, User, Clock } from 'lucide-react'
-import { fetchUsers, type UserItem } from '@/api/users'
+import { fetchUsers } from '@/api/users'
+import { UserItem } from '@/types'
 
 export default function Users() {
   const { data, isLoading } = useQuery({

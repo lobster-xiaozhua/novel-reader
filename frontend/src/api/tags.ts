@@ -1,11 +1,5 @@
 import { get, post, del } from '@/utils/http'
-
-export interface TagItem {
-  id: number
-  name: string
-  color: string
-  book_count: number
-}
+import { TagItem } from '@/types'
 
 export function fetchTags() {
   return get<{ items: TagItem[]; total: number }>('/tags/')

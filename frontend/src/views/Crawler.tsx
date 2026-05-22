@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Bug,
   Clock,
@@ -9,7 +9,7 @@ import {
   XCircle,
   Plus,
 } from 'lucide-react'
-import { fetchCrawlerTasks } from '@/api/crawler'
+import { fetchCrawlerTasks, createCrawlerTask } from '@/api/crawler'
 import { CrawlerTask } from '@/types'
 
 const statusConfig = {
@@ -22,12 +22,27 @@ const statusConfig = {
 
 export default function Crawler() {
   const [url, setUrl] = useState('')
+  const queryClient = useQueryClient()
+
   const { data, isLoading } = useQuery({
     queryKey: ['crawler-tasks'],
     queryFn: () => fetchCrawlerTasks(),
   })
 
+  const createMutation = useMutation({
+    mutationFn: createCrawlerTask,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crawler-tasks'] })
+      setUrl('')
+    },
+  })
+
   const tasks = data?.items || []
+
+  const handleCreate = () => {
+    if (!url.trim()) return
+    createMutation.mutate(url.trim())
+  }
 
   return (
     <div className="space-y-6">
@@ -39,16 +54,20 @@ export default function Crawler() {
             placeholder="输入URL..."
             value={url}
             onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             className="w-80 h-10 px-4 rounded-lg bg-card-bg border border-card-border text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50 transition-colors"
           />
-          <button className="flex items-center gap-2 px-4 h-10 rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 transition-colors">
-            <Plus className="w-4 h-4" />
+          <button
+            onClick={handleCreate}
+            disabled={createMutation.isPending || !url.trim()}
+            className="flex items-center gap-2 px-4 h-10 rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 transition-colors disabled:opacity-50"
+          >
+            {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             新建任务
           </button>
         </div>
       </div>
 
-      {/* Status Overview */}
       <div className="grid grid-cols-5 gap-4">
         {Object.entries(statusConfig).map(([key, config]) => {
           const count = tasks.filter((t: CrawlerTask) => t.status === key).length
@@ -65,7 +84,6 @@ export default function Crawler() {
         })}
       </div>
 
-      {/* Tasks Table */}
       <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
         <table className="w-full">
           <thead>
@@ -80,6 +98,10 @@ export default function Crawler() {
             {isLoading ? (
               <tr>
                 <td colSpan={4} className="text-center py-20 text-text-muted">加载中...</td>
+              </tr>
+            ) : tasks.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="text-center py-20 text-text-muted">暂无爬虫任务</td>
               </tr>
             ) : (
               tasks.map((task: CrawlerTask) => {
@@ -99,7 +121,7 @@ export default function Crawler() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md ${status.bg} ${status.color} text-xs font-medium`}>
-                        <StatusIcon className="w-3.5 h-3.5" />
+                        <StatusIcon className={`w-3.5 h-3.5 ${task.status === 'running' ? 'animate-spin' : ''}`} />
                         {status.label}
                       </span>
                     </td>
