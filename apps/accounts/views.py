@@ -1,57 +1,55 @@
-from django.shortcuts import render, redirect
+from django.http import JsonResponse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
-from .forms import LoginForm, RegisterForm
 
 
+@require_POST
 def login_view(request):
-    if request.user.is_authenticated:
-        return redirect('home')
-
-    if request.method == 'POST':
-        form = LoginForm(request.POST)
-        if form.is_valid():
-            username = form.cleaned_data['username']
-            password = form.cleaned_data['password']
-            user = authenticate(request, username=username, password=password)
-            if user is not None:
-                login(request, user)
-                next_url = request.GET.get('next') or request.POST.get('next')
-                if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
-                    return redirect(next_url)
-                return redirect('home')
-            else:
-                messages.error(request, '用户名或密码错误')
-    else:
-        form = LoginForm()
-
-    return render(request, 'accounts/login.html', {'form': form})
+    username = request.POST.get('username') or request.json().get('username')
+    password = request.POST.get('password') or request.json().get('password')
+    user = authenticate(request, username=username, password=password)
+    if user is not None:
+        login(request, user)
+        return JsonResponse({
+            'success': True,
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'is_staff': user.is_staff,
+            }
+        })
+    return JsonResponse({'success': False, 'error': '用户名或密码错误'}, status=401)
 
 
+@require_POST
 def register_view(request):
-    if request.user.is_authenticated:
-        return redirect('home')
+    from django.contrib.auth.models import User
+    username = request.POST.get('username') or request.json().get('username')
+    password = request.POST.get('password') or request.json().get('password')
+    email = request.POST.get('email') or request.json().get('email', '')
 
-    if request.method == 'POST':
-        form = RegisterForm(request.POST)
-        if form.is_valid():
-            user = form.save()
-            login(request, user)
-            messages.success(request, '注册成功！')
-            return redirect('home')
-    else:
-        form = RegisterForm()
+    if not username or not password:
+        return JsonResponse({'success': False, 'error': '用户名和密码不能为空'}, status=400)
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({'success': False, 'error': '用户名已存在'}, status=400)
 
-    return render(request, 'accounts/register.html', {'form': form})
+    user = User.objects.create_user(username=username, password=password, email=email)
+    login(request, user)
+    return JsonResponse({
+        'success': True,
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'is_staff': user.is_staff,
+        }
+    })
 
 
 @login_required
 @require_POST
 def logout_view(request):
     logout(request)
-    messages.success(request, '已退出登录')
-    return redirect('login')
+    return JsonResponse({'success': True})

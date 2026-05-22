@@ -118,9 +118,12 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_DIRS = [BASE_DIR / 'static']
+STATICFILES_DIRS = [BASE_DIR / 'static', BASE_DIR / 'frontend' / 'dist']
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 WHITENOISE_MAX_AGE = 31536000
+
+# React SPA fallback
+WHITENOISE_INDEX_FILE = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -146,7 +149,6 @@ LOGGING = {
         'simple': {'format': '[%(levelname)s] %(name)s: %(message)s'},
         'verbose': {'format': '[%(asctime)s] [%(levelname)s] %(name)s:%(lineno)d: %(message)s'},
         'json': {
-            'class': 'pythonjsonlogger.jsonlogger.JsonFormatter',
             'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
         },
     },
