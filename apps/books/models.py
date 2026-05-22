@@ -1,4 +1,5 @@
 from django.db import models
+from utils.book_gradient import get_book_gradient
 
 
 class Tag(models.Model):
@@ -40,18 +41,7 @@ class Book(models.Model):
 
     @property
     def cover_gradient(self):
-        colors = [
-            ('#667eea', '#764ba2'),
-            ('#f093fb', '#f5576c'),
-            ('#4facfe', '#00f2fe'),
-            ('#43e97b', '#38f9d7'),
-            ('#fa709a', '#fee140'),
-            ('#30cfd0', '#330867'),
-            ('#a8edea', '#fed6e3'),
-            ('#ff9a9e', '#fecfef'),
-        ]
-        idx = self.id % len(colors) if self.id else 0
-        return colors[idx]
+        return get_book_gradient(self.id)
 
     @property
     def chapter_count(self):

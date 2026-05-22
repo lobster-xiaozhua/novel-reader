@@ -16,10 +16,11 @@
 
 ## 技术栈
 
-- **后端**: Django 4.2 + SQLite
+- **后端**: Django 5.2 + Django Ninja + SQLite
 - **任务队列**: Celery + Redis
 - **搜索**: Django Haystack + Whoosh
-- **前端**: Django Templates + 原生 JavaScript + CSS3
+- **前端**: React 19 + Vite + TypeScript + Tailwind CSS + Zustand
+- **API**: Django Ninja (OpenAPI/Swagger)
 - **爬虫**: requests + BeautifulSoup4
 - **部署**: Docker + Gunicorn
 - **测试**: pytest

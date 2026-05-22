@@ -12,6 +12,7 @@ from apps.chapters.models import Chapter
 from apps.reader.models import ReadingProgress, ReadingStats
 from apps.favorites.models import Favorite
 from apps.crawler.models import CrawlerTask
+from utils.book_gradient import get_book_gradient
 
 # Auth helper: optional session auth (allows anonymous)
 class OptionalSessionAuth(SessionAuth):
@@ -28,6 +29,17 @@ api = NinjaAPI(
     docs_url='/docs/',
     openapi_url='/openapi.json',
 )
+
+
+@api.exception_handler(Exception)
+def global_exception_handler(request, exc):
+    import logging
+    logger = logging.getLogger('ninja')
+    logger.error(f'API Error: {request.path} - {type(exc).__name__}: {str(exc)}')
+    from ninja.errors import HttpError
+    if isinstance(exc, HttpError):
+        raise exc
+    return api.create_response(request, {'error': str(exc)}, status=500)
 
 
 # ========== Schemas ==========
@@ -80,20 +92,6 @@ class ChapterContentSchema(Schema):
     title: str
     word_count: int = 0
     content: str = ''
-
-
-class ReadingProgressSchema(Schema):
-    id: int
-    book_id: int
-    chapter_id: Optional[int] = None
-    position: int = 0
-    updated_at: str
-
-
-class ReadingProgressIn(Schema):
-    book_id: int
-    chapter_id: Optional[int] = None
-    position: int = 0
 
 
 class CrawlerTaskSchema(Schema):
@@ -184,18 +182,7 @@ class ProgressOut(Schema):
 # ========== Helpers ==========
 
 def book_gradient(book_id: Optional[int]) -> tuple:
-    colors = [
-        ('#667eea', '#764ba2'),
-        ('#f093fb', '#f5576c'),
-        ('#4facfe', '#00f2fe'),
-        ('#43e97b', '#38f9d7'),
-        ('#fa709a', '#fee140'),
-        ('#30cfd0', '#330867'),
-        ('#a8edea', '#fed6e3'),
-        ('#ff9a9e', '#fecfef'),
-    ]
-    idx = (book_id or 0) % len(colors)
-    return colors[idx]
+    return get_book_gradient(book_id or 0)
 
 
 # ========== Books ==========
@@ -273,15 +260,19 @@ def get_chapter_content(request, book_id: int, chapter_id: int):
 
 # ========== Progress ==========
 
-@api.get('/progress/', response=List[ReadingProgressSchema], auth=session_auth)
+@api.get('/progress/', response=List[ProgressOut], auth=session_auth)
 @paginate
 def list_progress(request):
-    qs = ReadingProgress.objects.filter(user=request.user)
+    qs = ReadingProgress.objects.filter(user=request.user).select_related('book', 'chapter')
     return [{
         'id': p.id,
         'book_id': p.book_id,
+        'book_title': p.book.title,
+        'book_author': p.book.author,
         'chapter_id': p.chapter_id,
+        'chapter_title': p.chapter.title if p.chapter else None,
         'position': p.position,
+        'total_chapters': p.book.total_chapters,
         'updated_at': p.updated_at.isoformat(),
     } for p in qs]
 
@@ -395,25 +386,6 @@ def list_users(request):
         'last_login': u.last_login.isoformat() if u.last_login else None,
         'book_count': ReadingProgress.objects.filter(user=u).count(),
     } for u in qs]
-
-
-# ========== Progress (enhanced) ==========
-
-@api.get('/progress/', response=List[ProgressOut], auth=session_auth)
-@paginate
-def list_progress_enhanced(request):
-    qs = ReadingProgress.objects.filter(user=request.user).select_related('book', 'chapter')
-    return [{
-        'id': p.id,
-        'book_id': p.book_id,
-        'book_title': p.book.title,
-        'book_author': p.book.author,
-        'chapter_id': p.chapter_id,
-        'chapter_title': p.chapter.title if p.chapter else None,
-        'position': p.position,
-        'total_chapters': p.book.total_chapters,
-        'updated_at': p.updated_at.isoformat(),
-    } for p in qs]
 
 
 # ========== Stats ==========
