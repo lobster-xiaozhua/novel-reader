@@ -6,7 +6,6 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
       - ./data:/app/data
     environment:
       - DEBUG=True
@@ -17,12 +16,11 @@ services:
     command: >
       sh -c "python manage.py migrate &&
              python manage.py shell -c \"from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='admin').exists() or User.objects.create_superuser('admin', 'admin@example.com', 'admin123')\" &&
-             gunicorn --bind 0.0.0.0:8000 novel_reader.wsgi:application"
+             granian novel_reader.asgi:application --host 0.0.0.0 --port 8000 --interface asgi --workers 1"
 
   celery:
     build: .
     volumes:
-      - .:/app
       - ./data:/app/data
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0

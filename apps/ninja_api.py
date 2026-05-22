@@ -1,9 +1,9 @@
-from datetime import date, datetime, timedelta
 import json
 import logging
 import os
 import re
 import shutil
+from datetime import date, timedelta
 from typing import List, Optional
 
 from django.contrib.auth import authenticate, login, logout
@@ -11,10 +11,9 @@ from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db import connection
-from django.db.models import Prefetch
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from haystack.query import SearchQuerySet
 from ninja import NinjaAPI, Schema
 from ninja.pagination import paginate
 from ninja.security import SessionAuth
@@ -33,18 +32,20 @@ class OptionalSessionAuth(SessionAuth):
     def __call__(self, request):
         return request.user if request.user.is_authenticated else True
 
+
 class SessionAuthNoCSRF(SessionAuth):
     def __call__(self, request):
         if request.user and request.user.is_authenticated:
             return request.user
         return None
 
+
 optional_auth = OptionalSessionAuth()
 session_auth = SessionAuthNoCSRF()
 
 api = NinjaAPI(
     title='NovelReader API',
-    version='1.0.0',
+    version='2.0.0',
     description='高性能小说阅读器 API',
     docs_url='/docs/',
     openapi_url='/openapi.json',
@@ -53,8 +54,6 @@ api = NinjaAPI(
 
 @api.exception_handler(Exception)
 def global_exception_handler(request, exc):
-    import logging
-    logger = logging.getLogger('ninja')
     logger.error(f'API Error: {request.path} - {type(exc).__name__}: {str(exc)}')
     from ninja.errors import HttpError
     if isinstance(exc, HttpError):
@@ -87,14 +86,14 @@ class BookListSchema(Schema):
     def resolve_created_at(obj):
         if hasattr(obj, 'created_at'):
             val = obj.created_at
-            return val.isoformat() if isinstance(val, datetime) else str(val)
+            return val.isoformat() if isinstance(val, timezone.datetime) else str(val)
         return ''
 
     @staticmethod
     def resolve_updated_at(obj):
         if hasattr(obj, 'updated_at'):
             val = obj.updated_at
-            return val.isoformat() if isinstance(val, datetime) else str(val)
+            return val.isoformat() if isinstance(val, timezone.datetime) else str(val)
         return ''
 
 
@@ -149,6 +148,8 @@ class ReadingProgressIn(Schema):
 class StatsTrackIn(Schema):
     seconds: int = 0
     chapter_id: Optional[int] = None
+
+
 class CrawlerTaskSchema(Schema):
     id: int
     url: str
@@ -270,7 +271,7 @@ class HealthSchema(Schema):
     database: str = 'ok'
     cache: str = 'ok'
     disk_usage: str = 'ok'
-    version: str = '1.0.0'
+    version: str = '2.0.0'
 
 
 class SearchResult(Schema):
@@ -287,11 +288,24 @@ class SearchResponse(Schema):
     suggestions: List[str] = []
 
 
+class CategoryStat(Schema):
+    category: str
+    count: int
+
+
+class DashboardStatsSchema(Schema):
+    total_books: int
+    total_users: int
+    total_chapters: int
+    total_words: int
+    category_stats: List[CategoryStat] = []
+
+
 # ========== Health Check ==========
 
 @api.get('/health/', response=HealthSchema, auth=None)
 def health_check(request):
-    checks = {'status': 'ok', 'database': 'ok', 'cache': 'ok', 'disk_usage': 'ok'}
+    checks = {'status': 'ok', 'database': 'ok', 'cache': 'ok', 'disk_usage': 'ok', 'version': '2.0.0'}
     try:
         connection.ensure_connection()
     except Exception as e:
@@ -327,10 +341,12 @@ def auth_login(request, payload: LoginIn):
     user = authenticate(request, username=payload.username, password=payload.password)
     if user is not None:
         login(request, user)
+        logger.info(f'[Auth] 用户登录: {user.username}')
         return {
             'success': True,
             'user': {'id': user.id, 'username': user.username, 'email': user.email or '', 'is_staff': user.is_staff},
         }
+    logger.warning(f'[Auth] 登录失败: {payload.username}')
     return {'success': False, 'error': '用户名或密码错误'}
 
 
@@ -340,6 +356,7 @@ def auth_register(request, payload: RegisterIn):
         return {'success': False, 'error': '用户名已存在'}
     user = User.objects.create_user(username=payload.username, password=payload.password, email=payload.email)
     login(request, user)
+    logger.info(f'[Auth] 新用户注册: {user.username}')
     return {
         'success': True,
         'user': {'id': user.id, 'username': user.username, 'email': user.email or '', 'is_staff': user.is_staff},
@@ -348,12 +365,20 @@ def auth_register(request, payload: RegisterIn):
 
 @api.post('/auth/logout/', response=MessageSchema, auth=session_auth)
 def auth_logout(request):
+    username = request.user.username
     logout(request)
+    logger.info(f'[Auth] 用户登出: {username}')
     return {'message': '已退出登录'}
 
 
-def book_gradient(book_id: Optional[int]) -> tuple:
-    return get_book_gradient(book_id or 0)
+@api.get('/auth/me/', response=AuthResponse, auth=optional_auth)
+def auth_me(request):
+    if request.user.is_authenticated:
+        return {
+            'success': True,
+            'user': {'id': request.user.id, 'username': request.user.username, 'email': request.user.email or '', 'is_staff': request.user.is_staff},
+        }
+    return {'success': False, 'error': '未登录'}
 
 
 # ========== Books ==========
@@ -367,7 +392,7 @@ def list_books(request, tag: Optional[str] = None, category: Optional[str] = Non
     if category:
         qs = qs.filter(category=category)
     if search:
-        qs = qs.filter(title__icontains=search) | qs.filter(author__icontains=search)
+        qs = qs.filter(Q(title__icontains=search) | Q(author__icontains=search))
     return qs
 
 
@@ -570,7 +595,6 @@ def track_stats(request, payload: StatsTrackIn):
         stats.chapters_read += 1
         stats.words_read += words
         stats.save(update_fields=['read_seconds', 'chapters_read', 'words_read'])
-    logger.info(f'[Stats] {request.user.username} 阅读 {payload.seconds}s 章节{payload.chapter_id}')
     return {'message': 'ok'}
 
 
@@ -587,6 +611,7 @@ def create_crawler_task(request, payload: CrawlerTaskIn):
     task = CrawlerTask.objects.create(user=request.user, url=payload.url, status='pending')
     from apps.crawler.tasks import run_crawler_task
     run_crawler_task.delay(task.id)
+    logger.info(f'[Crawler] 创建任务: {task.id} - {payload.url}')
     return task
 
 
@@ -629,13 +654,16 @@ def list_tags(request):
 @api.post('/tags/', response=TagListSchema, auth=session_auth)
 def create_tag(request, payload: TagIn):
     tag = Tag.objects.create(name=payload.name, color=payload.color)
+    logger.info(f'[Tag] 创建标签: {tag.name}')
     return {'id': tag.id, 'name': tag.name, 'color': tag.color, 'book_count': 0}
 
 
 @api.delete('/tags/{tag_id}/', response=MessageSchema, auth=session_auth)
 def delete_tag(request, tag_id: int):
     tag = get_object_or_404(Tag, id=tag_id)
+    tag_name = tag.name
     tag.delete()
+    logger.info(f'[Tag] 删除标签: {tag_name}')
     return {'message': '删除成功'}
 
 
@@ -662,8 +690,10 @@ def toggle_favorite(request, payload: FavoriteToggleIn):
     fav = Favorite.objects.filter(user=request.user, book=book).first()
     if fav:
         fav.delete()
+        logger.info(f'[Favorite] 取消收藏: {book.title}')
         return {'message': '已取消收藏'}
     Favorite.objects.create(user=request.user, book=book)
+    logger.info(f'[Favorite] 添加收藏: {book.title}')
     return {'message': '已收藏'}
 
 
@@ -724,6 +754,25 @@ def get_user_stats(request, days: int = 7):
     }
 
 
+# ========== Dashboard ==========
+
+@api.get('/dashboard/', response=DashboardStatsSchema, auth=optional_auth)
+def get_dashboard_stats(request):
+    category_stats = list(
+        Book.objects.exclude(category='')
+        .values('category')
+        .annotate(count=Count('id'))
+        .order_by('-count')[:10]
+    )
+    return {
+        'total_books': Book.objects.count(),
+        'total_users': User.objects.count(),
+        'total_chapters': Chapter.objects.count(),
+        'total_words': Chapter.objects.aggregate(total=Count('word_count'))['total'] or 0,
+        'category_stats': category_stats,
+    }
+
+
 # ========== Search ==========
 
 @api.get('/search/', response=SearchResponse, auth=optional_auth)
@@ -733,17 +782,14 @@ def search_books(request, q: str = ''):
     suggestions = []
     total = 0
     if query:
-        try:
-            sqs = SearchQuerySet().models(Book).filter(content=query)
-            total = sqs.count()
-            paginator = Paginator(sqs, 12)
-            page_obj = paginator.get_page(1)
-            results = [
-                {'id': r.object.id, 'title': r.object.title, 'author': r.object.author, 'category': r.object.category}
-                for r in page_obj.object_list if r.object
-            ]
-        except Exception as e:
-            logger.warning(f'搜索失败: {e}')
+        qs = Book.objects.filter(
+            Q(title__icontains=query) | Q(author__icontains=query) | Q(description__icontains=query)
+        )
+        total = qs.count()
+        results = [
+            {'id': b.id, 'title': b.title, 'author': b.author, 'category': b.category}
+            for b in qs[:20]
+        ]
     if len(query) >= 2:
         suggestions = list(Book.objects.filter(title__istartswith=query).values_list('title', flat=True)[:10])
     return {'query': query, 'results': results, 'total': total, 'suggestions': suggestions}

@@ -1,4 +1,4 @@
-import { get } from '@/utils/http'
+import { get, upload } from '@/utils/http'
 import { Book, Chapter } from '@/types'
 
 export function fetchBooks(params?: { tag?: string; category?: string; search?: string; page?: number }) {
@@ -15,4 +15,10 @@ export function fetchChapters(bookId: number) {
 
 export function fetchChapterContent(bookId: number, chapterId: number) {
   return get<Chapter>(`/books/${bookId}/chapters/${chapterId}/`)
+}
+
+export function importBooks(files: File[]) {
+  const formData = new FormData()
+  files.forEach((f) => formData.append('files', f))
+  return upload<{ success: boolean; imported: number; errors: string[]; total: number }>('/books/import/', formData)
 }

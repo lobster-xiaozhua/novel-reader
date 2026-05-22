@@ -120,3 +120,16 @@ export interface TagView {
   title: string
   name: string
 }
+
+export interface CategoryStat {
+  category: string
+  count: number
+}
+
+export interface DashboardStats {
+  total_books: number
+  total_users: number
+  total_chapters: number
+  total_words: number
+  category_stats: CategoryStat[]
+}

@@ -4,6 +4,7 @@ import { TrendingUp, BookOpen, Clock, Type } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 import { fetchStats } from '@/api/stats'
 import { COLORS } from '@/config/colors'
+import { Spinner } from '@/components/Loading'
 
 const DAY_OPTIONS = [
   { label: '7天', value: 7 },
@@ -34,22 +35,14 @@ export default function Stats() {
         <h2 className="text-xl font-bold text-text-primary">阅读统计</h2>
         <div className="flex items-center gap-2">
           {DAY_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setDays(opt.value)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
-                ${days === opt.value
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-card-bg border border-card-border text-text-secondary hover:text-text-primary'
-                }`}
-            >
+            <button key={opt.value} onClick={() => setDays(opt.value)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${days === opt.value ? 'bg-primary-500 text-white' : 'bg-card-bg border border-card-border text-text-secondary hover:text-text-primary'}`}>
               {opt.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {summaryCards.map((card) => (
           <div key={card.title} className="bg-card-bg border border-card-border rounded-xl p-5 card-hover">
@@ -66,31 +59,24 @@ export default function Stats() {
         ))}
       </div>
 
-      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Minutes Trend */}
         <div className="bg-card-bg border border-card-border rounded-xl p-5">
           <h3 className="text-lg font-semibold text-text-primary mb-1">阅读时长趋势</h3>
           <p className="text-sm text-text-muted mb-4">最近{days}天阅读分钟数</p>
           <div className="h-[300px]">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-full text-text-muted">加载中...</div>
-            ) : (
+            {isLoading ? <div className="flex items-center justify-center h-full"><Spinner /></div> : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="colorMinutes2" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0} />
-                  </linearGradient>
+                      <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.3} />
+                      <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0} />
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickFormatter={(v) => new Date(v).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} />
                   <YAxis stroke="#64748b" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{ background: '#1a2235', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f1f5f9' }}
-                    labelFormatter={(v) => new Date(v).toLocaleDateString('zh-CN')}
-                  />
+                  <Tooltip contentStyle={{ background: '#1a2235', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f1f5f9' }} labelFormatter={(v) => new Date(v).toLocaleDateString('zh-CN')} />
                   <Area type="monotone" dataKey="minutes" stroke={COLORS.primary} fillOpacity={1} fill="url(#colorMinutes2)" name="阅读分钟" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -98,23 +84,17 @@ export default function Stats() {
           </div>
         </div>
 
-        {/* Chapters Bar */}
         <div className="bg-card-bg border border-card-border rounded-xl p-5">
           <h3 className="text-lg font-semibold text-text-primary mb-1">阅读章节统计</h3>
           <p className="text-sm text-text-muted mb-4">最近{days}天阅读章节数</p>
           <div className="h-[300px]">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-full text-text-muted">加载中...</div>
-            ) : (
+            {isLoading ? <div className="flex items-center justify-center h-full"><Spinner /></div> : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickFormatter={(v) => new Date(v).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} />
                   <YAxis stroke="#64748b" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{ background: '#1a2235', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f1f5f9' }}
-                    labelFormatter={(v) => new Date(v).toLocaleDateString('zh-CN')}
-                  />
+                  <Tooltip contentStyle={{ background: '#1a2235', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f1f5f9' }} labelFormatter={(v) => new Date(v).toLocaleDateString('zh-CN')} />
                   <Bar dataKey="chapters" fill={COLORS.success} radius={[4, 4, 0, 0]} name="阅读章节" />
                 </BarChart>
               </ResponsiveContainer>
@@ -123,14 +103,11 @@ export default function Stats() {
         </div>
       </div>
 
-      {/* Words Chart */}
       <div className="bg-card-bg border border-card-border rounded-xl p-5">
         <h3 className="text-lg font-semibold text-text-primary mb-1">阅读字数趋势</h3>
         <p className="text-sm text-text-muted mb-4">最近{days}天阅读字数</p>
         <div className="h-[300px]">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-full text-text-muted">加载中...</div>
-          ) : (
+          {isLoading ? <div className="flex items-center justify-center h-full"><Spinner /></div> : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
@@ -142,11 +119,7 @@ export default function Stats() {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickFormatter={(v) => new Date(v).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} />
                 <YAxis stroke="#64748b" fontSize={12} />
-                <Tooltip
-                  contentStyle={{ background: '#1a2235', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f1f5f9' }}
-                  labelFormatter={(v) => new Date(v).toLocaleDateString('zh-CN')}
-                  formatter={(value: number) => [`${value.toLocaleString()} 字`, '阅读字数']}
-                />
+                <Tooltip contentStyle={{ background: '#1a2235', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f1f5f9' }} labelFormatter={(v) => new Date(v).toLocaleDateString('zh-CN')} formatter={(value: number) => [`${value.toLocaleString()} 字`, '阅读字数']} />
                 <Area type="monotone" dataKey="words" stroke={COLORS.info} fillOpacity={1} fill="url(#colorWords)" name="阅读字数" />
               </AreaChart>
             </ResponsiveContainer>

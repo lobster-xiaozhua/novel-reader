@@ -1,5 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { DialogProvider } from '@/components/ReDialog'
+import AuthGuard from '@/components/AuthGuard'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import Layout from './layout'
 import Dashboard from './views/Dashboard'
 import Books from './views/Books'
@@ -21,17 +23,17 @@ function App() {
         <Route path="/error/403" element={<ErrorPage code={403} />} />
         <Route path="/error/404" element={<ErrorPage code={404} />} />
         <Route path="/error/500" element={<ErrorPage code={500} />} />
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="books" element={<Books />} />
-          <Route path="chapters" element={<Chapters />} />
-          <Route path="tags" element={<Tags />} />
-          <Route path="users" element={<Users />} />
-          <Route path="progress" element={<Progress />} />
-          <Route path="stats" element={<Stats />} />
-          <Route path="favorites" element={<Favorites />} />
-          <Route path="crawler" element={<Crawler />} />
+        <Route path="/" element={<AuthGuard><Layout /></AuthGuard>}>
+          <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
+          <Route path="dashboard" element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
+          <Route path="books" element={<ErrorBoundary><Books /></ErrorBoundary>} />
+          <Route path="chapters" element={<ErrorBoundary><Chapters /></ErrorBoundary>} />
+          <Route path="tags" element={<ErrorBoundary><Tags /></ErrorBoundary>} />
+          <Route path="users" element={<ErrorBoundary><Users /></ErrorBoundary>} />
+          <Route path="progress" element={<ErrorBoundary><Progress /></ErrorBoundary>} />
+          <Route path="stats" element={<ErrorBoundary><Stats /></ErrorBoundary>} />
+          <Route path="favorites" element={<ErrorBoundary><Favorites /></ErrorBoundary>} />
+          <Route path="crawler" element={<ErrorBoundary><Crawler /></ErrorBoundary>} />
           <Route path="*" element={<ErrorPage code={404} />} />
         </Route>
       </Routes>

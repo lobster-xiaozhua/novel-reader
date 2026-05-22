@@ -10,21 +10,16 @@ const http: AxiosInstance = axios.create({
   },
 })
 
-http.interceptors.request.use(
-  (config) => {
-    return config
-  },
-  (error) => Promise.reject(error)
-)
-
 http.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      window.location.href = '/login'
+      const store = (window as any).__userStore
+      if (store?.getState?.()?.isLoggedIn) {
+        store.getState().logout()
+        window.location.href = '/login'
+      }
     }
-    const msg = (error.response?.data as { detail?: string })?.detail || error.message || '请求失败'
-    console.error(`HTTP Error: ${msg}`)
     return Promise.reject(error)
   }
 )
@@ -46,6 +41,14 @@ export async function put<T>(url: string, data?: unknown, config?: AxiosRequestC
 
 export async function del<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
   const res = await http.delete(url, config)
+  return res.data
+}
+
+export async function upload<T>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<T> {
+  const res = await http.post(url, formData, {
+    ...config,
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
   return res.data
 }
 

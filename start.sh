@@ -3,7 +3,6 @@ set -e
 
 cd "$(dirname "$0")"
 
-# 颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -21,7 +20,7 @@ log_step() { echo -e "${CYAN}[→]${NC} $1"; }
 print_banner() {
     echo ""
     echo -e "${MAGENTA}╔═══════════════════════════════════════════════════╗${NC}"
-    echo -e "${MAGENTA}║${NC}  ${CYAN}Novel Reader - Django 小说阅读器${NC}                ${MAGENTA}║${NC}"
+    echo -e "${MAGENTA}║${NC}  ${CYAN}Novel Reader v2.0 - 高性能小说阅读器${NC}        ${MAGENTA}║${NC}"
     echo -e "${MAGENTA}╚═══════════════════════════════════════════════════╝${NC}"
     echo ""
 }
@@ -37,15 +36,14 @@ show_help() {
   restart    重启服务
   status     查看服务状态
   migrate    执行数据库迁移
-  createsuperuser  创建超级用户
-  shell      进入 Django shell
+  build      构建前端
+  dev        开发模式（前后端分离）
   help       显示此帮助
 
 示例:
-  ./start.sh start          # 启动服务
-  ./start.sh stop           # 停止服务
-  ./start.sh restart        # 重启服务
-  ./start.sh migrate        # 数据库迁移
+  ./start.sh start          # 启动生产服务
+  ./start.sh dev            # 开发模式
+  ./start.sh build          # 构建前端
 EOF
 }
 
@@ -58,6 +56,13 @@ check_env() {
         ((errors++))
     else
         log_success "Python: $(python3 --version | cut -d' ' -f2)"
+    fi
+
+    if ! command -v node &> /dev/null; then
+        log_error "Node.js 未安装"
+        ((errors++))
+    else
+        log_success "Node: $(node --version)"
     fi
 
     if [ $errors -gt 0 ]; then
@@ -76,7 +81,16 @@ install_deps() {
     source venv/bin/activate
     pip install -q --upgrade pip
     pip install -q -r requirements.txt
-    log_success "依赖安装完成"
+    log_success "Python 依赖安装完成"
+
+    if [ -f "frontend/package.json" ]; then
+        cd frontend
+        if [ ! -d "node_modules" ]; then
+            npm ci --prefer-offline 2>/dev/null || npm install
+        fi
+        cd ..
+        log_success "Node 依赖安装完成"
+    fi
 }
 
 migrate_db() {
@@ -102,10 +116,12 @@ else:
 " 2>/dev/null || true
 }
 
-collect_static() {
-    log_step "收集静态文件..."
-    source venv/bin/activate
-    python manage.py collectstatic --noinput 2>/dev/null || true
+build_frontend() {
+    log_step "构建前端..."
+    cd frontend
+    npm run build
+    cd ..
+    log_success "前端构建完成"
 }
 
 cmd_start() {
@@ -113,10 +129,13 @@ cmd_start() {
     check_env
     install_deps
     migrate_db
-    collect_static
     create_superuser
+    build_frontend
 
-    log_step "启动 Django 开发服务器..."
+    source venv/bin/activate
+    python manage.py collectstatic --noinput 2>/dev/null || true
+
+    log_step "启动 Granian ASGI 服务器..."
     echo ""
     echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}  服务已启动!${NC}"
@@ -124,17 +143,38 @@ cmd_start() {
     echo ""
     echo -e "  ${GREEN}📖${NC} 访问地址:  http://localhost:8000"
     echo -e "  ${GREEN}🔧${NC} Admin 后台: http://localhost:8000/admin"
-    echo -e "  ${GREEN}👤${NC} 默认账号:  admin / admin123"
+    echo -e "  ${GREEN}📋${NC} API 文档:   http://localhost:8000/api/v1/docs/"
     echo ""
     echo -e "${YELLOW}按 Ctrl+C 停止服务${NC}"
     echo ""
 
-    python manage.py runserver 0.0.0.0:8000
+    granian novel_reader.asgi:application --host 0.0.0.0 --port 8000 --interface asgi --workers 1
+}
+
+cmd_dev() {
+    print_banner
+    check_env
+    install_deps
+    migrate_db
+    create_superuser
+
+    echo ""
+    echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  开发模式启动!${NC}"
+    echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "  ${GREEN}📖${NC} 前端: http://localhost:5173"
+    echo -e "  ${GREEN}🔧${NC} 后端: http://localhost:8000"
+    echo ""
+
+    source venv/bin/activate
+    python manage.py runserver 0.0.0.0:8000 &
+    cd frontend && npm run dev
 }
 
 cmd_stop() {
     log_step "停止服务..."
-    local pids=$(pgrep -f "manage.py runserver" || true)
+    local pids=$(pgrep -f "granian\|manage.py runserver\|vite" || true)
     if [ -n "$pids" ]; then
         echo "$pids" | xargs kill 2>/dev/null || true
         log_success "服务已停止"
@@ -145,12 +185,16 @@ cmd_stop() {
 
 cmd_status() {
     log_step "服务状态"
-    if pgrep -f "manage.py runserver" > /dev/null; then
-        log_success "Django 服务: 运行中"
+    if pgrep -f "granian" > /dev/null; then
+        log_success "Granian 服务: 运行中"
+        echo "  PID: $(pgrep -f "granian")"
+        echo "  地址: http://localhost:8000"
+    elif pgrep -f "manage.py runserver" > /dev/null; then
+        log_success "Django 开发服务器: 运行中"
         echo "  PID: $(pgrep -f "manage.py runserver")"
         echo "  地址: http://localhost:8000"
     else
-        log_error "Django 服务: 未运行"
+        log_error "服务: 未运行"
     fi
 }
 
@@ -160,30 +204,25 @@ cmd_migrate() {
     migrate_db
 }
 
-cmd_createsuperuser() {
+cmd_build() {
     check_env
     install_deps
+    build_frontend
     source venv/bin/activate
-    python manage.py createsuperuser
-}
-
-cmd_shell() {
-    check_env
-    install_deps
-    source venv/bin/activate
-    python manage.py shell
+    python manage.py collectstatic --noinput 2>/dev/null || true
+    log_success "构建完成"
 }
 
 main() {
     local command="${1:-start}"
     case "$command" in
         start) cmd_start ;;
+        dev) cmd_dev ;;
         stop) cmd_stop ;;
         restart) cmd_stop; sleep 1; cmd_start ;;
         status) cmd_status ;;
         migrate) cmd_migrate ;;
-        createsuperuser) cmd_createsuperuser ;;
-        shell) cmd_shell ;;
+        build) cmd_build ;;
         help|--help|-h) show_help ;;
         *) log_error "未知命令: $command"; show_help; exit 1 ;;
     esac

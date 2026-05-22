@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Users as UsersIcon, Shield, User, Clock } from 'lucide-react'
 import { fetchUsers } from '@/api/users'
 import { UserItem } from '@/types'
+import { Spinner } from '@/components/Loading'
 
 export default function Users() {
   const { data, isLoading } = useQuery({
@@ -15,17 +16,12 @@ export default function Users() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-text-primary">用户管理</h2>
-        <div className="text-sm text-text-muted">
-          共 {users.length} 位用户
-        </div>
+        <div className="text-sm text-text-muted">共 {users.length} 位用户</div>
       </div>
 
-      {isLoading ? (
-        <div className="text-center py-20 text-text-muted">加载中...</div>
-      ) : users.length === 0 ? (
+      {isLoading ? <Spinner /> : users.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-text-muted">
-          <UsersIcon className="w-12 h-12 mb-3 opacity-30" />
-          <p>暂无用户数据</p>
+          <UsersIcon className="w-12 h-12 mb-3 opacity-30" /><p>暂无用户数据</p>
         </div>
       ) : (
         <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
@@ -55,23 +51,18 @@ export default function Users() {
                   <td className="px-6 py-4">
                     {user.is_staff ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary-500/10 text-primary-500 text-xs font-medium">
-                        <Shield className="w-3 h-3" />
-                        管理员
+                        <Shield className="w-3 h-3" />管理员
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/5 text-text-secondary text-xs">
-                        <User className="w-3 h-3" />
-                        普通用户
+                        <User className="w-3 h-3" />普通用户
                       </span>
                     )}
                   </td>
                   <td className="px-6 py-4 text-sm text-text-primary font-medium">{user.book_count}</td>
-                  <td className="px-6 py-4 text-sm text-text-muted">
-                    {new Date(user.date_joined).toLocaleDateString('zh-CN')}
-                  </td>
+                  <td className="px-6 py-4 text-sm text-text-muted">{new Date(user.date_joined).toLocaleDateString('zh-CN')}</td>
                   <td className="px-6 py-4 text-sm text-text-muted flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5" />
-                    {user.last_login ? new Date(user.last_login).toLocaleDateString('zh-CN') : '从未'}
+                    <Clock className="w-3.5 h-3.5" />{user.last_login ? new Date(user.last_login).toLocaleDateString('zh-CN') : '从未'}
                   </td>
                 </tr>
               ))}

@@ -1,16 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  Bug,
-  Clock,
-  CheckCircle,
-  AlertTriangle,
-  Loader2,
-  XCircle,
-  Plus,
-} from 'lucide-react'
+import { Bug, Clock, CheckCircle, AlertTriangle, Loader2, XCircle, Plus } from 'lucide-react'
 import { fetchCrawlerTasks, createCrawlerTask } from '@/api/crawler'
 import { CrawlerTask } from '@/types'
+import { useToast } from '@/components/Toast'
+import { Spinner } from '@/components/Loading'
 
 const statusConfig = {
   pending: { label: '等待中', icon: Clock, color: 'text-warning', bg: 'bg-warning/10' },
@@ -23,6 +17,7 @@ const statusConfig = {
 export default function Crawler() {
   const [url, setUrl] = useState('')
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   const { data, isLoading } = useQuery({
     queryKey: ['crawler-tasks'],
@@ -34,34 +29,24 @@ export default function Crawler() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['crawler-tasks'] })
       setUrl('')
+      toast.success('爬虫任务已创建')
     },
+    onError: () => toast.error('创建任务失败'),
   })
 
   const tasks = data?.items || []
-
-  const handleCreate = () => {
-    if (!url.trim()) return
-    createMutation.mutate(url.trim())
-  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-text-primary">爬虫任务</h2>
         <div className="flex items-center gap-3">
-          <input
-            type="text"
-            placeholder="输入URL..."
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-            className="w-80 h-10 px-4 rounded-lg bg-card-bg border border-card-border text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50 transition-colors"
-          />
-          <button
-            onClick={handleCreate}
+          <input type="text" placeholder="输入URL..." value={url} onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && url.trim() && createMutation.mutate(url.trim())}
+            className="w-80 h-10 px-4 rounded-lg bg-card-bg border border-card-border text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50 transition-colors" />
+          <button onClick={() => { if (url.trim()) createMutation.mutate(url.trim()) }}
             disabled={createMutation.isPending || !url.trim()}
-            className="flex items-center gap-2 px-4 h-10 rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 transition-colors disabled:opacity-50"
-          >
+            className="flex items-center gap-2 px-4 h-10 rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 transition-colors disabled:opacity-50">
             {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             新建任务
           </button>
@@ -96,21 +81,14 @@ export default function Crawler() {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr>
-                <td colSpan={4} className="text-center py-20 text-text-muted">加载中...</td>
-              </tr>
+              <tr><td colSpan={4}><Spinner /></td></tr>
             ) : tasks.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="text-center py-20 text-text-muted">暂无爬虫任务</td>
-              </tr>
+              <tr><td colSpan={4} className="text-center py-20 text-text-muted">暂无爬虫任务</td></tr>
             ) : (
               tasks.map((task: CrawlerTask) => {
                 const status = statusConfig[task.status]
                 const StatusIcon = status.icon
-                const progress = task.total_chapters > 0
-                  ? Math.round((task.downloaded_chapters / task.total_chapters) * 100)
-                  : 0
-
+                const progress = task.total_chapters > 0 ? Math.round((task.downloaded_chapters / task.total_chapters) * 100) : 0
                 return (
                   <tr key={task.id} className="border-b border-white/[0.06] hover:bg-white/[0.02] transition-colors">
                     <td className="px-6 py-4">
@@ -128,19 +106,12 @@ export default function Crawler() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-24 h-2 rounded-full bg-white/5 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-primary-500 transition-all"
-                            style={{ width: `${progress}%` }}
-                          />
+                          <div className="h-full rounded-full bg-primary-500 transition-all" style={{ width: `${progress}%` }} />
                         </div>
-                        <span className="text-sm text-text-secondary">
-                          {task.downloaded_chapters}/{task.total_chapters}
-                        </span>
+                        <span className="text-sm text-text-secondary">{task.downloaded_chapters}/{task.total_chapters}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-text-muted">
-                      {new Date(task.created_at).toLocaleString('zh-CN')}
-                    </td>
+                    <td className="px-6 py-4 text-sm text-text-muted">{new Date(task.created_at).toLocaleString('zh-CN')}</td>
                   </tr>
                 )
               })

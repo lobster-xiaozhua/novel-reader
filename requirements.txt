@@ -5,21 +5,13 @@ whitenoise>=6.9.0
 django-environ>=0.12.0
 django-unfold>=0.52.0
 
-# ========== API (Ninja替代DRF) ==========
+# ========== API ==========
 django-ninja>=1.4.0
 pydantic>=2.11.0
-
-# ========== Frontend ==========
-django-htmx>=1.23.0
-django-cotton>=2.0.0
 
 # ========== Cache & Queue ==========
 redis>=5.2.0
 celery>=5.5.0
-
-# ========== Search ==========
-django-haystack>=3.3.0
-whoosh>=2.7.4
 
 # ========== Crawler ==========
 requests>=2.32.0

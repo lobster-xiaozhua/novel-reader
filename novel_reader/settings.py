@@ -12,7 +12,6 @@ env = environ.Env(
     CACHE_LOCATION=(str, 'novelreader-cache'),
     CELERY_BROKER_URL=(str, 'redis://localhost:6379/0'),
     CELERY_RESULT_BACKEND=(str, 'redis://localhost:6379/0'),
-    DEFAULT_BOOK_PATH=(str, ''),
 )
 environ.Env.read_env(BASE_DIR / '.env')
 
@@ -43,20 +42,20 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'haystack',
+    'corsheaders',
     'apps.accounts',
     'apps.books',
     'apps.chapters',
     'apps.reader',
     'apps.favorites',
     'apps.crawler',
-    'apps.search',
     'ninja',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -118,8 +117,6 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static', BASE_DIR / 'frontend' / 'dist' / 'static', BASE_DIR / 'frontend' / 'dist']
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 WHITENOISE_MAX_AGE = 31536000
-
-# React SPA fallback
 WHITENOISE_INDEX_FILE = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -139,15 +136,16 @@ SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_AGE = 1209600
 SESSION_SAVE_EVERY_REQUEST = True
 
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[]) if not DEBUG else []
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
         'simple': {'format': '[%(levelname)s] %(name)s: %(message)s'},
         'verbose': {'format': '[%(asctime)s] [%(levelname)s] %(name)s:%(lineno)d: %(message)s'},
-        'json': {
-            'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
-        },
     },
     'handlers': {
         'console': {
@@ -224,7 +222,6 @@ CACHE_DIR = BASE_DIR / 'data' / 'cache'
 for _d in [BOOKS_DIR, LOGS_DIR, CACHE_DIR]:
     _d.mkdir(parents=True, exist_ok=True)
 
-# Celery
 CELERY_BROKER_URL = env('CELERY_BROKER_URL')
 CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND')
 CELERY_ACCEPT_CONTENT = ['json']
@@ -236,21 +233,9 @@ CELERY_TASK_TIME_LIMIT = 30 * 60
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_ACKS_LATE = True
 
-# Haystack
-HAYSTACK_CONNECTIONS = {
-    'default': {
-        'ENGINE': 'haystack.backends.whoosh_backend.WhooshEngine',
-        'PATH': BASE_DIR / 'data' / 'whoosh_index',
-    },
-}
-HAYSTACK_SIGNAL_PROCESSOR = 'haystack.signals.RealtimeSignalProcessor'
-HAYSTACK_SEARCH_RESULTS_PER_PAGE = 12
-
-# Ninja API
 NINJA_PAGINATION_PER_PAGE = 20
 NINJA_PAGINATION_MAX_LIMIT = 100
 
-# Unfold Admin Theme
 UNFOLD = {
     "SITE_TITLE": "小说阅读器管理后台",
     "SITE_HEADER": "📖 小说阅读器",
@@ -349,7 +334,6 @@ UNFOLD = {
     },
 }
 
-# Debug Toolbar
 if DEBUG:
     INSTALLED_APPS.insert(0, 'debug_toolbar')
     MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')

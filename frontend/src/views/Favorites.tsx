@@ -2,9 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Heart, BookOpen, Clock, Trash2 } from 'lucide-react'
 import { fetchFavorites, toggleFavorite } from '@/api/favorites'
 import { FavoriteItem } from '@/types'
+import { useToast } from '@/components/Toast'
+import { Spinner } from '@/components/Loading'
 
 export default function Favorites() {
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   const { data, isLoading } = useQuery({
     queryKey: ['favorites'],
@@ -13,7 +16,11 @@ export default function Favorites() {
 
   const toggleMutation = useMutation({
     mutationFn: toggleFavorite,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['favorites'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['favorites'] })
+      toast.success('已取消收藏')
+    },
+    onError: () => toast.error('操作失败'),
   })
 
   const items = data?.items || []
@@ -22,14 +29,10 @@ export default function Favorites() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-text-primary">我的收藏</h2>
-        <div className="text-sm text-text-muted">
-          共 {items.length} 本收藏
-        </div>
+        <div className="text-sm text-text-muted">共 {items.length} 本收藏</div>
       </div>
 
-      {isLoading ? (
-        <div className="text-center py-20 text-text-muted">加载中...</div>
-      ) : items.length === 0 ? (
+      {isLoading ? <Spinner /> : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-text-muted">
           <Heart className="w-12 h-12 mb-3 opacity-30" />
           <p>暂无收藏</p>
@@ -38,10 +41,7 @@ export default function Favorites() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {items.map((item: FavoriteItem) => (
-            <div
-              key={item.id}
-              className="bg-card-bg border border-card-border rounded-xl p-5 card-hover"
-            >
+            <div key={item.id} className="bg-card-bg border border-card-border rounded-xl p-5 card-hover">
               <div className="flex items-start gap-4">
                 <div className="w-14 h-14 rounded-xl bg-primary-500/10 flex items-center justify-center flex-shrink-0">
                   <BookOpen className="w-7 h-7 text-primary-500" />
@@ -50,25 +50,18 @@ export default function Favorites() {
                   <h3 className="font-semibold text-text-primary truncate">{item.title}</h3>
                   <p className="text-sm text-text-secondary mt-1">{item.author}</p>
                   <div className="flex items-center gap-2 mt-2">
-                    <span className="px-2 py-0.5 rounded-md bg-primary-500/10 text-primary-500 text-xs">
-                      {item.category}
-                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-primary-500/10 text-primary-500 text-xs">{item.category}</span>
                     <span className="text-xs text-text-muted">{item.total_chapters} 章</span>
                   </div>
                 </div>
               </div>
-
               <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.06]">
                 <span className="text-xs text-text-muted flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {new Date(item.created_at).toLocaleDateString('zh-CN')}
+                  <Clock className="w-3 h-3" />{new Date(item.created_at).toLocaleDateString('zh-CN')}
                 </span>
-                <button
-                  onClick={() => toggleMutation.mutate(item.book_id)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-danger/10 text-danger text-sm hover:bg-danger/20 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  取消收藏
+                <button onClick={() => toggleMutation.mutate(item.book_id)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-danger/10 text-danger text-sm hover:bg-danger/20 transition-colors">
+                  <Trash2 className="w-4 h-4" />取消收藏
                 </button>
               </div>
             </div>
