@@ -1,7 +1,11 @@
 from datetime import date, timedelta
+import logging
+import shutil
 from typing import List, Optional
 from django.contrib.auth.models import User
+from django.db import connection
 from django.shortcuts import get_object_or_404
+from django.core.cache import cache
 from ninja import NinjaAPI, Schema, Field
 from ninja.pagination import paginate
 from ninja.security import SessionAuth
@@ -12,6 +16,8 @@ from apps.chapters.models import Chapter
 from apps.reader.models import ReadingProgress, ReadingStats
 from apps.favorites.models import Favorite
 from apps.crawler.models import CrawlerTask
+
+logger = logging.getLogger(__name__)
 
 # Auth helper: optional session auth (allows anonymous)
 class OptionalSessionAuth(SessionAuth):
@@ -179,6 +185,47 @@ class ProgressOut(Schema):
     position: int
     total_chapters: int
     updated_at: str
+
+
+# ========== Health Check ==========
+
+class HealthSchema(Schema):
+    status: str
+    database: str = 'ok'
+    cache: str = 'ok'
+    disk_usage: str = 'ok'
+    version: str = '1.0.0'
+
+
+@api.get('/health/', response=HealthSchema, auth=None)
+def health_check(request):
+    checks = {'status': 'ok', 'database': 'ok', 'cache': 'ok', 'disk_usage': 'ok'}
+    try:
+        connection.ensure_connection()
+    except Exception as e:
+        logger.warning(f"数据库健康检查失败: {e}")
+        checks['database'] = 'error'
+        checks['status'] = 'degraded'
+    try:
+        cache.set('_health', '1', 5)
+        if cache.get('_health') != '1':
+            raise RuntimeError("cache readback failed")
+    except Exception as e:
+        logger.warning(f"缓存健康检查失败: {e}")
+        checks['cache'] = 'error'
+        checks['status'] = 'degraded'
+    try:
+        usage = shutil.disk_usage('/')
+        used_pct = (usage.used / usage.total) * 100
+        if used_pct > 95:
+            checks['disk_usage'] = f'critical ({used_pct:.0f}%)'
+            checks['status'] = 'degraded'
+        elif used_pct > 85:
+            checks['disk_usage'] = f'warning ({used_pct:.0f}%)'
+    except Exception as e:
+        logger.warning(f"磁盘健康检查失败: {e}")
+        checks['disk_usage'] = 'unknown'
+    return checks
 
 
 # ========== Helpers ==========
