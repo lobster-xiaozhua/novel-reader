@@ -3,6 +3,7 @@ Django>=5.2,<6.0
 granian>=2.2.0
 whitenoise>=6.9.0
 django-environ>=0.12.0
+django-unfold>=0.52.0
 
 # ========== API (Ninja替代DRF) ==========
 django-ninja>=1.4.0
