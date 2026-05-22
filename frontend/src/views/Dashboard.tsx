@@ -11,8 +11,7 @@ import {
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { fetchStats } from '@/api/stats'
 import { fetchCrawlerTasks } from '@/api/crawler'
-
-const COLORS = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#06b6d4']
+import { CHART_COLORS, COLORS } from '@/config/colors'
 
 export default function Dashboard() {
   const { data: stats } = useQuery({
@@ -100,8 +99,8 @@ export default function Dashboard() {
                     color: '#f1f5f9',
                   }}
                 />
-                <Area type="monotone" dataKey="minutes" stroke="#f59e0b" fillOpacity={1} fill="url(#colorMinutes)" name="阅读分钟" />
-                <Area type="monotone" dataKey="chapters" stroke="#10b981" fillOpacity={1} fill="url(#colorChapters)" name="阅读章节" />
+                <Area type="monotone" dataKey="minutes" stroke={COLORS.primary} fillOpacity={1} fill="url(#colorMinutes)" name="阅读分钟" />
+                  <Area type="monotone" dataKey="chapters" stroke={COLORS.success} fillOpacity={1} fill="url(#colorChapters)" name="阅读章节" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -123,7 +122,7 @@ export default function Dashboard() {
                   dataKey="value"
                 >
                   {categoryData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip
@@ -142,7 +141,7 @@ export default function Dashboard() {
               <div key={entry.name} className="flex items-center gap-2">
                 <div
                   className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                  style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
                 />
                 <span className="text-sm text-text-secondary">{entry.name}</span>
               </div>

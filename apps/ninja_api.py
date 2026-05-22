@@ -24,6 +24,7 @@ from apps.chapters.models import Chapter
 from apps.reader.models import ReadingProgress, ReadingStats
 from apps.favorites.models import Favorite
 from apps.crawler.models import CrawlerTask
+from utils.book_gradient import get_book_gradient
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,17 @@ api = NinjaAPI(
     docs_url='/docs/',
     openapi_url='/openapi.json',
 )
+
+
+@api.exception_handler(Exception)
+def global_exception_handler(request, exc):
+    import logging
+    logger = logging.getLogger('ninja')
+    logger.error(f'API Error: {request.path} - {type(exc).__name__}: {str(exc)}')
+    from ninja.errors import HttpError
+    if isinstance(exc, HttpError):
+        raise exc
+    return api.create_response(request, {'error': str(exc)}, status=500)
 
 
 # ========== Schemas ==========
@@ -137,8 +149,6 @@ class ReadingProgressIn(Schema):
 class StatsTrackIn(Schema):
     seconds: int = 0
     chapter_id: Optional[int] = None
-
-
 class CrawlerTaskSchema(Schema):
     id: int
     url: str
@@ -340,6 +350,10 @@ def auth_register(request, payload: RegisterIn):
 def auth_logout(request):
     logout(request)
     return {'message': '已退出登录'}
+
+
+def book_gradient(book_id: Optional[int]) -> tuple:
+    return get_book_gradient(book_id or 0)
 
 
 # ========== Books ==========
