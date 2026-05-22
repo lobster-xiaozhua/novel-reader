@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Heart, BookOpen, Clock, Trash2 } from 'lucide-react'
-import { fetchFavorites, toggleFavorite, type FavoriteItem } from '@/api/favorites'
+import { fetchFavorites, toggleFavorite } from '@/api/favorites'
+import { FavoriteItem } from '@/types'
 
 export default function Favorites() {
   const queryClient = useQueryClient()

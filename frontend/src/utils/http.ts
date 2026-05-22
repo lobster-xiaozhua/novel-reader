@@ -3,6 +3,7 @@ import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios'
 const http: AxiosInstance = axios.create({
   baseURL: '/api/v1',
   timeout: 30000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',

@@ -1,117 +1,150 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { FileText, Search, BookOpen, Eye } from 'lucide-react'
-import { fetchBooks, fetchChapters } from '@/api/books'
-import { Book, Chapter } from '@/types'
+import { useLocation } from 'react-router-dom'
+import { FileText, BookOpen, ChevronRight, ArrowLeft } from 'lucide-react'
+import { fetchBooks } from '@/api/books'
+import { fetchChapters, fetchChapterContent } from '@/api/books'
+import { Chapter, Book } from '@/types'
+import MarkdownRender from '@/components/MarkdownRender'
 
 export default function Chapters() {
-  const [selectedBook, setSelectedBook] = useState<number | null>(null)
-  const [search, setSearch] = useState('')
+  const location = useLocation()
+  const initialBookId = (location.state as { bookId?: number })?.bookId || null
+  const [selectedBookId, setSelectedBookId] = useState<number | null>(initialBookId)
+  const [readingChapter, setReadingChapter] = useState<Chapter | null>(null)
 
-  const { data: booksData, isLoading: booksLoading } = useQuery({
+  const { data: booksData } = useQuery({
     queryKey: ['books'],
     queryFn: () => fetchBooks(),
   })
 
   const { data: chaptersData, isLoading: chaptersLoading } = useQuery({
-    queryKey: ['chapters', selectedBook],
-    queryFn: () => fetchChapters(selectedBook!),
-    enabled: !!selectedBook,
+    queryKey: ['chapters', selectedBookId],
+    queryFn: () => fetchChapters(selectedBookId!),
+    enabled: !!selectedBookId,
+  })
+
+  const { data: chapterContent, isLoading: contentLoading } = useQuery({
+    queryKey: ['chapter-content', selectedBookId, readingChapter?.id],
+    queryFn: () => fetchChapterContent(selectedBookId!, readingChapter!.id),
+    enabled: !!selectedBookId && !!readingChapter,
   })
 
   const books = booksData?.items || []
   const chapters = chaptersData || []
-  const filteredBooks = search
-    ? books.filter((b: Book) => b.title.toLowerCase().includes(search.toLowerCase()))
-    : books
+
+  if (readingChapter) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setReadingChapter(null)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-card-bg border border-card-border text-sm text-text-secondary hover:text-text-primary transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            返回目录
+          </button>
+          <h2 className="text-lg font-semibold text-text-primary">
+            {readingChapter.title}
+          </h2>
+        </div>
+        <div className="bg-card-bg border border-card-border rounded-xl p-8 max-w-4xl mx-auto">
+          {contentLoading ? (
+            <div className="text-center py-20 text-text-muted">加载中...</div>
+          ) : (
+            <MarkdownRender content={chapterContent?.content || ''} />
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-text-primary">章节管理</h2>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-          <input
-            type="text"
-            placeholder="搜索书籍..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-64 h-10 pl-9 pr-4 rounded-lg bg-card-bg border border-card-border text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50 transition-colors"
-          />
-        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Books List */}
-        <div className="lg:col-span-1 bg-card-bg border border-card-border rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-white/[0.06] font-medium text-text-primary">选择书籍</div>
-          <div className="max-h-[600px] overflow-y-auto">
-            {booksLoading ? (
-              <div className="text-center py-10 text-text-muted">加载中...</div>
-            ) : filteredBooks.length === 0 ? (
-              <div className="text-center py-10 text-text-muted">暂无书籍</div>
-            ) : (
-              filteredBooks.map((book: Book) => (
+      <div className="grid grid-cols-12 gap-6">
+        <div className="col-span-3">
+          <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/[0.06]">
+              <h3 className="text-sm font-medium text-text-secondary">选择书籍</h3>
+            </div>
+            <div className="max-h-[600px] overflow-y-auto">
+              {books.map((book: Book) => (
                 <button
                   key={book.id}
-                  onClick={() => setSelectedBook(book.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-b border-white/[0.04] last:border-0
-                    ${selectedBook === book.id ? 'bg-primary-500/10 text-primary-500' : 'text-text-secondary hover:bg-white/[0.02]'}`}
+                  onClick={() => setSelectedBookId(book.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors ${
+                    selectedBookId === book.id ? 'bg-primary-500/10 border-l-2 border-primary-500' : ''
+                  }`}
                 >
-                  <BookOpen className="w-4 h-4 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{book.title}</div>
+                  <BookOpen className="w-4 h-4 text-text-muted flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-sm text-text-primary truncate">{book.title}</div>
                     <div className="text-xs text-text-muted">{book.chapter_count} 章</div>
                   </div>
                 </button>
-              ))
-            )}
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Chapters List */}
-        <div className="lg:col-span-2 bg-card-bg border border-card-border rounded-xl overflow-hidden">
-          <div className="px-6 py-3 border-b border-white/[0.06] font-medium text-text-primary">
-            {selectedBook ? '章节列表' : '请选择书籍'}
-          </div>
-          {!selectedBook ? (
-            <div className="flex flex-col items-center justify-center py-20 text-text-muted">
-              <FileText className="w-12 h-12 mb-3 opacity-30" />
-              <p>从左侧选择一本书籍查看章节</p>
-            </div>
-          ) : chaptersLoading ? (
-            <div className="text-center py-20 text-text-muted">加载中...</div>
-          ) : chapters.length === 0 ? (
-            <div className="text-center py-20 text-text-muted">暂无章节</div>
-          ) : (
-            <div className="max-h-[600px] overflow-y-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-white/[0.06]">
-                    <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary">序号</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary">标题</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary">字数</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary">操作</th>
+        <div className="col-span-9">
+          <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/[0.06]">
+                  <th className="px-6 py-4 text-left text-sm font-medium text-text-secondary">章节号</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-text-secondary">标题</th>
+                  <th className="px-6 py-4 text-left text-sm font-medium text-text-secondary">字数</th>
+                  <th className="px-6 py-4 text-right text-sm font-medium text-text-secondary">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!selectedBookId ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-20 text-text-muted">请先选择书籍</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {chapters.map((chapter: Chapter) => (
-                    <tr key={chapter.id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
-                      <td className="px-6 py-3 text-sm text-text-muted">{chapter.chapter_number}</td>
-                      <td className="px-6 py-3 text-sm text-text-primary">{chapter.title}</td>
-                      <td className="px-6 py-3 text-sm text-text-secondary">{chapter.word_count?.toLocaleString() || 0}</td>
-                      <td className="px-6 py-3">
-                        <button className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary-500/10 text-primary-500 text-xs hover:bg-primary-500/20 transition-colors">
-                          <Eye className="w-3.5 h-3.5" />
+                ) : chaptersLoading ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-20 text-text-muted">加载中...</td>
+                  </tr>
+                ) : chapters.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-20 text-text-muted">暂无章节</td>
+                  </tr>
+                ) : (
+                  chapters.map((ch: Chapter) => (
+                    <tr key={ch.id} className="border-b border-white/[0.06] hover:bg-white/[0.02] transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-text-muted">第{ch.chapter_number}章</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-text-muted" />
+                          <span className="text-sm text-text-primary">{ch.title}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-text-secondary">
+                        {ch.word_count > 0 ? `${ch.word_count} 字` : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => setReadingChapter(ch)}
+                          className="flex items-center gap-1 ml-auto px-3 py-1.5 rounded-lg bg-primary-500/10 text-primary-500 text-sm hover:bg-primary-500/20 transition-colors"
+                        >
+                          <ChevronRight className="w-4 h-4" />
                           阅读
                         </button>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
