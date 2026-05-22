@@ -13,11 +13,18 @@ from apps.reader.models import ReadingProgress, ReadingStats
 from apps.favorites.models import Favorite
 from apps.crawler.models import CrawlerTask
 
+# Auth helper: optional session auth (allows anonymous)
+class OptionalSessionAuth(SessionAuth):
+    def __call__(self, request):
+        return request.user if request.user.is_authenticated else True
+
+optional_auth = OptionalSessionAuth()
+session_auth = SessionAuth()
+
 api = NinjaAPI(
     title='NovelReader API',
     version='1.0.0',
     description='高性能小说阅读器 API',
-    auth=SessionAuth(),
     docs_url='/docs/',
     openapi_url='/openapi.json',
 )
@@ -126,6 +133,54 @@ class MessageSchema(Schema):
     message: str
 
 
+class TagListSchema(Schema):
+    id: int
+    name: str
+    color: str
+    book_count: int
+
+
+class TagIn(Schema):
+    name: str
+    color: str = '#f59e0b'
+
+
+class FavoriteSchema(Schema):
+    id: int
+    book_id: int
+    title: str
+    author: str
+    category: str
+    total_chapters: int
+    created_at: str
+
+
+class FavoriteToggleIn(Schema):
+    book_id: int
+
+
+class UserSchema(Schema):
+    id: int
+    username: str
+    email: str
+    is_staff: bool
+    date_joined: str
+    last_login: Optional[str] = None
+    book_count: int = 0
+
+
+class ProgressOut(Schema):
+    id: int
+    book_id: int
+    book_title: str
+    book_author: str
+    chapter_id: Optional[int] = None
+    chapter_title: Optional[str] = None
+    position: int
+    total_chapters: int
+    updated_at: str
+
+
 # ========== Helpers ==========
 
 def book_gradient(book_id: Optional[int]) -> tuple:
@@ -145,7 +200,7 @@ def book_gradient(book_id: Optional[int]) -> tuple:
 
 # ========== Books ==========
 
-@api.get('/books/', response=List[BookListSchema])
+@api.get('/books/', response=List[BookListSchema], auth=optional_auth)
 @paginate
 def list_books(request, tag: Optional[str] = None, category: Optional[str] = None, search: Optional[str] = None):
     qs = Book.objects.prefetch_related('tags').all()
@@ -158,7 +213,7 @@ def list_books(request, tag: Optional[str] = None, category: Optional[str] = Non
     return qs
 
 
-@api.get('/books/{book_id}/', response=BookDetailSchema)
+@api.get('/books/{book_id}/', response=BookDetailSchema, auth=optional_auth)
 def get_book(request, book_id: int):
     book = get_object_or_404(Book.objects.prefetch_related('tags'), id=book_id)
     is_fav = False
@@ -184,13 +239,13 @@ def get_book(request, book_id: int):
     }
 
 
-@api.get('/books/{book_id}/chapters/', response=List[ChapterSchema])
+@api.get('/books/{book_id}/chapters/', response=List[ChapterSchema], auth=optional_auth)
 def list_chapters(request, book_id: int):
     book = get_object_or_404(Book, id=book_id)
     return book.chapters.all()
 
 
-@api.get('/books/{book_id}/chapters/{chapter_id}/', response=ChapterContentSchema)
+@api.get('/books/{book_id}/chapters/{chapter_id}/', response=ChapterContentSchema, auth=optional_auth)
 def get_chapter_content(request, book_id: int, chapter_id: int):
     chapter = get_object_or_404(Chapter, book_id=book_id, id=chapter_id)
     content = ''
@@ -218,11 +273,9 @@ def get_chapter_content(request, book_id: int, chapter_id: int):
 
 # ========== Progress ==========
 
-@api.get('/progress/', response=List[ReadingProgressSchema])
+@api.get('/progress/', response=List[ReadingProgressSchema], auth=session_auth)
 @paginate
 def list_progress(request):
-    if not request.user.is_authenticated:
-        raise HttpError(401, '未登录')
     qs = ReadingProgress.objects.filter(user=request.user)
     return [{
         'id': p.id,
@@ -233,10 +286,8 @@ def list_progress(request):
     } for p in qs]
 
 
-@api.post('/progress/', response=ReadingProgressSchema)
+@api.post('/progress/', response=ReadingProgressSchema, auth=session_auth)
 def create_progress(request, payload: ReadingProgressIn):
-    if not request.user.is_authenticated:
-        raise HttpError(401, '未登录')
     progress, _ = ReadingProgress.objects.update_or_create(
         user=request.user,
         book_id=payload.book_id,
@@ -256,18 +307,14 @@ def create_progress(request, payload: ReadingProgressIn):
 
 # ========== Crawler ==========
 
-@api.get('/crawler/', response=List[CrawlerTaskSchema])
+@api.get('/crawler/', response=List[CrawlerTaskSchema], auth=session_auth)
 @paginate
 def list_crawler_tasks(request):
-    if not request.user.is_authenticated:
-        raise HttpError(401, '未登录')
     return CrawlerTask.objects.filter(user=request.user)
 
 
-@api.post('/crawler/', response=CrawlerTaskSchema)
+@api.post('/crawler/', response=CrawlerTaskSchema, auth=session_auth)
 def create_crawler_task(request, payload: CrawlerTaskIn):
-    if not request.user.is_authenticated:
-        raise HttpError(401, '未登录')
     task = CrawlerTask.objects.create(
         user=request.user,
         url=payload.url,
@@ -278,12 +325,101 @@ def create_crawler_task(request, payload: CrawlerTaskIn):
     return task
 
 
+# ========== Tags ==========
+
+@api.get('/tags/', response=List[TagListSchema], auth=optional_auth)
+@paginate
+def list_tags(request):
+    qs = Tag.objects.all()
+    return [{
+        'id': t.id,
+        'name': t.name,
+        'color': t.color,
+        'book_count': t.books.count(),
+    } for t in qs]
+
+
+@api.post('/tags/', response=TagListSchema, auth=session_auth)
+def create_tag(request, payload: TagIn):
+    tag = Tag.objects.create(name=payload.name, color=payload.color)
+    return {'id': tag.id, 'name': tag.name, 'color': tag.color, 'book_count': 0}
+
+
+@api.delete('/tags/{tag_id}/', response=MessageSchema, auth=session_auth)
+def delete_tag(request, tag_id: int):
+    tag = get_object_or_404(Tag, id=tag_id)
+    tag.delete()
+    return {'message': '删除成功'}
+
+
+# ========== Favorites ==========
+
+@api.get('/favorites/', response=List[FavoriteSchema], auth=session_auth)
+@paginate
+def list_favorites(request):
+    qs = Favorite.objects.filter(user=request.user).select_related('book')
+    return [{
+        'id': f.id,
+        'book_id': f.book_id,
+        'title': f.book.title,
+        'author': f.book.author,
+        'category': f.book.category,
+        'total_chapters': f.book.total_chapters,
+        'created_at': f.created_at.isoformat(),
+    } for f in qs]
+
+
+@api.post('/favorites/toggle/', response=MessageSchema, auth=session_auth)
+def toggle_favorite(request, payload: FavoriteToggleIn):
+    book = get_object_or_404(Book, id=payload.book_id)
+    fav = Favorite.objects.filter(user=request.user, book=book).first()
+    if fav:
+        fav.delete()
+        return {'message': '已取消收藏'}
+    Favorite.objects.create(user=request.user, book=book)
+    return {'message': '已收藏'}
+
+
+# ========== Users ==========
+
+@api.get('/users/', response=List[UserSchema], auth=session_auth)
+@paginate
+def list_users(request):
+    qs = User.objects.all()
+    return [{
+        'id': u.id,
+        'username': u.username,
+        'email': u.email or '',
+        'is_staff': u.is_staff,
+        'date_joined': u.date_joined.isoformat(),
+        'last_login': u.last_login.isoformat() if u.last_login else None,
+        'book_count': ReadingProgress.objects.filter(user=u).count(),
+    } for u in qs]
+
+
+# ========== Progress (enhanced) ==========
+
+@api.get('/progress/', response=List[ProgressOut], auth=session_auth)
+@paginate
+def list_progress_enhanced(request):
+    qs = ReadingProgress.objects.filter(user=request.user).select_related('book', 'chapter')
+    return [{
+        'id': p.id,
+        'book_id': p.book_id,
+        'book_title': p.book.title,
+        'book_author': p.book.author,
+        'chapter_id': p.chapter_id,
+        'chapter_title': p.chapter.title if p.chapter else None,
+        'position': p.position,
+        'total_chapters': p.book.total_chapters,
+        'updated_at': p.updated_at.isoformat(),
+    } for p in qs]
+
+
 # ========== Stats ==========
 
-@api.get('/stats/', response=UserStatsSchema)
+@api.get('/stats/', response=UserStatsSchema, auth=session_auth)
 def get_user_stats(request, days: int = 7):
-    if not request.user.is_authenticated:
-        raise HttpError(401, '未登录')
     user = request.user
     today = date.today()
     total_books = Book.objects.count()

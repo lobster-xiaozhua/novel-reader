@@ -1,12 +1,11 @@
 import os
 import json
 import logging
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.core.cache import cache
-from django.utils import timezone
 from apps.books.models import Book
 from apps.reader.models import ReadingProgress, ReadingStats
 from .models import Chapter
@@ -62,27 +61,31 @@ def chapter_read(request, book_id, chapter_id):
         ).select_related('chapter').first()
 
     content = _read_chapter_content(chapter)
-    chapters_json = json.dumps(all_chapters, ensure_ascii=False)
 
-    context = {
-        'book': book,
-        'chapter': chapter,
+    return JsonResponse({
+        'book': {'id': book.id, 'title': book.title},
+        'chapter': {
+            'id': chapter.id,
+            'chapter_number': chapter.chapter_number,
+            'title': chapter.title,
+            'word_count': chapter.word_count,
+            'content': content,
+        },
         'chapters': all_chapters,
-        'chapters_json': chapters_json,
-        'content': content,
-        'progress': progress,
+        'progress': {'chapter_id': progress.chapter_id, 'position': progress.position} if progress else None,
         'prev_chapter': prev_chapter,
         'next_chapter': next_chapter,
-    }
-    return render(request, 'chapters/read.html', context)
+    })
 
 
 @login_required
 @require_POST
 def save_progress(request, book_id):
-    chapter_id = request.POST.get('chapter_id')
+    import json
+    data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+    chapter_id = data.get('chapter_id')
     try:
-        position = int(request.POST.get('position', 0))
+        position = int(data.get('position', 0))
     except (ValueError, TypeError):
         position = 0
 
@@ -101,15 +104,18 @@ def save_progress(request, book_id):
 @login_required
 @require_POST
 def track_stats(request):
+    import json
+    data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
     try:
-        seconds = int(request.POST.get('seconds', 0))
-        chapter_id = request.POST.get('chapter_id', '0')
+        seconds = int(data.get('seconds', 0))
+        chapter_id = data.get('chapter_id', '0')
     except (ValueError, TypeError):
         return JsonResponse({'status': 'error', 'message': '参数错误'}, status=400)
 
     if seconds < 5:
         return JsonResponse({'status': 'ok'})
 
+    from django.utils import timezone
     today = timezone.now().date()
     words = 0
     try:
