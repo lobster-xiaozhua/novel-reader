@@ -1,4 +1,4 @@
-import { useState, useCallback, createContext, useContext, useRef, useEffect } from 'react'
+import { useState, useCallback, createContext, useContext, useRef } from 'react'
 import { X, Loader2 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 

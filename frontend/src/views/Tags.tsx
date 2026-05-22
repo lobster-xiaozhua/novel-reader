@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tag, Plus, Search, Edit2, Trash2, X, Check } from 'lucide-react'
 import { fetchTags, createTag, deleteTag, type TagItem } from '@/api/tags'
+import { useDialog } from '@/components/ReDialog'
 
 const PRESET_COLORS = [
   '#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6',
@@ -10,6 +11,7 @@ const PRESET_COLORS = [
 
 export default function Tags() {
   const queryClient = useQueryClient()
+  const dialog = useDialog()
   const [search, setSearch] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
@@ -43,6 +45,23 @@ export default function Tags() {
   const handleCreate = () => {
     if (!newName.trim()) return
     createMutation.mutate({ name: newName.trim(), color: newColor })
+  }
+
+  const handleDelete = async (tag: TagItem) => {
+    const confirmed = await dialog.confirm({
+      title: '删除标签',
+      content: (
+        <p className="text-text-secondary">
+          确定要删除标签 <span className="font-medium text-text-primary">「{tag.name}」</span> 吗？<br />
+          此操作不可撤销，关联书籍将失去该标签。
+        </p>
+      ),
+      confirmText: '删除',
+      cancelText: '取消',
+    })
+    if (confirmed) {
+      deleteMutation.mutate(tag.id)
+    }
   }
 
   return (
@@ -145,7 +164,7 @@ export default function Tags() {
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => deleteMutation.mutate(tag.id)}
+                    onClick={() => handleDelete(tag)}
                     className="p-1 rounded-md hover:bg-danger/10 text-text-muted hover:text-danger transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

@@ -12,6 +12,7 @@ import {
   Bug,
   Menu,
   ChevronLeft,
+  FileCode,
 } from 'lucide-react'
 import { useAppStore } from '@/stores/appStore'
 import { MenuItem } from '@/types'
@@ -26,6 +27,7 @@ const menuItems: MenuItem[] = [
   { title: '阅读统计', icon: 'BarChart3', path: '/stats' },
   { title: '收藏', icon: 'Heart', path: '/favorites' },
   { title: '爬虫任务', icon: 'Bug', path: '/crawler' },
+  { title: 'Markdown', icon: 'FileCode', path: '/markdown' },
 ]
 
 const iconMap: Record<string, React.ElementType> = {
@@ -38,6 +40,7 @@ const iconMap: Record<string, React.ElementType> = {
   BarChart3,
   Heart,
   Bug,
+  FileCode,
 }
 
 export default function Sidebar() {
