@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import json
 import logging
 import os
@@ -11,6 +11,7 @@ from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db import connection
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from haystack.query import SearchQuerySet
@@ -31,8 +32,14 @@ class OptionalSessionAuth(SessionAuth):
     def __call__(self, request):
         return request.user if request.user.is_authenticated else True
 
+class SessionAuthNoCSRF(SessionAuth):
+    def __call__(self, request):
+        if request.user and request.user.is_authenticated:
+            return request.user
+        return None
+
 optional_auth = OptionalSessionAuth()
-session_auth = SessionAuth()
+session_auth = SessionAuthNoCSRF()
 
 api = NinjaAPI(
     title='NovelReader API',
@@ -63,6 +70,20 @@ class BookListSchema(Schema):
     gradient: tuple = ('#667eea', '#764ba2')
     created_at: str
     updated_at: str
+
+    @staticmethod
+    def resolve_created_at(obj):
+        if hasattr(obj, 'created_at'):
+            val = obj.created_at
+            return val.isoformat() if isinstance(val, datetime) else str(val)
+        return ''
+
+    @staticmethod
+    def resolve_updated_at(obj):
+        if hasattr(obj, 'updated_at'):
+            val = obj.updated_at
+            return val.isoformat() if isinstance(val, datetime) else str(val)
+        return ''
 
 
 class BookDetailSchema(Schema):
@@ -336,66 +357,7 @@ def list_books(request, tag: Optional[str] = None, category: Optional[str] = Non
     return qs
 
 
-@api.get('/books/{book_id}/', response=BookDetailSchema, auth=optional_auth)
-def get_book(request, book_id: int):
-    book = get_object_or_404(Book.objects.prefetch_related('tags'), id=book_id)
-    is_fav = False
-    progress = None
-    if request.user.is_authenticated:
-        is_fav = Favorite.objects.filter(user=request.user, book=book).exists()
-        rp = ReadingProgress.objects.filter(user=request.user, book=book).first()
-        if rp:
-            progress = {'chapter_id': rp.chapter_id, 'position': rp.position}
-    return {
-        'id': book.id,
-        'title': book.title,
-        'author': book.author,
-        'category': book.category,
-        'description': book.description,
-        'total_chapters': book.total_chapters,
-        'tags': [{'id': t.id, 'name': t.name, 'color': t.color} for t in book.tags.all()],
-        'gradient': book.cover_gradient,
-        'is_favorited': is_fav,
-        'reading_progress': progress,
-        'created_at': book.created_at.isoformat(),
-        'updated_at': book.updated_at.isoformat(),
-    }
-
-
-@api.get('/books/{book_id}/chapters/', response=List[ChapterSchema], auth=optional_auth)
-def list_chapters(request, book_id: int):
-    book = get_object_or_404(Book, id=book_id)
-    return book.chapters.all()
-
-
-@api.get('/books/{book_id}/chapters/{chapter_id}/', response=ChapterContentSchema, auth=optional_auth)
-def get_chapter_content(request, book_id: int, chapter_id: int):
-    chapter = get_object_or_404(Chapter, book_id=book_id, id=chapter_id)
-    content = ''
-    cache_key = f'chapter_content:{chapter.id}'
-    content = cache.get(cache_key)
-    if content is None and os.path.exists(chapter.file_path):
-        for enc in ('utf-8', 'gbk', 'gb2312', 'utf-16'):
-            try:
-                with open(chapter.file_path, 'r', encoding=enc) as f:
-                    content = f.read()
-                cache.set(cache_key, content, 300)
-                break
-            except UnicodeDecodeError:
-                continue
-            except Exception as e:
-                logger.error(f'读取章节文件失败 {chapter.file_path}: {e}')
-                break
-    return {
-        'id': chapter.id,
-        'chapter_number': chapter.chapter_number,
-        'title': chapter.title,
-        'word_count': chapter.word_count,
-        'content': content,
-    }
-
-
-@api.post('/books/batch-import/', response=BatchImportResult, auth=session_auth)
+@api.post('/books/import/', response=BatchImportResult, auth=session_auth)
 def batch_import(request):
     files = request.FILES.getlist('files')
     if not files:
@@ -474,6 +436,65 @@ def batch_import(request):
     return {'success': True, 'imported': imported, 'errors': errors, 'total': len(files)}
 
 
+@api.get('/books/{book_id}/', response=BookDetailSchema, auth=optional_auth)
+def get_book(request, book_id: int):
+    book = get_object_or_404(Book.objects.prefetch_related('tags'), id=book_id)
+    is_fav = False
+    progress = None
+    if request.user.is_authenticated:
+        is_fav = Favorite.objects.filter(user=request.user, book=book).exists()
+        rp = ReadingProgress.objects.filter(user=request.user, book=book).first()
+        if rp:
+            progress = {'chapter_id': rp.chapter_id, 'position': rp.position}
+    return {
+        'id': book.id,
+        'title': book.title,
+        'author': book.author,
+        'category': book.category,
+        'description': book.description,
+        'total_chapters': book.total_chapters,
+        'tags': [{'id': t.id, 'name': t.name, 'color': t.color} for t in book.tags.all()],
+        'gradient': book.cover_gradient,
+        'is_favorited': is_fav,
+        'reading_progress': progress,
+        'created_at': book.created_at.isoformat(),
+        'updated_at': book.updated_at.isoformat(),
+    }
+
+
+@api.get('/books/{book_id}/chapters/', response=List[ChapterSchema], auth=optional_auth)
+def list_chapters(request, book_id: int):
+    book = get_object_or_404(Book, id=book_id)
+    return book.chapters.all()
+
+
+@api.get('/books/{book_id}/chapters/{chapter_id}/', response=ChapterContentSchema, auth=optional_auth)
+def get_chapter_content(request, book_id: int, chapter_id: int):
+    chapter = get_object_or_404(Chapter, book_id=book_id, id=chapter_id)
+    content = ''
+    cache_key = f'chapter_content:{chapter.id}'
+    content = cache.get(cache_key)
+    if content is None and os.path.exists(chapter.file_path):
+        for enc in ('utf-8', 'gbk', 'gb2312', 'utf-16'):
+            try:
+                with open(chapter.file_path, 'r', encoding=enc) as f:
+                    content = f.read()
+                cache.set(cache_key, content, 300)
+                break
+            except UnicodeDecodeError:
+                continue
+            except Exception as e:
+                logger.error(f'读取章节文件失败 {chapter.file_path}: {e}')
+                break
+    return {
+        'id': chapter.id,
+        'chapter_number': chapter.chapter_number,
+        'title': chapter.title,
+        'word_count': chapter.word_count,
+        'content': content,
+    }
+
+
 # ========== Progress ==========
 
 @api.get('/progress/', response=List[ProgressOut], auth=session_auth)
@@ -495,9 +516,10 @@ def list_progress(request):
 
 @api.post('/progress/', response=ProgressOut, auth=session_auth)
 def create_progress(request, payload: ReadingProgressIn):
+    book = get_object_or_404(Book, id=payload.book_id)
     progress, _ = ReadingProgress.objects.update_or_create(
         user=request.user,
-        book_id=payload.book_id,
+        book=book,
         defaults={'chapter_id': payload.chapter_id, 'position': payload.position},
     )
     return {
