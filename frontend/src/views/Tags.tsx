@@ -3,11 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tag, Plus, Search, Edit2, Trash2, X, Check } from 'lucide-react'
 import { fetchTags, createTag, deleteTag, type TagItem } from '@/api/tags'
 import { useDialog } from '@/components/ReDialog'
-
-const PRESET_COLORS = [
-  '#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6',
-  '#06b6d4', '#f97316', '#ec4899', '#84cc16', '#6366f1',
-]
+import { TAG_COLORS } from '@/config/colors'
 
 export default function Tags() {
   const queryClient = useQueryClient()
@@ -15,7 +11,7 @@ export default function Tags() {
   const [search, setSearch] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newColor, setNewColor] = useState(PRESET_COLORS[0])
+  const [newColor, setNewColor] = useState(TAG_COLORS[0])
 
   const { data, isLoading } = useQuery({
     queryKey: ['tags'],
@@ -28,7 +24,7 @@ export default function Tags() {
       queryClient.invalidateQueries({ queryKey: ['tags'] })
       setIsCreating(false)
       setNewName('')
-      setNewColor(PRESET_COLORS[0])
+      setNewColor(TAG_COLORS[0])
     },
   })
 
@@ -106,7 +102,7 @@ export default function Tags() {
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">颜色</label>
               <div className="flex items-center gap-2">
-                {PRESET_COLORS.map((c) => (
+                {TAG_COLORS.map((c) => (
                   <button
                     key={c}
                     onClick={() => setNewColor(c)}
