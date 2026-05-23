@@ -12,8 +12,8 @@ class DisableCSRFForAPI:
 
 
 class SuppressBadAuthLog(logging.Filter):
+    _PATTERNS = ('"AUTH"', 'Bad request syntax')
+
     def filter(self, record):
         msg = record.getMessage()
-        if '\\x00AUTH' in msg or 'Bad request syntax' in msg:
-            return False
-        return True
+        return not any(p in msg for p in self._PATTERNS)

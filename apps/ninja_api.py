@@ -15,6 +15,7 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import NinjaAPI, Schema
+from ninja.errors import HttpError
 from ninja.pagination import paginate
 from ninja.security import SessionAuth
 
@@ -513,18 +514,24 @@ def get_chapter_content(request, book_id: int, chapter_id: int):
     content = ''
     cache_key = f'chapter_content:{chapter.id}'
     content = cache.get(cache_key)
-    if content is None and os.path.exists(chapter.file_path):
-        for enc in ('utf-8', 'gbk', 'gb2312', 'utf-16'):
-            try:
-                with open(chapter.file_path, 'r', encoding=enc) as f:
-                    content = f.read()
-                cache.set(cache_key, content, 300)
-                break
-            except UnicodeDecodeError:
-                continue
-            except Exception as e:
-                logger.error(f'读取章节文件失败 {chapter.file_path}: {e}')
-                break
+    if content is None and chapter.file_path:
+        file_path = os.path.normpath(chapter.file_path)
+        books_root = os.path.normpath(str(settings.BOOKS_DIR))
+        if not file_path.startswith(books_root):
+            logger.error(f'章节文件路径越界: {chapter.file_path}')
+            content = ''
+        elif os.path.exists(file_path):
+            for enc in ('utf-8', 'gbk', 'gb2312', 'utf-16'):
+                try:
+                    with open(file_path, 'r', encoding=enc) as f:
+                        content = f.read()
+                    cache.set(cache_key, content, 300)
+                    break
+                except UnicodeDecodeError:
+                    continue
+                except Exception as e:
+                    logger.error(f'读取章节文件失败 {file_path}: {e}')
+                    break
     return {
         'id': chapter.id,
         'chapter_number': chapter.chapter_number,
@@ -576,7 +583,7 @@ def create_progress(request, payload: ReadingProgressIn):
 
 @api.post('/progress/track-stats/', response=MessageSchema, auth=session_auth)
 def track_stats(request, payload: StatsTrackIn):
-    if payload.seconds < 5:
+    if payload.seconds < 5 or payload.seconds > 3600:
         return {'message': 'ok'}
     today = timezone.now().date()
     words = 0
@@ -608,6 +615,12 @@ def list_crawler_tasks(request):
 
 @api.post('/crawler/', response=CrawlerTaskSchema, auth=session_auth)
 def create_crawler_task(request, payload: CrawlerTaskIn):
+    from utils.crawler_engine import validate_crawl_url
+    if not validate_crawl_url(payload.url):
+        raise HttpError(400, '目标 URL 不合法或指向内网地址')
+    active_count = CrawlerTask.objects.filter(user=request.user, status__in=['pending', 'running']).count()
+    if active_count >= 5:
+        raise HttpError(429, '当前已有过多运行中的任务，请稍后再试')
     task = CrawlerTask.objects.create(user=request.user, url=payload.url, status='pending')
     from apps.crawler.tasks import run_crawler_task
     run_crawler_task.delay(task.id)

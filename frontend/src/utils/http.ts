@@ -17,6 +17,8 @@ http.interceptors.response.use(
       const store = (window as any).__userStore
       if (store?.getState?.()?.isLoggedIn) {
         store.getState().logout()
+      }
+      if (!window.location.pathname.startsWith('/login')) {
         window.location.href = '/login'
       }
     }

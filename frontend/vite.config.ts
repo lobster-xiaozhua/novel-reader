@@ -29,12 +29,12 @@ export default defineConfig({
         main: path.resolve(__dirname, 'index.html'),
       },
       output: {
-        entryFileNames: 'static/js/[name]-[hash].js',
+        entryFileNames: 'static/js/[name].js',
         chunkFileNames: 'static/js/[name]-[hash].js',
         assetFileNames: (assetInfo) => {
           const info = assetInfo.name || ''
           if (info.endsWith('.css')) {
-            return 'static/css/[name]-[hash][extname]'
+            return 'static/css/[name][extname]'
           }
           return 'static/[ext]/[name]-[hash][extname]'
         },
