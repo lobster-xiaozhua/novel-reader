@@ -99,8 +99,9 @@ DATABASES = {
         'NAME': BASE_DIR / 'data' / 'db.sqlite3',
     }
 }
-_db_url = env.db_url(default='', engine='django.db.backends.sqlite3')
-if _db_url:
+_db_url_str = env('DATABASE_URL', default='')
+if _db_url_str:
+    _db_url = env.db_url(default=_db_url_str, engine='django.db.backends.sqlite3')
     DATABASES['default'] = _db_url
     if DATABASES['default'].get('ENGINE', '').startswith('sqlite'):
         DATABASES['default']['ENGINE'] = 'django.db.backends.sqlite3'

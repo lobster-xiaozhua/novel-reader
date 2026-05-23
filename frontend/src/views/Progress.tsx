@@ -35,7 +35,9 @@ export default function Progress() {
               <tr><td colSpan={5} className="text-center py-20 text-text-muted"><Bookmark className="w-12 h-12 mx-auto mb-3 opacity-30" /><p>暂无阅读进度</p></td></tr>
             ) : (
               items.map((item: ProgressItem) => {
-                const progress = item.total_chapters > 0 ? Math.round(((item.position || 0) / item.total_chapters) * 100) : 0
+                const progress = item.total_chapters > 0 && item.position > 0
+                  ? Math.round((item.position / item.total_chapters) * 100)
+                  : 0
                 return (
                   <tr key={item.id} className="border-b border-white/[0.06] hover:bg-white/[0.02] transition-colors">
                     <td className="px-6 py-4">
@@ -46,9 +48,9 @@ export default function Progress() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-24 h-2 rounded-full bg-white/5 overflow-hidden">
-                          <div className="h-full rounded-full bg-primary-500 transition-all" style={{ width: `${progress}%` }} />
+                          <div className="h-full rounded-full bg-primary-500 transition-all" style={{ width: `${Math.min(progress, 100)}%` }} />
                         </div>
-                        <span className="text-sm text-text-muted">{progress}%</span>
+                        <span className="text-sm text-text-muted">{Math.min(progress, 100)}%</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">

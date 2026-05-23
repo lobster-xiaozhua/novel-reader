@@ -1,5 +1,17 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios'
 
+const AUTH_EXPIRED_EVENT = 'auth:expired'
+
+export function onAuthExpired(callback: () => void): () => void {
+  const handler = () => callback()
+  window.addEventListener(AUTH_EXPIRED_EVENT, handler)
+  return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handler)
+}
+
+function emitAuthExpired() {
+  window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+}
+
 const http: AxiosInstance = axios.create({
   baseURL: '/api/v1',
   timeout: 30000,
@@ -14,13 +26,7 @@ http.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      const store = (window as any).__userStore
-      if (store?.getState?.()?.isLoggedIn) {
-        store.getState().logout()
-      }
-      if (!window.location.pathname.startsWith('/login')) {
-        window.location.href = '/login'
-      }
+      emitAuthExpired()
     }
     return Promise.reject(error)
   }

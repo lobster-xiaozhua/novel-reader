@@ -1,14 +1,17 @@
 import { useState, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { BookOpen, Search, Eye, Tag, Upload, Loader2 } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { BookOpen, Search, Eye, Tag, Upload, Loader2, Heart } from 'lucide-react'
 import { fetchBooks, importBooks } from '@/api/books'
+import { toggleFavorite } from '@/api/favorites'
 import { Book } from '@/types'
 import { useToast } from '@/components/Toast'
 import { Spinner } from '@/components/Loading'
 
 export default function Books() {
-  const [search, setSearch] = useState('')
+  const [searchParams] = useSearchParams()
+  const initialSearch = searchParams.get('search') || ''
+  const [search, setSearch] = useState(initialSearch)
   const [importing, setImporting] = useState(false)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -35,11 +38,22 @@ export default function Books() {
         }
         queryClient.invalidateQueries({ queryKey: ['books'] })
       }
-    } catch (err) {
+    } catch {
       toast.error('导入失败，请重试')
     } finally {
       setImporting(false)
       if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  const handleToggleFav = async (e: React.MouseEvent, bookId: number) => {
+    e.stopPropagation()
+    try {
+      const res = await toggleFavorite(bookId)
+      toast.success(res.message)
+      queryClient.invalidateQueries({ queryKey: ['books'] })
+    } catch {
+      toast.error('操作失败')
     }
   }
 
@@ -121,13 +135,22 @@ export default function Books() {
                 <span className="text-xs text-text-muted">
                   {new Date(book.created_at).toLocaleDateString('zh-CN')}
                 </span>
-                <button
-                  onClick={() => navigate(`/chapters`, { state: { bookId: book.id } })}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary-500/10 text-primary-500 text-sm hover:bg-primary-500/20 transition-colors"
-                >
-                  <Eye className="w-4 h-4" />
-                  查看
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => handleToggleFav(e, book.id)}
+                    className="p-1.5 rounded-lg hover:bg-primary-500/10 text-text-muted hover:text-primary-500 transition-colors"
+                    title="收藏"
+                  >
+                    <Heart className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => navigate(`/chapters`, { state: { bookId: book.id } })}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary-500/10 text-primary-500 text-sm hover:bg-primary-500/20 transition-colors"
+                  >
+                    <Eye className="w-4 h-4" />
+                    查看
+                  </button>
+                </div>
               </div>
             </div>
           ))}

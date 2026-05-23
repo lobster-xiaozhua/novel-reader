@@ -1,19 +1,30 @@
+import { Suspense, lazy } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { DialogProvider } from '@/components/ReDialog'
 import AuthGuard from '@/components/AuthGuard'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import Layout from './layout'
-import Dashboard from './views/Dashboard'
-import Books from './views/Books'
-import Chapters from './views/Chapters'
-import Tags from './views/Tags'
-import Users from './views/Users'
-import Progress from './views/Progress'
-import Stats from './views/Stats'
-import Favorites from './views/Favorites'
-import Crawler from './views/Crawler'
 import Login from './views/Login'
 import ErrorPage from './views/ErrorPage'
+import { Spinner } from '@/components/Loading'
+
+const Dashboard = lazy(() => import('./views/Dashboard'))
+const Books = lazy(() => import('./views/Books'))
+const Chapters = lazy(() => import('./views/Chapters'))
+const Tags = lazy(() => import('./views/Tags'))
+const Users = lazy(() => import('./views/Users'))
+const Progress = lazy(() => import('./views/Progress'))
+const Stats = lazy(() => import('./views/Stats'))
+const Favorites = lazy(() => import('./views/Favorites'))
+const Crawler = lazy(() => import('./views/Crawler'))
+
+function LazyPage({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<Spinner />}>
+      {children}
+    </Suspense>
+  )
+}
 
 function App() {
   return (
@@ -24,16 +35,16 @@ function App() {
         <Route path="/error/404" element={<ErrorPage code={404} />} />
         <Route path="/error/500" element={<ErrorPage code={500} />} />
         <Route path="/" element={<AuthGuard><Layout /></AuthGuard>}>
-          <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
-          <Route path="dashboard" element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
-          <Route path="books" element={<ErrorBoundary><Books /></ErrorBoundary>} />
-          <Route path="chapters" element={<ErrorBoundary><Chapters /></ErrorBoundary>} />
-          <Route path="tags" element={<ErrorBoundary><Tags /></ErrorBoundary>} />
-          <Route path="users" element={<ErrorBoundary><Users /></ErrorBoundary>} />
-          <Route path="progress" element={<ErrorBoundary><Progress /></ErrorBoundary>} />
-          <Route path="stats" element={<ErrorBoundary><Stats /></ErrorBoundary>} />
-          <Route path="favorites" element={<ErrorBoundary><Favorites /></ErrorBoundary>} />
-          <Route path="crawler" element={<ErrorBoundary><Crawler /></ErrorBoundary>} />
+          <Route index element={<ErrorBoundary><LazyPage><Dashboard /></LazyPage></ErrorBoundary>} />
+          <Route path="dashboard" element={<ErrorBoundary><LazyPage><Dashboard /></LazyPage></ErrorBoundary>} />
+          <Route path="books" element={<ErrorBoundary><LazyPage><Books /></LazyPage></ErrorBoundary>} />
+          <Route path="chapters" element={<ErrorBoundary><LazyPage><Chapters /></LazyPage></ErrorBoundary>} />
+          <Route path="tags" element={<ErrorBoundary><LazyPage><Tags /></LazyPage></ErrorBoundary>} />
+          <Route path="users" element={<ErrorBoundary><LazyPage><Users /></LazyPage></ErrorBoundary>} />
+          <Route path="progress" element={<ErrorBoundary><LazyPage><Progress /></LazyPage></ErrorBoundary>} />
+          <Route path="stats" element={<ErrorBoundary><LazyPage><Stats /></LazyPage></ErrorBoundary>} />
+          <Route path="favorites" element={<ErrorBoundary><LazyPage><Favorites /></LazyPage></ErrorBoundary>} />
+          <Route path="crawler" element={<ErrorBoundary><LazyPage><Crawler /></LazyPage></ErrorBoundary>} />
           <Route path="*" element={<ErrorPage code={404} />} />
         </Route>
       </Routes>

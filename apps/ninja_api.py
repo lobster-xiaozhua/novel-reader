@@ -11,7 +11,7 @@ from django.contrib.auth.models import User
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import NinjaAPI, Schema
@@ -714,7 +714,8 @@ def toggle_favorite(request, payload: FavoriteToggleIn):
 @api.get('/users/', response=List[UserSchema], auth=session_auth)
 @paginate
 def list_users(request):
-    qs = User.objects.all()
+    from django.db.models import Count as DbCount
+    qs = User.objects.annotate(book_count=DbCount('readingprogress')).all()
     return [{
         'id': u.id,
         'username': u.username,
@@ -722,7 +723,7 @@ def list_users(request):
         'is_staff': u.is_staff,
         'date_joined': u.date_joined.isoformat(),
         'last_login': u.last_login.isoformat() if u.last_login else None,
-        'book_count': ReadingProgress.objects.filter(user=u).count(),
+        'book_count': u.book_count,
     } for u in qs]
 
 
@@ -737,9 +738,12 @@ def get_user_stats(request, days: int = 7):
     favorite_count = Favorite.objects.filter(user=user).count()
     today_stats = ReadingStats.objects.filter(user=user, date=today).first()
     week_start = today - timedelta(days=today.weekday())
-    week_stats = ReadingStats.objects.filter(user=user, date__gte=week_start)
-    week_chapters = sum(s.chapters_read for s in week_stats)
-    total_words = sum(s.words_read for s in ReadingStats.objects.filter(user=user))
+    week_stats = ReadingStats.objects.filter(user=user, date__gte=week_start).aggregate(
+        total_chapters=Sum('chapters_read'),
+    )
+    total_words = ReadingStats.objects.filter(user=user).aggregate(
+        total=Sum('words_read'),
+    )['total'] or 0
     start = today - timedelta(days=days - 1)
     daily_stats = ReadingStats.objects.filter(user=user, date__gte=start)
     stats_map = {s.date: s for s in daily_stats}
@@ -760,7 +764,7 @@ def get_user_stats(request, days: int = 7):
         'favorite_count': favorite_count,
         'today_chapters': today_stats.chapters_read if today_stats else 0,
         'today_minutes': round(today_stats.read_seconds / 60, 1) if today_stats else 0.0,
-        'week_chapters': week_chapters,
+        'week_chapters': week_stats['total_chapters'] or 0,
         'total_words': total_words,
         'chart': chart,
     }
@@ -780,7 +784,7 @@ def get_dashboard_stats(request):
         'total_books': Book.objects.count(),
         'total_users': User.objects.count(),
         'total_chapters': Chapter.objects.count(),
-        'total_words': Chapter.objects.aggregate(total=Count('word_count'))['total'] or 0,
+        'total_words': Chapter.objects.aggregate(total=Sum('word_count'))['total'] or 0,
         'category_stats': category_stats,
     }
 

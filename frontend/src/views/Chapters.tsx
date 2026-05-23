@@ -55,6 +55,10 @@ export default function Chapters() {
           ) : (
             <NovelReader
               content={chapterContent?.content || ''}
+              bookId={selectedBookId!}
+              chapterId={readingChapter.id}
+              chapterNumber={readingChapter.chapter_number}
+              totalChapters={chapters.length}
               hasPrev={readingChapterIdx! > 0}
               hasNext={readingChapterIdx! < chapters.length - 1}
               onPrev={() => setReadingChapterIdx((i) => (i !== null && i > 0 ? i - 1 : i))}
