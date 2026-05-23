@@ -117,22 +117,28 @@ call venv\Scripts\activate.bat
 
 pip install -q --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ >nul 2>&1
 
-set "pkg_list=Django granian whitenoise django-environ django-unfold django-ninja pydantic redis celery requests beautifulsoup4 tenacity httpx orjson uvloop django-cors-headers pytest pytest-django pytest-cov ruff django-debug-toolbar"
+set "pkg_list=Django granian whitenoise django-environ django-unfold django-ninja pydantic redis celery requests beautifulsoup4 tenacity httpx orjson django-cors-headers pytest pytest-django pytest-cov ruff django-debug-toolbar"
 set "pkg_total=0"
 for %%p in (!pkg_list!) do set /a pkg_total+=1
 
 set "pkg_idx=0"
+set "pkg_failed=0"
 for %%p in (!pkg_list!) do (
     set /a pkg_idx+=1
     call :draw_progress "%%p" !pkg_idx! !pkg_total! downloading
     pip install -q "%%p" -i https://mirrors.aliyun.com/pypi/simple/ >nul 2>&1
     if errorlevel 1 (
         call :log_error "  ✗ %%p 安装失败"
+        set /a pkg_failed+=1
     ) else (
         call :draw_progress "%%p" !pkg_idx! !pkg_total! done
     )
 )
-call :log_success "Python 依赖安装完成 (%pkg_total% 个包)"
+if !pkg_failed! gtr 0 (
+    call :log_warning "Python 依赖安装完成 (!pkg_total! 个包, !pkg_failed! 个失败)"
+) else (
+    call :log_success "Python 依赖安装完成 (!pkg_total! 个包)"
+)
 goto :eof
 
 :install_node_deps
@@ -151,18 +157,24 @@ set "pkg_total=0"
 for %%p in (!pkg_list!) do set /a pkg_total+=1
 
 set "pkg_idx=0"
+set "pkg_failed=0"
 for %%p in (!pkg_list!) do (
     set /a pkg_idx+=1
     call :draw_progress "%%p" !pkg_idx! !pkg_total! downloading
     npm install "%%p" --registry https://registry.npmmirror.com --no-save --no-package-lock >nul 2>&1
     if errorlevel 1 (
         call :log_error "  ✗ %%p 安装失败"
+        set /a pkg_failed+=1
     ) else (
         call :draw_progress "%%p" !pkg_idx! !pkg_total! done
     )
 )
 cd ..
-call :log_success "Node 依赖安装完成 (%pkg_total% 个包)"
+if !pkg_failed! gtr 0 (
+    call :log_warning "Node 依赖安装完成 (!pkg_total! 个包, !pkg_failed! 个失败)"
+) else (
+    call :log_success "Node 依赖安装完成 (!pkg_total! 个包)"
+)
 goto :eof
 
 :install_deps
@@ -241,6 +253,35 @@ call :check_env
 call :install_deps
 call :migrate_db
 call :create_superuser
+
+for /f "tokens=3" %%m in ('systeminfo ^| findstr /C:"可用的物理内存" /C:"Available Physical Memory" 2^>nul') do (
+    for /f "tokens=1" %%v in ("%%m") do set "mem_mb=%%v"
+)
+if defined mem_mb (
+    set "mem_mb=!mem_mb:,=!"
+    set "mem_mb=!mem_mb: =!"
+    if !mem_mb! lss 1500 (
+        call :log_warning "可用内存 !mem_mb!MB，不足同时运行 Django + Vite"
+        call :log_step "切换为低内存模式：构建前端 → 启动后端"
+        call :build_frontend
+        call venv\Scripts\activate.bat
+        python manage.py collectstatic --noinput 2>nul || (
+            call :log_warning "静态文件收集跳过"
+        )
+
+        echo.
+        echo %GREEN%═══════════════════════════════════════════════════%NC%
+        echo %GREEN%  低内存开发模式启动!%NC%
+        echo %GREEN%═══════════════════════════════════════════════════%NC%
+        echo.
+        echo   %GREEN%📖%NC% 访问地址: http://localhost:8000
+        echo   %YELLOW%⚠%NC%  前端变更需重新 %CYAN%start.bat build%NC%
+        echo.
+
+        granian novel_reader.asgi:application --host 0.0.0.0 --port 8000 --interface asgi --workers 1
+        goto :eof
+    )
+)
 
 call :log_step "启动开发模式..."
 echo.
