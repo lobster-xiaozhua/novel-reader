@@ -9,7 +9,6 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 import requests
-from django.conf import settings
 from apps.books.models import Book
 from apps.chapters.models import Chapter
 from .crawler_config import get_config_for_url, SiteConfig
@@ -202,7 +201,6 @@ class CrawlerEngine:
         return name[:100] if name else "unnamed"
 
     def _append_log(self, task, message):
-        from apps.crawler.models import CrawlerTask
         try:
             task.refresh_from_db()
             logs = json.loads(task.logs) if task.logs else []
@@ -214,7 +212,6 @@ class CrawlerEngine:
             logger.error(f"添加日志失败: {e}")
 
     def run(self, task):
-        from apps.crawler.models import CrawlerTask
         
         self.config = get_config_for_url(task.url)
         self.parser = IntelligentParser(self.config)

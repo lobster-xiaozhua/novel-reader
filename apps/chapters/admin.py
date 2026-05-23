@@ -1,5 +1,5 @@
 from django.contrib import admin
-from unfold.admin import ModelAdmin, StackedInline
+from unfold.admin import ModelAdmin
 from unfold.decorators import display
 from .models import Chapter
 

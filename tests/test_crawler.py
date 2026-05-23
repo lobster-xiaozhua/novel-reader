@@ -1,4 +1,3 @@
-import pytest
 from django.test import TestCase
 from utils.crawler_config import SiteConfig, get_config_for_url, DEFAULT_CONFIG
 from utils.crawler_engine import validate_crawl_url, IntelligentParser

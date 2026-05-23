@@ -8,8 +8,8 @@ from typing import List, Optional
 
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
+from django.conf import settings
 from django.core.cache import cache
-from django.core.paginator import Paginator
 from django.db import connection
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
@@ -24,7 +24,6 @@ from apps.chapters.models import Chapter
 from apps.reader.models import ReadingProgress, ReadingStats
 from apps.favorites.models import Favorite
 from apps.crawler.models import CrawlerTask
-from utils.book_gradient import get_book_gradient
 
 logger = logging.getLogger(__name__)
 

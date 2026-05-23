@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """全路由测试脚本"""
 import requests
-import json
 import sys
 
 BASE = "http://localhost:8000"
@@ -121,7 +120,7 @@ def main():
     # Login to get session
     session = requests.Session()
     r = session.post(f"{BASE}/api/v1/auth/login/", json={"username": "testuser99", "password": "Test123!@#"})
-    login_ok = r.status_code == 200 and r.json().get("success") == True
+    login_ok = r.status_code == 200 and r.json().get("success")
     print(f"  {'✅' if login_ok else '❌'} 登录 testuser99: {r.json()}")
 
     if login_ok:
@@ -169,15 +168,15 @@ def main():
                     r6 = session.post(f"{BASE}/api/v1/favorites/toggle/", json={"book_id": first_book_id})
                     print(f"  {'✅' if r6.status_code == 200 else '❌'} 切换收藏: {r6.status_code} (is_favorited={r6.json().get('is_favorited', 'N/A')})")
                 else:
-                    print(f"     → 无章节数据")
+                    print("     → 无章节数据")
             else:
-                print(f"     → 获取章节列表失败")
+                print("     → 获取章节列表失败")
 
             # 不存在的章节
             r7 = session.get(f"{BASE}/api/v1/books/{first_book_id}/chapters/99999/")
             print(f"  {'✅' if r7.status_code == 404 else '❌'} 不存在的章节: {r7.status_code}")
         else:
-            print(f"\n  ⚠️  未找到书籍，跳过章节测试")
+            print("\n  ⚠️  未找到书籍，跳过章节测试")
 
         # Tags CRUD
         test("GET", "/api/v1/tags/", desc="标签列表-已登录", expected_code=200, cookies=cookies)
@@ -219,7 +218,7 @@ def main():
     total = PASS + FAIL
     pct = f"{PASS / total * 100:.1f}%" if total > 0 else "0%"
     print(f"\n  总计: {total} | ✅ 通过: {PASS} | ❌ 失败: {FAIL} ({pct})")
-    print(f"\n  失败列表:")
+    print("\n  失败列表:")
     for r in RESULTS:
         if not r["ok"]:
             print(f"  - {r['method']} {r['path']} 期望 {r['expected']} 实际 {r['actual']}")
