@@ -4,13 +4,13 @@ chcp 65001 >nul 2>&1
 
 cd /d "%~dp0"
 
-set "RED=[31m"
-set "GREEN=[32m"
-set "YELLOW=[33m"
-set "BLUE=[34m"
-set "CYAN=[36m"
-set "MAGENTA=[35m"
-set "NC=[0m"
+set "RED=[31m"
+set "GREEN=[32m"
+set "YELLOW=[33m"
+set "BLUE=[34m"
+set "CYAN=[36m"
+set "MAGENTA=[35m"
+set "NC=[0m"
 
 goto :main
 
