@@ -1,7 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
-from django.views.static import serve
 from django.views.generic import TemplateView
 from apps.ninja_api import api
 
@@ -11,6 +10,8 @@ urlpatterns = [
 ]
 
 if settings.DEBUG:
+    from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+    urlpatterns += staticfiles_urlpatterns()
     urlpatterns += [
         path('__debug__/', include('debug_toolbar.urls')),
         re_path(r'^(?!static/|admin/|api/|__debug__/).*$', TemplateView.as_view(template_name='index.html')),
