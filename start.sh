@@ -79,14 +79,16 @@ install_deps() {
         log_success "虚拟环境已创建"
     fi
     source venv/bin/activate
-    pip install -q --upgrade pip
-    pip install -q -r requirements.txt
+    log_info "使用阿里云 PyPI 镜像..."
+    pip install -q --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/
+    pip install -q -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
     log_success "Python 依赖安装完成"
 
     if [ -f "frontend/package.json" ]; then
         cd frontend
         if [ ! -d "node_modules" ]; then
-            npm ci --prefer-offline 2>/dev/null || npm install
+            log_info "使用阿里云 npm 镜像..."
+            npm ci --prefer-offline --registry https://registry.npmmirror.com 2>/dev/null || npm install --registry https://registry.npmmirror.com
         fi
         cd ..
         log_success "Node 依赖安装完成"

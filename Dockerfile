@@ -2,6 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list
+
 RUN apt-get update && apt-get install -y \
     gcc \
     nodejs \
@@ -9,10 +12,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 
 COPY frontend/package.json frontend/package-lock.json frontend/
-RUN cd frontend && npm ci
+RUN cd frontend && npm ci --registry https://registry.npmmirror.com
 
 COPY . .
 

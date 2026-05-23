@@ -96,14 +96,16 @@ if not exist "venv" (
     call :log_success "虚拟环境已创建"
 )
 call venv\Scripts\activate.bat
-pip install -q --upgrade pip
-pip install -q -r requirements.txt
+call :log_info "使用阿里云 PyPI 镜像..."
+pip install -q --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/
+pip install -q -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 call :log_success "Python 依赖安装完成"
 
 if exist "frontend\package.json" (
     cd frontend
     if not exist "node_modules" (
-        npm ci --prefer-offline 2>nul || npm install
+        call :log_info "使用阿里云 npm 镜像..."
+        npm ci --prefer-offline --registry https://registry.npmmirror.com 2>nul || npm install --registry https://registry.npmmirror.com
     )
     cd ..
     call :log_success "Node 依赖安装完成"
