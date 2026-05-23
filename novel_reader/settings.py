@@ -114,7 +114,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_DIRS = [BASE_DIR / 'static', BASE_DIR / 'frontend' / 'dist' / 'static', BASE_DIR / 'frontend' / 'dist']
+STATICFILES_DIRS = [BASE_DIR / 'static'] + [d for d in [BASE_DIR / 'frontend' / 'dist' / 'static', BASE_DIR / 'frontend' / 'dist'] if d.is_dir()]
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 WHITENOISE_MAX_AGE = 31536000
 WHITENOISE_INDEX_FILE = True
@@ -143,6 +143,11 @@ CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[]) if not DEBUG
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {
+        'suppress_bad_auth': {
+            '()': 'novel_reader.middleware.SuppressBadAuthLog',
+        },
+    },
     'formatters': {
         'simple': {'format': '[%(levelname)s] %(name)s: %(message)s'},
         'verbose': {'format': '[%(asctime)s] [%(levelname)s] %(name)s:%(lineno)d: %(message)s'},
@@ -152,6 +157,7 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
             'level': 'DEBUG' if DEBUG else 'INFO',
+            'filters': ['suppress_bad_auth'],
         },
         'file': {
             'class': 'logging.handlers.RotatingFileHandler',

@@ -158,18 +158,38 @@ cmd_dev() {
     migrate_db
     create_superuser
 
-    echo ""
-    echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}  开发模式启动!${NC}"
-    echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-    echo ""
-    echo -e "  ${GREEN}📖${NC} 前端: http://localhost:5173"
-    echo -e "  ${GREEN}🔧${NC} 后端: http://localhost:8000"
-    echo ""
+    local mem_mb=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+    if [ "$mem_mb" -gt 0 ] && [ "$mem_mb" -lt 1500 ]; then
+        log_warning "可用内存 ${mem_mb}MB，不足同时运行 Django + Vite"
+        log_step "切换为低内存模式：构建前端 → 启动后端"
+        build_frontend
+        source venv/bin/activate
+        python manage.py collectstatic --noinput 2>/dev/null || true
 
-    source venv/bin/activate
-    python manage.py runserver 0.0.0.0:8000 &
-    cd frontend && npm run dev
+        echo ""
+        echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+        echo -e "${GREEN}  低内存开发模式启动!${NC}"
+        echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+        echo ""
+        echo -e "  ${GREEN}📖${NC} 访问地址: http://localhost:8000"
+        echo -e "  ${YELLOW}⚠${NC}  前端变更需重新 ${CYAN}./start.sh build${NC}"
+        echo ""
+
+        granian novel_reader.asgi:application --host 0.0.0.0 --port 8000 --interface asgi --workers 1
+    else
+        echo ""
+        echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+        echo -e "${GREEN}  开发模式启动!${NC}"
+        echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+        echo ""
+        echo -e "  ${GREEN}📖${NC} 前端: http://localhost:5173"
+        echo -e "  ${GREEN}🔧${NC} 后端: http://localhost:8000"
+        echo ""
+
+        source venv/bin/activate
+        python manage.py runserver 0.0.0.0:8000 &
+        cd frontend && npm run dev
+    fi
 }
 
 cmd_stop() {
