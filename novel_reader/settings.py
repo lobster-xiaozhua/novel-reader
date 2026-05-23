@@ -94,10 +94,16 @@ TEMPLATES = [
 WSGI_APPLICATION = 'novel_reader.wsgi.application'
 
 DATABASES = {
-    'default': env.db_url(
-        default=f'sqlite:///{BASE_DIR / "data" / "db.sqlite3"}'
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'data' / 'db.sqlite3',
+    }
 }
+_db_url = env.db_url(default='', engine='django.db.backends.sqlite3')
+if _db_url:
+    DATABASES['default'] = _db_url
+    if DATABASES['default'].get('ENGINE', '').startswith('sqlite'):
+        DATABASES['default']['ENGINE'] = 'django.db.backends.sqlite3'
 DATABASES['default']['CONN_MAX_AGE'] = env('CONN_MAX_AGE')
 
 AUTH_PASSWORD_VALIDATORS = [

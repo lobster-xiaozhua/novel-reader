@@ -187,17 +187,13 @@ goto :eof
 :create_superuser
 call :log_step "创建超级用户..."
 call venv\Scripts\activate.bat
-python manage.py shell -c "
-from django.contrib.auth.models import User
-if not User.objects.filter(username='admin').exists():
-    import secrets, string
-    pwd = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))
-    User.objects.create_superuser('admin', 'admin@example.com', pwd)
-    print(f'Superuser created: admin / {pwd}')
-    print('请妥善保存此密码！')
-else:
-    print('Superuser admin already exists')
-" 2>nul || (
+python -c "import pathlib;p=pathlib.Path('create_superuser_tmp.py');p.write_text('from django.contrib.auth.models import User\nimport secrets,string\nif not User.objects.filter(username=\"admin\").exists():\n    pwd=\"\".join(secrets.choice(string.ascii_letters+string.digits) for _ in range(16))\n    User.objects.create_superuser(\"admin\",\"admin@example.com\",pwd)\n    print(f\"Superuser created: admin / {pwd}\")\n    print(\"请妥善保存此密码！\")\nelse:\n    print(\"Superuser admin already exists\")\n');print('ok')"
+if exist "create_superuser_tmp.py" (
+    python manage.py shell create_superuser_tmp.py 2>nul || (
+        call :log_warning "超级用户创建跳过"
+    )
+    del create_superuser_tmp.py 2>nul
+) else (
     call :log_warning "超级用户创建跳过"
 )
 goto :eof

@@ -10,6 +10,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m'
+DIM='\033[2m'
 
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
@@ -72,26 +73,95 @@ check_env() {
     log_success "环境检查通过"
 }
 
+draw_progress() {
+    local pkg="$1" current="$2" total="$3" status="$4"
+    local width=30
+    local filled=$((current * width / total))
+    local empty=$((width - filled))
+    local pct=$((current * 100 / total))
+    local bar=""
+    for ((i=0; i<filled; i++)); do bar+="█"; done
+    for ((i=0; i<empty; i++)); do bar+="░"; done
+    if [ "$status" = "done" ]; then
+        printf "  ${GREEN}✓${NC} %-30s [${GREEN}%s${NC}] %3d%% ${DIM}已完成${NC}\n" "$pkg" "$bar" "$pct"
+    else
+        printf "  ${CYAN}→${NC} %-30s [${CYAN}%s${NC}] %3d%% ${YELLOW}下载中...${NC}\n" "$pkg" "$bar" "$pct"
+    fi
+}
+
+install_python_deps() {
+    log_step "安装 Python 依赖..."
+    log_info "使用阿里云 PyPI 镜像..."
+    source venv/bin/activate
+    pip install -q --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ 2>/dev/null || true
+
+    local pkgs=(Django granian whitenoise django-environ django-unfold django-ninja pydantic redis celery requests beautifulsoup4 tenacity httpx orjson django-cors-headers pytest pytest-django pytest-cov ruff django-debug-toolbar)
+    local total=${#pkgs[@]}
+    local idx=0
+    local failed=0
+
+    for pkg in "${pkgs[@]}"; do
+        ((idx++))
+        draw_progress "$pkg" "$idx" "$total" "downloading"
+        if pip install -q "$pkg" -i https://mirrors.aliyun.com/pypi/simple/ 2>/dev/null; then
+            draw_progress "$pkg" "$idx" "$total" "done"
+        else
+            log_error "  ✗ $pkg 安装失败"
+            ((failed++))
+        fi
+    done
+
+    if [ $failed -gt 0 ]; then
+        log_warning "Python 依赖安装完成 ($total 个包, $failed 个失败)"
+    else
+        log_success "Python 依赖安装完成 ($total 个包)"
+    fi
+}
+
+install_node_deps() {
+    log_step "安装 Node 依赖..."
+    log_info "使用阿里云 npm 镜像..."
+    cd frontend
+
+    if [ -d "node_modules" ]; then
+        cd ..
+        log_success "Node 依赖已存在，跳过安装"
+        return
+    fi
+
+    local pkgs=(@tailwindcss/vite @tanstack/react-query axios lucide-react react react-dom react-markdown react-router-dom react-syntax-highlighter recharts rehype-highlight remark-gfm tailwindcss zustand @eslint/js @types/node @types/react @types/react-dom @types/react-syntax-highlighter @vitejs/plugin-react eslint eslint-plugin-react-hooks eslint-plugin-react-refresh globals typescript typescript-eslint vite)
+    local total=${#pkgs[@]}
+    local idx=0
+    local failed=0
+
+    for pkg in "${pkgs[@]}"; do
+        ((idx++))
+        draw_progress "$pkg" "$idx" "$total" "downloading"
+        if npm install "$pkg" --registry https://registry.npmmirror.com --no-save --no-package-lock 2>/dev/null; then
+            draw_progress "$pkg" "$idx" "$total" "done"
+        else
+            log_error "  ✗ $pkg 安装失败"
+            ((failed++))
+        fi
+    done
+
+    cd ..
+    if [ $failed -gt 0 ]; then
+        log_warning "Node 依赖安装完成 ($total 个包, $failed 个失败)"
+    else
+        log_success "Node 依赖安装完成 ($total 个包)"
+    fi
+}
+
 install_deps() {
     log_step "安装依赖..."
     if [ ! -d "venv" ]; then
         python3 -m venv venv
         log_success "虚拟环境已创建"
     fi
-    source venv/bin/activate
-    log_info "使用阿里云 PyPI 镜像..."
-    pip install -q --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/
-    pip install -q -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
-    log_success "Python 依赖安装完成"
-
+    install_python_deps
     if [ -f "frontend/package.json" ]; then
-        cd frontend
-        if [ ! -d "node_modules" ]; then
-            log_info "使用阿里云 npm 镜像..."
-            npm ci --prefer-offline --registry https://registry.npmmirror.com 2>/dev/null || npm install --registry https://registry.npmmirror.com
-        fi
-        cd ..
-        log_success "Node 依赖安装完成"
+        install_node_deps
     fi
 }
 
