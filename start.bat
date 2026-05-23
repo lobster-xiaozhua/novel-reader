@@ -11,6 +11,8 @@ set "BLUE=[34m"
 set "CYAN=[36m"
 set "MAGENTA=[35m"
 set "NC=[0m"
+set "BOLD=[1m"
+set "DIM=[2m"
 
 goto :main
 
@@ -89,26 +91,89 @@ if !errors! gtr 0 (
 call :log_success "环境检查通过"
 goto :eof
 
+:draw_progress
+set "pkg=%~1"
+set "current=%~2"
+set "total=%~3"
+set "status=%~4"
+set "width=30"
+set /a filled=current*width/total
+set /a empty=width-filled
+set "bar="
+for /l %%i in (1,1,!filled!) do set "bar=!bar!█"
+for /l %%i in (1,1,!empty!) do set "bar=!bar!░"
+set /a pct=current*100/total
+if "!status!"=="done" (
+    echo %GREEN%  ✓%NC% %-30s [%GREEN%!bar!%NC%] !pct!%% %DIM%已完成%NC%
+) else (
+    echo %CYAN%  →%NC% %-30s [%CYAN%!bar!%NC%] !pct!%% %YELLOW%下载中...%NC%
+)
+goto :eof
+
+:install_python_deps
+call :log_step "安装 Python 依赖..."
+call :log_info "使用阿里云 PyPI 镜像..."
+call venv\Scripts\activate.bat
+
+pip install -q --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ >nul 2>&1
+
+set "pkg_list=Django granian whitenoise django-environ django-unfold django-ninja pydantic redis celery requests beautifulsoup4 tenacity httpx orjson uvloop django-cors-headers pytest pytest-django pytest-cov ruff django-debug-toolbar"
+set "pkg_total=0"
+for %%p in (!pkg_list!) do set /a pkg_total+=1
+
+set "pkg_idx=0"
+for %%p in (!pkg_list!) do (
+    set /a pkg_idx+=1
+    call :draw_progress "%%p" !pkg_idx! !pkg_total! downloading
+    pip install -q "%%p" -i https://mirrors.aliyun.com/pypi/simple/ >nul 2>&1
+    if errorlevel 1 (
+        call :log_error "  ✗ %%p 安装失败"
+    ) else (
+        call :draw_progress "%%p" !pkg_idx! !pkg_total! done
+    )
+)
+call :log_success "Python 依赖安装完成 (%pkg_total% 个包)"
+goto :eof
+
+:install_node_deps
+call :log_step "安装 Node 依赖..."
+call :log_info "使用阿里云 npm 镜像..."
+cd frontend
+
+if exist "node_modules" (
+    cd ..
+    call :log_success "Node 依赖已存在，跳过安装"
+    goto :eof
+)
+
+set "pkg_list=@tailwindcss/vite @tanstack/react-query axios lucide-react react react-dom react-markdown react-router-dom react-syntax-highlighter recharts rehype-highlight remark-gfm tailwindcss zustand @eslint/js @types/node @types/react @types/react-dom @types/react-syntax-highlighter @vitejs/plugin-react eslint eslint-plugin-react-hooks eslint-plugin-react-refresh globals typescript typescript-eslint vite"
+set "pkg_total=0"
+for %%p in (!pkg_list!) do set /a pkg_total+=1
+
+set "pkg_idx=0"
+for %%p in (!pkg_list!) do (
+    set /a pkg_idx+=1
+    call :draw_progress "%%p" !pkg_idx! !pkg_total! downloading
+    npm install "%%p" --registry https://registry.npmmirror.com --no-save --no-package-lock >nul 2>&1
+    if errorlevel 1 (
+        call :log_error "  ✗ %%p 安装失败"
+    ) else (
+        call :draw_progress "%%p" !pkg_idx! !pkg_total! done
+    )
+)
+cd ..
+call :log_success "Node 依赖安装完成 (%pkg_total% 个包)"
+goto :eof
+
 :install_deps
 call :log_step "安装依赖..."
 if not exist "venv" (
     python -m venv venv
     call :log_success "虚拟环境已创建"
 )
-call venv\Scripts\activate.bat
-call :log_info "使用阿里云 PyPI 镜像..."
-pip install -q --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/
-pip install -q -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
-call :log_success "Python 依赖安装完成"
-
+call :install_python_deps
 if exist "frontend\package.json" (
-    cd frontend
-    if not exist "node_modules" (
-        call :log_info "使用阿里云 npm 镜像..."
-        npm ci --prefer-offline --registry https://registry.npmmirror.com 2>nul || npm install --registry https://registry.npmmirror.com
-    )
-    cd ..
-    call :log_success "Node 依赖安装完成"
+    call :install_node_deps
 )
 goto :eof
 
