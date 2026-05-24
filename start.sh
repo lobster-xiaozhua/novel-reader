@@ -181,11 +181,17 @@ install_node_deps() {
     log_detail "镜像源: ${mirror}"
     cd frontend
 
-    if [ -d "node_modules" ]; then
+    if [ -f "node_modules/.package-lock.json" ]; then
         local pkg_count=$(ls -1 node_modules 2>/dev/null | wc -l)
         cd ..
-        log_success "Node 依赖已存在 (${pkg_count} 个包)，跳过安装"
+        log_success "Node 依赖已存在且完整 (${pkg_count} 个包)，跳过安装"
         return
+    fi
+
+    if [ -d "node_modules" ]; then
+        local pkg_count=$(ls -1 node_modules 2>/dev/null | wc -l)
+        log_warning "node_modules 不完整 (${pkg_count} 个包)，重新安装"
+        rm -rf node_modules
     fi
 
     if [ -f "package-lock.json" ]; then
@@ -274,6 +280,12 @@ build_frontend() {
     log_detail "输出: frontend/dist/"
 
     cd frontend
+    if [ ! -f "node_modules/.package-lock.json" ]; then
+        cd ..
+        log_warning "node_modules 不完整，先安装依赖"
+        install_node_deps
+        cd frontend
+    fi
     run_spin "Vite 构建中" npm run build
     cd ..
 
