@@ -1,11 +1,19 @@
+<!--
+  base_site.html - Django 管理后台基础模板
+  =============================================================================
+  用途: 继承 Django 默认 admin 模板 (admin/base_site.html)，覆盖自定义样式和品牌
+  内容: 加载项目自定义 admin CSS，替换后台顶部站点名称
+-->
 {% extends "admin/base_site.html" %}
 {% load static %}
 
+<!-- 注入额外样式表: 在 admin 默认样式之后加载项目自定义 admin 样式 -->
 {% block extrastyle %}
 {{ block.super }}
 <link rel="stylesheet" href="{% static 'css/admin.css' %}">
 {% endblock %}
 
+<!-- 自定义站点品牌名称: 替换 Django admin 默认的 "Django 管理" -->
 {% block branding %}
 <h1 id="site-name">📖 小说阅读器管理后台</h1>
 {% endblock %}
