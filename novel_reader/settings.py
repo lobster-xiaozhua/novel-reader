@@ -92,6 +92,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'novel_reader.wsgi.application'
+ASGI_APPLICATION = 'novel_reader.asgi.application'
 
 DATABASES = {
     'default': {
