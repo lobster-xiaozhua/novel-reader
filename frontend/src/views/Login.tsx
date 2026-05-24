@@ -29,7 +29,7 @@ export default function Login() {
 
       if (res.success && res.user) {
         loginUser(res.user)
-        navigate('/dashboard')
+        navigate('/admin-dashboard')
       } else {
         setError(res.error || '操作失败')
       }
