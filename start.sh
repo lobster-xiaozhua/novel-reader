@@ -22,6 +22,44 @@ log_detail() { echo -e "  ${DIM}└─ $1${NC}"; }
 
 SEPARATOR() { echo -e "${DIM}───────────────────────────────────────────────────${NC}"; }
 
+SPINNER_FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+_SP_PID="" _SP_MSG="" _SP_START=0
+
+_spin_start() {
+    _SP_MSG="$1"; _SP_START=$(date +%s)
+    ( while true; do
+        local e=$(($(date +%s)-_SP_START)) m=$((e/60)) s=$((e%60))
+        printf "\r  ${CYAN}%s${NC} %s  ${DIM}[%02d:%02d]${NC}   " "${SPINNER_FRAMES[$((SECONDS%10))]}" "$_SP_MSG" "$m" "$s"
+        sleep 0.08
+    done ) & _SP_PID=$!
+}
+
+_spin_stop() {
+    local ok="${1:-true}"
+    [ -n "$_SP_PID" ] && kill "$_SP_PID" 2>/dev/null; wait "$_SP_PID" 2>/dev/null || true; _SP_PID=""
+    local e=$(($(date +%s)-_SP_START)) m=$((e/60)) s=$((e%60))
+    if [ "$ok" = "true" ]; then
+        printf "\r  ${GREEN}✓${NC} %s  ${DIM}[%02d:%02d]${NC}                              \n" "$_SP_MSG" "$m" "$s"
+    else
+        printf "\r  ${RED}✗${NC} %s  ${DIM}[%02d:%02d]${NC}                              \n" "$_SP_MSG" "$m" "$s"
+    fi
+}
+
+run_spin() {
+    local desc="$1"; shift
+    local tmp=$(mktemp /tmp/novel-XXXXXX.log)
+    _spin_start "$desc"
+    if "$@" &> "$tmp"; then
+        _spin_stop true
+        tail -3 "$tmp" 2>/dev/null | while IFS= read -r l; do [ -n "$l" ] && log_detail "$l"; done
+        rm -f "$tmp"; return 0
+    else
+        _spin_stop false
+        log_error "命令失败，日志:"; head -20 "$tmp" | while IFS= read -r l; do echo -e "  ${RED}$l${NC}"; done
+        rm -f "$tmp"; return 1
+    fi
+}
+
 print_banner() {
     echo ""
     echo -e "${MAGENTA}╔═══════════════════════════════════════════════════╗${NC}"
@@ -119,32 +157,18 @@ install_python_deps() {
     log_detail "镜像源: ${mirror}"
     log_detail "虚拟环境: $(realpath venv 2>/dev/null || echo 'venv/')"
 
-    if [ -f "requirements.txt" ]; then
-        local pkg_count=$(grep -c "^[^#]" requirements.txt 2>/dev/null || echo "?")
-        log_detail "从 requirements.txt 安装 (${pkg_count} 个依赖)"
-
-        pip install --upgrade pip -i "$mirror" 2>&1 | tail -1 || true
-
-        if pip install -r requirements.txt -i "$mirror" 2>&1 | while IFS= read -r line; do
-            if [[ "$line" == *"Successfully"* ]]; then
-                local installed=$(echo "$line" | grep -oP '\d+(?= package)' || echo "?")
-                log_detail "$line"
-            elif [[ "$line" == *"Requirement already satisfied"* ]]; then
-                :
-            elif [[ "$line" == *"error"* ]] || [[ "$line" == *"Error"* ]]; then
-                echo -e "  ${RED}$line${NC}" >&2
-            fi
-        done; then
-            :
-        fi
-
-        local pip_list=$(pip list --format=columns 2>/dev/null | tail -n +3 | wc -l)
-        log_detail "已安装 ${pip_list} 个包"
-    else
-        log_error "requirements.txt 不存在"
-        return 1
+    if [ ! -f "requirements.txt" ]; then
+        log_error "requirements.txt 不存在"; return 1
     fi
 
+    local pkg_count=$(grep -c "^[^#]" requirements.txt 2>/dev/null || echo "?")
+    log_detail "从 requirements.txt 安装 (${pkg_count} 个依赖)"
+
+    run_spin "升级 pip" pip install --upgrade pip -i "$mirror"
+    run_spin "安装 Python 依赖 (${pkg_count} 个)" pip install -r requirements.txt -i "$mirror"
+
+    local pip_list=$(pip list --format=columns 2>/dev/null | tail -n +3 | wc -l)
+    log_detail "环境中已安装 ${pip_list} 个包"
     echo ""
     log_success "Python 依赖安装完成"
 }
@@ -166,18 +190,10 @@ install_node_deps() {
 
     if [ -f "package-lock.json" ]; then
         log_detail "从 package-lock.json 安装 (确定性构建)"
-        npm ci --registry "$mirror" 2>&1 | while IFS= read -r line; do
-            if [[ "$line" == *"added"* ]] || [[ "$line" == *"audited"* ]]; then
-                log_detail "$line"
-            fi
-        done
+        run_spin "安装 Node 依赖 (npm ci)" npm ci --registry "$mirror"
     elif [ -f "package.json" ]; then
         log_detail "从 package.json 安装"
-        npm install --registry "$mirror" 2>&1 | while IFS= read -r line; do
-            if [[ "$line" == *"added"* ]] || [[ "$line" == *"audited"* ]]; then
-                log_detail "$line"
-            fi
-        done
+        run_spin "安装 Node 依赖 (npm install)" npm install --registry "$mirror"
     fi
 
     cd ..
@@ -215,15 +231,7 @@ migrate_db() {
         log_detail "首次迁移，将创建新数据库"
     fi
 
-    python manage.py migrate 2>&1 | while IFS= read -r line; do
-        if [[ "$line" == *"Applying"* ]]; then
-            log_detail "$line"
-        elif [[ "$line" == *"Running"* ]]; then
-            log_detail "$line"
-        elif [[ "$line" == *"WARNINGS"* ]] || [[ "$line" == *"System check"* ]]; then
-            log_detail "$line"
-        fi
-    done
+    run_spin "执行数据库迁移" python manage.py migrate
     echo ""
     log_success "数据库迁移完成"
 }
@@ -266,11 +274,7 @@ build_frontend() {
     log_detail "输出: frontend/dist/"
 
     cd frontend
-    npm run build 2>&1 | while IFS= read -r line; do
-        if [[ "$line" == *"built in"* ]]; then
-            log_detail "$line"
-        fi
-    done
+    run_spin "Vite 构建中" npm run build
     cd ..
 
     local js_size=$(du -h frontend/dist/static/js/main.js 2>/dev/null | cut -f1 || echo "?")
@@ -291,9 +295,7 @@ cmd_start() {
 
     source venv/bin/activate
     log_step "收集静态文件"
-    python manage.py collectstatic --noinput 2>&1 | tail -1 | while IFS= read -r line; do
-        log_detail "$line"
-    done
+    run_spin "收集静态文件" python manage.py collectstatic --noinput
     log_success "静态文件收集完成"
 
     log_step "启动 Granian ASGI 服务器"
@@ -328,7 +330,7 @@ cmd_dev() {
         log_step "切换为低内存模式：构建前端 → 启动后端"
         build_frontend
         source venv/bin/activate
-        python manage.py collectstatic --noinput 2>/dev/null || true
+        run_spin "收集静态文件" python manage.py collectstatic --noinput
 
         echo ""
         echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
@@ -416,7 +418,7 @@ cmd_build() {
     build_frontend
     source venv/bin/activate
     log_step "收集静态文件"
-    python manage.py collectstatic --noinput 2>/dev/null || true
+    run_spin "收集静态文件" python manage.py collectstatic --noinput
     log_success "构建完成"
 }
 
