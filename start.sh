@@ -22,90 +22,6 @@ log_detail() { echo -e "  ${DIM}└─ $1${NC}"; }
 
 SEPARATOR() { echo -e "${DIM}───────────────────────────────────────────────────${NC}"; }
 
-SPINNER_FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-SPINNER_PID=""
-SPINNER_MSG=""
-SPINNER_START=0
-
-_start_spinner() {
-    SPINNER_MSG="$1"
-    SPINNER_START=$(date +%s)
-    SPINNER_IDX=0
-    (
-        while true; do
-            local elapsed=$(($(date +%s) - SPINNER_START))
-            local mins=$((elapsed / 60))
-            local secs=$((elapsed % 60))
-            local time_str=$(printf "%02d:%02d" $mins $secs)
-            local frame=${SPINNER_FRAMES[$((SPINNER_IDX % ${#SPINNER_FRAMES[@]}))]}
-            printf "\r  ${CYAN}%s${NC} %s  ${DIM}[%s]${NC}   " "$frame" "$SPINNER_MSG" "$time_str"
-            ((SPINNER_IDX++))
-            sleep 0.08
-        done
-    ) &
-    SPINNER_PID=$!
-}
-
-_stop_spinner() {
-    local success="${1:-true}"
-    if [ -n "$SPINNER_PID" ] && kill -0 "$SPINNER_PID" 2>/dev/null; then
-        kill "$SPINNER_PID" 2>/dev/null
-        wait "$SPINNER_PID" 2>/dev/null || true
-    fi
-    local elapsed=$(($(date +%s) - SPINNER_START))
-    local mins=$((elapsed / 60))
-    local secs=$((elapsed % 60))
-    local time_str=$(printf "%02d:%02d" $mins $secs)
-    if [ "$success" = "true" ]; then
-        printf "\r  ${GREEN}✓${NC} %s  ${DIM}[%s]${NC}                              \n" "$SPINNER_MSG" "$time_str"
-    else
-        printf "\r  ${RED}✗${NC} %s  ${DIM}[%s]${NC}                              \n" "$SPINNER_MSG" "$time_str"
-    fi
-    SPINNER_PID=""
-}
-
-run_with_spinner() {
-    local desc="$1"
-    shift
-    local tmpfile=$(mktemp /tmp/novel-reader-XXXXXX.log)
-    _start_spinner "$desc"
-    if "$@" &> "$tmpfile"; then
-        _stop_spinner true
-        local last_lines=$(tail -3 "$tmpfile" 2>/dev/null)
-        if [ -n "$last_lines" ]; then
-            echo "$last_lines" | while IFS= read -r line; do
-                [ -n "$line" ] && log_detail "$line"
-            done
-        fi
-        rm -f "$tmpfile"
-        return 0
-    else
-        _stop_spinner false
-        log_error "命令执行失败，日志:"
-        cat "$tmpfile" | head -20 | while IFS= read -r line; do
-            echo -e "  ${RED}$line${NC}"
-        done
-        rm -f "$tmpfile"
-        return 1
-    fi
-}
-
-draw_progress_bar() {
-    local label="$1" current="$2" total="$3"
-    local width=25
-    local pct=$((current * 100 / total))
-    local filled=$((current * width / total))
-    local empty=$((width - filled))
-    local bar=""
-    for ((i=0; i<filled; i++)); do bar+="█"; done
-    for ((i=0; i<empty; i++)); do bar+="░"; done
-    if [ "$pct" -eq 100 ]; then
-        printf "\r  ${GREEN}✓${NC} %-28s [${GREEN}%s${NC}] %3d%% ${DIM}完成${NC}   \n" "$label" "$bar" "$pct"
-    else
-        printf "\r  ${CYAN}→${NC} %-28s [${CYAN}%s${NC}] %3d%% ${YELLOW}进行中${NC}   " "$label" "$bar" "$pct"
-    fi
-}
-
 print_banner() {
     echo ""
     echo -e "${MAGENTA}╔═══════════════════════════════════════════════════╗${NC}"
@@ -203,19 +119,32 @@ install_python_deps() {
     log_detail "镜像源: ${mirror}"
     log_detail "虚拟环境: $(realpath venv 2>/dev/null || echo 'venv/')"
 
-    if [ ! -f "requirements.txt" ]; then
+    if [ -f "requirements.txt" ]; then
+        local pkg_count=$(grep -c "^[^#]" requirements.txt 2>/dev/null || echo "?")
+        log_detail "从 requirements.txt 安装 (${pkg_count} 个依赖)"
+
+        pip install --upgrade pip -i "$mirror" 2>&1 | tail -1 || true
+
+        if pip install -r requirements.txt -i "$mirror" 2>&1 | while IFS= read -r line; do
+            if [[ "$line" == *"Successfully"* ]]; then
+                local installed=$(echo "$line" | grep -oP '\d+(?= package)' || echo "?")
+                log_detail "$line"
+            elif [[ "$line" == *"Requirement already satisfied"* ]]; then
+                :
+            elif [[ "$line" == *"error"* ]] || [[ "$line" == *"Error"* ]]; then
+                echo -e "  ${RED}$line${NC}" >&2
+            fi
+        done; then
+            :
+        fi
+
+        local pip_list=$(pip list --format=columns 2>/dev/null | tail -n +3 | wc -l)
+        log_detail "已安装 ${pip_list} 个包"
+    else
         log_error "requirements.txt 不存在"
         return 1
     fi
 
-    local pkg_count=$(grep -c "^[^#]" requirements.txt 2>/dev/null || echo "?")
-    log_detail "从 requirements.txt 安装 (${pkg_count} 个依赖)"
-
-    run_with_spinner "升级 pip" pip install --upgrade pip -i "$mirror"
-    run_with_spinner "安装 Python 依赖 (${pkg_count} 个)" pip install -r requirements.txt -i "$mirror"
-
-    local pip_list=$(pip list --format=columns 2>/dev/null | tail -n +3 | wc -l)
-    log_detail "环境中已安装 ${pip_list} 个包"
     echo ""
     log_success "Python 依赖安装完成"
 }
@@ -237,10 +166,18 @@ install_node_deps() {
 
     if [ -f "package-lock.json" ]; then
         log_detail "从 package-lock.json 安装 (确定性构建)"
-        run_with_spinner "安装 Node 依赖 (npm ci)" npm ci --registry "$mirror"
+        npm ci --registry "$mirror" 2>&1 | while IFS= read -r line; do
+            if [[ "$line" == *"added"* ]] || [[ "$line" == *"audited"* ]]; then
+                log_detail "$line"
+            fi
+        done
     elif [ -f "package.json" ]; then
         log_detail "从 package.json 安装"
-        run_with_spinner "安装 Node 依赖 (npm install)" npm install --registry "$mirror"
+        npm install --registry "$mirror" 2>&1 | while IFS= read -r line; do
+            if [[ "$line" == *"added"* ]] || [[ "$line" == *"audited"* ]]; then
+                log_detail "$line"
+            fi
+        done
     fi
 
     cd ..
@@ -278,8 +215,15 @@ migrate_db() {
         log_detail "首次迁移，将创建新数据库"
     fi
 
-    run_with_spinner "执行数据库迁移" python manage.py migrate
-
+    python manage.py migrate 2>&1 | while IFS= read -r line; do
+        if [[ "$line" == *"Applying"* ]]; then
+            log_detail "$line"
+        elif [[ "$line" == *"Running"* ]]; then
+            log_detail "$line"
+        elif [[ "$line" == *"WARNINGS"* ]] || [[ "$line" == *"System check"* ]]; then
+            log_detail "$line"
+        fi
+    done
     echo ""
     log_success "数据库迁移完成"
 }
@@ -322,7 +266,11 @@ build_frontend() {
     log_detail "输出: frontend/dist/"
 
     cd frontend
-    run_with_spinner "Vite 构建中" npm run build
+    npm run build 2>&1 | while IFS= read -r line; do
+        if [[ "$line" == *"built in"* ]]; then
+            log_detail "$line"
+        fi
+    done
     cd ..
 
     local js_size=$(du -h frontend/dist/static/js/main.js 2>/dev/null | cut -f1 || echo "?")
@@ -343,7 +291,9 @@ cmd_start() {
 
     source venv/bin/activate
     log_step "收集静态文件"
-    run_with_spinner "收集静态文件" python manage.py collectstatic --noinput
+    python manage.py collectstatic --noinput 2>&1 | tail -1 | while IFS= read -r line; do
+        log_detail "$line"
+    done
     log_success "静态文件收集完成"
 
     log_step "启动 Granian ASGI 服务器"
@@ -378,7 +328,7 @@ cmd_dev() {
         log_step "切换为低内存模式：构建前端 → 启动后端"
         build_frontend
         source venv/bin/activate
-        run_with_spinner "收集静态文件" python manage.py collectstatic --noinput
+        python manage.py collectstatic --noinput 2>/dev/null || true
 
         echo ""
         echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
@@ -466,7 +416,7 @@ cmd_build() {
     build_frontend
     source venv/bin/activate
     log_step "收集静态文件"
-    run_with_spinner "收集静态文件" python manage.py collectstatic --noinput
+    python manage.py collectstatic --noinput 2>/dev/null || true
     log_success "构建完成"
 }
 
