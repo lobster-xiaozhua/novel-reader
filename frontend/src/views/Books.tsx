@@ -144,7 +144,7 @@ export default function Books() {
                     <Heart className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => navigate(`/chapters`, { state: { bookId: book.id } })}
+                    onClick={() => navigate(`/admin-dashboard/chapters`, { state: { bookId: book.id } })}
                     className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary-500/10 text-primary-500 text-sm hover:bg-primary-500/20 transition-colors"
                   >
                     <Eye className="w-4 h-4" />

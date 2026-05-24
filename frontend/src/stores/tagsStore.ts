@@ -36,13 +36,13 @@ export const useTagsStore = create<TagsState>()(
       removeOthers: (view) =>
         set((state) => ({
           visitedViews: state.visitedViews.filter(
-            (v) => v.path === view.path || v.path === '/dashboard'
+            (v) => v.path === view.path || v.path === '/admin-dashboard'
           ),
         })),
 
       removeAll: () =>
         set((state) => ({
-          visitedViews: state.visitedViews.filter((v) => v.path === '/dashboard'),
+          visitedViews: state.visitedViews.filter((v) => v.path === '/admin-dashboard'),
         })),
 
       addCachedView: (name) =>

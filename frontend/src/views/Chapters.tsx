@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
 import { FileText, BookOpen, ArrowLeft } from 'lucide-react'
 import { fetchBooks } from '@/api/books'
 import { fetchChapters, fetchChapterContent } from '@/api/books'
@@ -10,7 +10,8 @@ import { Spinner } from '@/components/Loading'
 
 export default function Chapters() {
   const location = useLocation()
-  const initialBookId = (location.state as { bookId?: number })?.bookId || null
+  const params = useParams<{ bookId?: string }>()
+  const initialBookId = (location.state as { bookId?: number })?.bookId || (params.bookId ? Number(params.bookId) : null)
   const [selectedBookId, setSelectedBookId] = useState<number | null>(initialBookId)
   const [readingChapterIdx, setReadingChapterIdx] = useState<number | null>(null)
 

@@ -4,15 +4,15 @@ import { X, RotateCcw } from 'lucide-react'
 import { useTagsStore } from '@/stores/tagsStore'
 
 const routeTitleMap: Record<string, string> = {
-  '/dashboard': 'Dashboard',
-  '/books': '书籍',
-  '/chapters': '章节',
-  '/tags': '标签',
-  '/users': '用户',
-  '/progress': '阅读进度',
-  '/stats': '阅读统计',
-  '/favorites': '收藏',
-  '/crawler': '爬虫任务',
+  '/admin-dashboard': 'Dashboard',
+  '/admin-dashboard/books': '书籍',
+  '/admin-dashboard/chapters': '章节',
+  '/admin-dashboard/tags': '标签',
+  '/admin-dashboard/users': '用户',
+  '/admin-dashboard/progress': '阅读进度',
+  '/admin-dashboard/stats': '阅读统计',
+  '/admin-dashboard/favorites': '收藏',
+  '/admin-dashboard/crawler': '爬虫任务',
 }
 
 export default function TagsView() {
@@ -23,7 +23,7 @@ export default function TagsView() {
   useEffect(() => {
     const path = location.pathname
     const title = routeTitleMap[path] || '页面'
-    addView({ path, title, name: path.replace('/', '') || 'dashboard' })
+    addView({ path, title, name: path.replace(/\//g, '') || 'dashboard' })
   }, [location.pathname, addView])
 
   return (
@@ -43,14 +43,14 @@ export default function TagsView() {
             `}
           >
             <span>{view.title}</span>
-            {view.path !== '/dashboard' && (
+            {view.path !== '/admin-dashboard' && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
                   removeView(view)
                   if (isActive) {
                     const last = visitedViews.filter((v) => v.path !== view.path).pop()
-                    navigate(last?.path || '/dashboard')
+                    navigate(last?.path || '/admin-dashboard')
                   }
                 }}
                 className="p-0.5 rounded hover:bg-white/10 transition-colors"

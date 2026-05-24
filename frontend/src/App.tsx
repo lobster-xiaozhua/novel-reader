@@ -9,9 +9,9 @@ import ErrorPage from './views/ErrorPage'
 import { Spinner } from '@/components/Loading'
 
 const Discovery = lazy(() => import('./views/Discovery'))
+const Chapters = lazy(() => import('./views/Chapters'))
 const Dashboard = lazy(() => import('./views/Dashboard'))
 const Books = lazy(() => import('./views/Books'))
-const Chapters = lazy(() => import('./views/Chapters'))
 const Tags = lazy(() => import('./views/Tags'))
 const Users = lazy(() => import('./views/Users'))
 const Progress = lazy(() => import('./views/Progress'))
@@ -38,6 +38,7 @@ function App() {
 
         <Route index element={<ErrorBoundary><LazyPage><Discovery /></LazyPage></ErrorBoundary>} />
         <Route path="discovery" element={<ErrorBoundary><LazyPage><Discovery /></LazyPage></ErrorBoundary>} />
+        <Route path="books/:bookId" element={<ErrorBoundary><LazyPage><Chapters /></LazyPage></ErrorBoundary>} />
 
         <Route path="admin-dashboard" element={<AuthGuard adminOnly><Layout /></AuthGuard>}>
           <Route index element={<ErrorBoundary><LazyPage><Dashboard /></LazyPage></ErrorBoundary>} />
