@@ -286,6 +286,13 @@ build_frontend() {
         install_node_deps
         cd frontend
     fi
+    local arch=$(uname -m 2>/dev/null || echo "unknown")
+    if [ "$arch" != "aarch64" ] && [ "$arch" != "armv7l" ] && [ "$arch" != "armv8l" ]; then
+        run_spin "TypeScript 类型检查" npm run typecheck 2>&1 || log_warning "类型检查有警告，继续构建"
+    else
+        log_detail "ARM 环境，跳过 tsc 类型检查 (esbuild 直接转译)"
+    fi
+
     run_spin "Vite 构建中" npm run build
     cd ..
 
