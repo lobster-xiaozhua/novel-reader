@@ -1,0 +1,1 @@
+var e={primary:`#f59e0b`,success:`#10b981`,info:`#3b82f6`,purple:`#8b5cf6`,danger:`#ef4444`,cyan:`#06b6d4`,warning:`#fbbf24`,pink:`#ec4899`,lime:`#84cc16`,indigo:`#6366f1`},t=Object.values(e),n=[e.primary,e.danger,e.success,e.info,e.purple,e.cyan,`#f97316`,e.pink,e.lime,e.indigo];export{e as n,n as r,t};
