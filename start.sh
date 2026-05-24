@@ -1,8 +1,16 @@
 #!/bin/bash
+# =============================================================================
+# start.sh - Novel Reader 项目启动脚本
+# =============================================================================
+# 用途: 统一管理项目的启动、停止、构建、迁移等生命周期操作
+# 功能: 环境检查、依赖安装、数据库迁移、前端构建、服务启动/停止
+# 支持命令: start | stop | restart | status | migrate | build | dev | help
+# =============================================================================
 set -e
 
 cd "$(dirname "$0")"
 
+# 定义终端颜色常量
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -13,6 +21,7 @@ DIM='\033[2m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+# 日志函数: 统一日志输出格式
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
@@ -20,11 +29,15 @@ log_error() { echo -e "${RED}[✗]${NC} $1"; }
 log_step() { echo -e "\n${CYAN}[→]${NC} ${BOLD}$1${NC}"; }
 log_detail() { echo -e "  ${DIM}└─ $1${NC}"; }
 
+# 分隔线: 用于在日志中划分不同步骤
 SEPARATOR() { echo -e "${DIM}───────────────────────────────────────────────────${NC}"; }
 
+# 旋转动画相关变量
 SPINNER_FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
 _SP_PID="" _SP_MSG="" _SP_START=0
 
+# _spin_start: 启动旋转加载动画 (内部函数)
+# 参数: $1 - 动画旁显示的任务描述文字
 _spin_start() {
     _SP_MSG="$1"; _SP_START=$(date +%s)
     ( while true; do
@@ -34,6 +47,8 @@ _spin_start() {
     done ) & _SP_PID=$!
 }
 
+# _spin_stop: 停止旋转加载动画 (内部函数)
+# 参数: $1 - 任务成功与否 (true/false), 默认为 true
 _spin_stop() {
     local ok="${1:-true}"
     [ -n "$_SP_PID" ] && kill "$_SP_PID" 2>/dev/null; wait "$_SP_PID" 2>/dev/null || true; _SP_PID=""
@@ -45,6 +60,9 @@ _spin_stop() {
     fi
 }
 
+# run_spin: 执行带旋转动画的命令，自动捕获输出和错误
+# 参数: $1 - 任务描述文字; $@ - 要执行的命令及其参数
+# 返回: 0 表示成功，1 表示命令执行失败
 run_spin() {
     local desc="$1"; shift
     local tmp=$(mktemp /tmp/novel-XXXXXX.log)
@@ -60,6 +78,7 @@ run_spin() {
     fi
 }
 
+# print_banner: 打印项目启动横幅
 print_banner() {
     echo ""
     echo -e "${MAGENTA}╔═══════════════════════════════════════════════════╗${NC}"
@@ -68,6 +87,7 @@ print_banner() {
     echo ""
 }
 
+# show_help: 显示命令帮助信息
 show_help() {
     print_banner
     cat << EOF
@@ -90,11 +110,14 @@ show_help() {
 EOF
 }
 
+# check_env: 检查运行环境是否满足要求
+# 检查项: Python3、Node.js、Redis(可选)、内存、磁盘空间
 check_env() {
     log_step "检查运行环境"
     SEPARATOR
     local errors=0
 
+    # 检查 Python3 是否安装
     if ! command -v python3 &> /dev/null; then
         log_error "Python3 未安装"
         log_detail "请安装 Python 3.12+ : https://www.python.org/downloads/"
@@ -105,6 +128,7 @@ check_env() {
         log_detail "路径: $(which python3)"
     fi
 
+    # 检查 Node.js 是否安装
     if ! command -v node &> /dev/null; then
         log_error "Node.js 未安装"
         log_detail "请安装 Node.js 20+ : https://nodejs.org/"
@@ -118,6 +142,7 @@ check_env() {
         fi
     fi
 
+    # 检查 Redis 是否可用 (可选，仅影响爬虫功能)
     if command -v redis-cli &> /dev/null; then
         local redis_ok=$(redis-cli ping 2>/dev/null || echo "FAIL")
         if [ "$redis_ok" = "PONG" ]; then
@@ -130,15 +155,18 @@ check_env() {
         log_detail "安装: apt install redis-server 或 docker run redis"
     fi
 
+    # 显示内存使用情况
     local mem_total=$(awk '/MemTotal/ {printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
     local mem_avail=$(awk '/MemAvailable/ {printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
     if [ "$mem_total" -gt 0 ]; then
         log_detail "内存   ${mem_avail}MB 可用 / ${mem_total}MB 总计"
     fi
 
+    # 显示磁盘可用空间
     local disk_free=$(df -h . | awk 'NR==2 {print $4}' 2>/dev/null || echo "unknown")
     log_detail "磁盘   ${disk_free} 可用"
 
+    # 汇总检查结果
     if [ $errors -gt 0 ]; then
         echo ""
         log_error "环境检查失败，请安装缺失的依赖后重试"
@@ -148,6 +176,8 @@ check_env() {
     log_success "环境检查通过"
 }
 
+# install_python_deps: 安装 Python 项目依赖
+# 使用阿里云镜像加速 pip 安装
 install_python_deps() {
     log_step "安装 Python 依赖"
     SEPARATOR
@@ -173,6 +203,8 @@ install_python_deps() {
     log_success "Python 依赖安装完成"
 }
 
+# install_node_deps: 安装前端 Node.js 依赖
+# 使用 npmmirror 镜像加速 npm 安装，智能检测依赖完整性
 install_node_deps() {
     log_step "安装 Node 依赖"
     SEPARATOR
@@ -181,6 +213,7 @@ install_node_deps() {
     log_detail "镜像源: ${mirror}"
     cd frontend
 
+    # 如果已有完整的 node_modules，跳过安装
     if [ -f "node_modules/.package-lock.json" ]; then
         local pkg_count=$(ls -1 node_modules 2>/dev/null | wc -l)
         cd ..
@@ -188,12 +221,14 @@ install_node_deps() {
         return
     fi
 
+    # 如果 node_modules 存在但不完整，删除后重新安装
     if [ -d "node_modules" ]; then
         local pkg_count=$(ls -1 node_modules 2>/dev/null | wc -l)
         log_warning "node_modules 不完整 (${pkg_count} 个包)，重新安装"
         rm -rf node_modules
     fi
 
+    # 优先使用 npm ci (从 package-lock.json 确定性安装)
     if [ -f "package-lock.json" ]; then
         log_detail "从 package-lock.json 安装 (确定性构建)"
         run_spin "安装 Node 依赖 (npm ci)" npm ci --registry "$mirror"
@@ -207,9 +242,12 @@ install_node_deps() {
     log_success "Node 依赖安装完成"
 }
 
+# install_deps: 安装项目全部依赖 (Python + Node.js)
+# 流程: 创建虚拟环境 → 安装 Python 依赖 → 安装 Node 依赖 (如果有前端)
 install_deps() {
     log_step "安装项目依赖"
     SEPARATOR
+    # 创建 Python 虚拟环境 (如果不存在)
     if [ ! -d "venv" ]; then
         python3 -m venv venv
         log_success "Python 虚拟环境已创建"
@@ -223,6 +261,8 @@ install_deps() {
     fi
 }
 
+# migrate_db: 执行 Django 数据库迁移
+# 自动检测现有数据库大小，首次迁移会新建数据库
 migrate_db() {
     log_step "执行数据库迁移"
     SEPARATOR
@@ -242,6 +282,8 @@ migrate_db() {
     log_success "数据库迁移完成"
 }
 
+# create_superuser: 创建初始管理员账户
+# 如果 admin 用户已存在则跳过，否则生成随机 16 位安全密码并输出
 create_superuser() {
     log_step "初始化管理员账户"
     SEPARATOR
@@ -273,12 +315,16 @@ else:
     log_success "管理员账户就绪"
 }
 
+# build_frontend: 构建前端 React 应用
+# 框架: React 19 + Vite + Tailwind CSS 4
+# 智能跳过: 已有构建产物则跳过，ARM 环境跳过类型检查
 build_frontend() {
     log_step "构建前端应用"
     SEPARATOR
     log_detail "框架: React 19 + Vite + Tailwind CSS 4"
     log_detail "输出: frontend/dist/"
 
+    # 检查预构建产物是否存在，存在则跳过
     if [ -f "frontend/dist/static/js/main.js" ]; then
         local js_size=$(du -h frontend/dist/static/js/main.js 2>/dev/null | cut -f1)
         local css_size=$(du -h frontend/dist/static/css/main.css 2>/dev/null | cut -f1)
@@ -291,12 +337,14 @@ build_frontend() {
     fi
 
     cd frontend
+    # 确保 node_modules 完整
     if [ ! -f "node_modules/.package-lock.json" ]; then
         cd ..
         log_warning "node_modules 不完整，先安装依赖"
         install_node_deps
         cd frontend
     fi
+    # 类型检查 (非 ARM 环境)
     local arch=$(uname -m 2>/dev/null || echo "unknown")
     if [ "$arch" != "aarch64" ] && [ "$arch" != "armv7l" ] && [ "$arch" != "armv8l" ]; then
         run_spin "TypeScript 类型检查" npm run typecheck 2>&1 || log_warning "类型检查有警告，继续构建"
@@ -304,9 +352,11 @@ build_frontend() {
         log_warning "ARM 环境，esbuild 可能不兼容，建议使用预构建产物"
     fi
 
+    # Vite 构建
     run_spin "Vite 构建中" npm run build
     cd ..
 
+    # 输出构建产物大小
     local js_size=$(du -h frontend/dist/static/js/main.js 2>/dev/null | cut -f1 || echo "?")
     local css_size=$(du -h frontend/dist/static/css/main.css 2>/dev/null | cut -f1 || echo "?")
     log_detail "JS  ${js_size}  →  static/js/main.js"
@@ -315,6 +365,8 @@ build_frontend() {
     log_success "前端构建完成"
 }
 
+# cmd_start: 生产模式启动 - 完整启动流程
+# 流程: 环境检查 → 依赖安装 → 数据库迁移 → 管理员初始化 → 前端构建 → 收集静态文件 → Granian 启动
 cmd_start() {
     print_banner
     check_env
@@ -347,6 +399,8 @@ cmd_start() {
     granian novel_reader.asgi:application --host 0.0.0.0 --port 8000 --interface asgi --workers 1
 }
 
+# cmd_dev: 开发模式启动 - 前后端分离运行或低内存模式
+# 流程: 环境检查 → 依赖安装 → 数据库迁移 → 管理员初始化 → (低内存时先构建前端)
 cmd_dev() {
     print_banner
     check_env
@@ -354,6 +408,7 @@ cmd_dev() {
     migrate_db
     create_superuser
 
+    # 检测内存，不足 1500MB 时切换为低内存模式 (先构建前端再启动后端)
     local mem_mb=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
     if [ "$mem_mb" -gt 0 ] && [ "$mem_mb" -lt 1500 ]; then
         log_warning "可用内存 ${mem_mb}MB，不足同时运行 Django + Vite"
@@ -385,12 +440,15 @@ cmd_dev() {
         echo -e "${YELLOW}按 Ctrl+C 停止服务${NC}"
         echo ""
 
+        # 同时启动 Django 开发服务器和 Vite 开发服务器
         source venv/bin/activate
         python manage.py runserver 0.0.0.0:8000 &
         cd frontend && npm run dev
     fi
 }
 
+# cmd_stop: 停止所有相关服务进程
+# 查找 granian、runserver、vite 进程并发送 kill 信号
 cmd_stop() {
     log_step "停止服务"
     SEPARATOR
@@ -408,6 +466,8 @@ cmd_stop() {
     fi
 }
 
+# cmd_status: 查看当前正在运行的服务状态
+# 检查 granian、Django runserver、Vite 进程
 cmd_status() {
     log_step "服务状态"
     SEPARATOR
@@ -436,12 +496,14 @@ cmd_status() {
     fi
 }
 
+# cmd_migrate: 仅执行数据库迁移 (不含启动)
 cmd_migrate() {
     check_env
     install_deps
     migrate_db
 }
 
+# cmd_build: 仅构建前端 + 收集静态文件 (不含启动)
 cmd_build() {
     check_env
     install_deps
@@ -452,6 +514,7 @@ cmd_build() {
     log_success "构建完成"
 }
 
+# main: 主入口函数 - 解析命令行参数并分发到对应子命令
 main() {
     local command="${1:-start}"
     case "$command" in
@@ -467,4 +530,5 @@ main() {
     esac
 }
 
+# 脚本入口: 将所有命令行参数传递给 main 函数
 main "$@"
