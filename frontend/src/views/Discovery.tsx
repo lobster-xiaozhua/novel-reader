@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { BookOpen, Clock, FileText, Users, BookMarked, ChevronRight, Star, Sparkles } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { BookOpen, Clock, FileText, Users, BookMarked, ChevronRight, Star, Sparkles, Heart, Bookmark } from 'lucide-react'
 import { fetchDiscovery, type DiscoveryBook } from '@/api/discovery'
+import { fetchFavorites } from '@/api/favorites'
+import { fetchProgress } from '@/api/progress'
 import { useUserStore } from '@/stores/userStore'
 import { Spinner } from '@/components/Loading'
+import type { FavoriteItem, ProgressItem } from '@/types'
 
 function BookCard({ book, size = 'md' }: { book: DiscoveryBook; size?: 'sm' | 'md' }) {
   const [c, d] = book.gradient
@@ -52,10 +55,12 @@ function SectionTitle({ icon: Icon, title, subtitle }: { icon: React.ElementType
 }
 
 export default function Discovery() {
-  const { isLoggedIn } = useUserStore()
-  const navigate = useNavigate()
+  const { isLoggedIn, user } = useUserStore()
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchDiscovery>> | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([])
+  const [progresses, setProgresses] = useState<ProgressItem[]>([])
 
   useEffect(() => {
     fetchDiscovery()
@@ -65,8 +70,14 @@ export default function Discovery() {
   }, [])
 
   useEffect(() => {
-    if (isLoggedIn) navigate('/dashboard')
-  }, [isLoggedIn, navigate])
+    if (!isLoggedIn) return
+    Promise.all([fetchFavorites(), fetchProgress()])
+      .then(([f, p]) => {
+        setFavorites(f.items || [])
+        setProgresses(p.items || [])
+      })
+      .catch((e) => console.error('[Discovery] 个人数据加载失败:', e))
+  }, [isLoggedIn])
 
   if (loading) return <Spinner />
   if (!data) return <div className="min-h-screen flex items-center justify-center text-text-muted">加载失败</div>
@@ -75,7 +86,6 @@ export default function Discovery() {
 
   return (
     <div className="min-h-screen bg-content-bg">
-      {/* Nav */}
       <header className="sticky top-0 z-40 bg-card-bg/80 backdrop-blur-xl border-b border-card-border">
         <div className="max-w-7xl mx-auto h-14 flex items-center justify-between px-4 sm:px-6">
           <Link to="/" className="flex items-center gap-2.5">
@@ -85,38 +95,121 @@ export default function Discovery() {
             <span className="font-bold text-text-primary">发现</span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-text-secondary hover:text-primary-500 transition-colors">
-              登录
-            </Link>
-            <Link
-              to="/login"
-              className="text-sm px-4 py-1.5 rounded-lg bg-primary-500 text-white font-medium hover:bg-primary-600 transition-colors"
-            >
-              注册
-            </Link>
+            {isLoggedIn ? (
+              <>
+                <span className="text-sm text-text-secondary">你好，{user?.username}</span>
+                {user?.is_staff && (
+                  <Link
+                    to="/admin-dashboard"
+                    className="text-sm px-3 py-1.5 rounded-lg border border-primary-500/30 text-primary-500 hover:bg-primary-500/10 transition-colors"
+                  >
+                    管理面板
+                  </Link>
+                )}
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="text-sm text-text-secondary hover:text-primary-500 transition-colors">
+                  登录
+                </Link>
+                <Link
+                  to="/login"
+                  className="text-sm px-4 py-1.5 rounded-lg bg-primary-500 text-white font-medium hover:bg-primary-600 transition-colors"
+                >
+                  注册
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
 
+      {/* Personal section for logged-in users */}
+      {isLoggedIn && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Reading Progress */}
+            {progresses.length > 0 && (
+              <div className="bg-card-bg border border-card-border rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Bookmark className="w-5 h-5 text-primary-500" />
+                  <h3 className="text-lg font-bold text-text-primary">继续阅读</h3>
+                  <span className="text-xs text-text-muted">({progresses.length})</span>
+                </div>
+                <div className="space-y-3">
+                  {progresses.slice(0, 5).map((p) => (
+                    <Link key={p.id} to={`/books/${p.book_id}`} className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/[0.02] transition-colors group">
+                      <div className="w-10 h-10 rounded-lg bg-primary-500/10 flex items-center justify-center flex-shrink-0">
+                        <BookOpen className="w-4 h-4 text-primary-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-text-primary truncate group-hover:text-primary-500 transition-colors">
+                          {p.book_title}
+                        </p>
+                        <p className="text-xs text-text-muted">
+                          {p.chapter_title || `第${p.position}章`} · 共{p.total_chapters}章
+                        </p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-text-muted" />
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Favorites */}
+            {favorites.length > 0 && (
+              <div className="bg-card-bg border border-card-border rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Heart className="w-5 h-5 text-primary-500" />
+                  <h3 className="text-lg font-bold text-text-primary">我的收藏</h3>
+                  <span className="text-xs text-text-muted">({favorites.length})</span>
+                </div>
+                <div className="space-y-3">
+                  {favorites.slice(0, 5).map((f) => (
+                    <Link key={f.id} to={`/books/${f.book_id}`} className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/[0.02] transition-colors group">
+                      <div className="w-10 h-10 rounded-lg bg-primary-500/10 flex items-center justify-center flex-shrink-0">
+                        <BookOpen className="w-4 h-4 text-primary-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-text-primary truncate group-hover:text-primary-500 transition-colors">
+                          {f.title}
+                        </p>
+                        <p className="text-xs text-text-muted">
+                          {f.author || '佚名'} · {f.total_chapters}章
+                        </p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-text-muted" />
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary-500/5 via-transparent to-info/5" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-500/10 text-primary-500 text-xs font-medium mb-6">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>探索无限好书</span>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
+          {!isLoggedIn && (
+            <div className="text-center mb-12">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-500/10 text-primary-500 text-xs font-medium mb-6">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>探索无限好书</span>
+              </div>
+              <h1 className="text-3xl sm:text-5xl font-extrabold text-text-primary tracking-tight">
+                发现你的下一本
+                <span className="text-primary-500"> 好书</span>
+              </h1>
+              <p className="mt-4 text-text-secondary max-w-lg mx-auto">
+                海量小说资源，沉浸式阅读体验，随时随地开启你的阅读之旅
+              </p>
             </div>
-            <h1 className="text-3xl sm:text-5xl font-extrabold text-text-primary tracking-tight">
-              发现你的下一本
-              <span className="text-primary-500"> 好书</span>
-            </h1>
-            <p className="mt-4 text-text-secondary max-w-lg mx-auto">
-              海量小说资源，沉浸式阅读体验，随时随地开启你的阅读之旅
-            </p>
-          </div>
+          )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-2xl mx-auto">
+          <div className={`grid grid-cols-2 sm:grid-cols-4 gap-4 ${isLoggedIn ? 'max-w-2xl mx-auto' : 'max-w-2xl mx-auto'}`}>
             {[
               { label: '总书籍', value: data.stats.total_books, icon: BookMarked },
               { label: '总章节', value: fmt(data.stats.total_chapters), icon: FileText },
@@ -134,7 +227,6 @@ export default function Discovery() {
       </section>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pb-20 space-y-16">
-        {/* Hot Books */}
         {data.hot_books.length > 0 && (
           <section>
             <SectionTitle icon={Star} title="热门精选" subtitle="章节最多的经典作品" />
@@ -148,7 +240,6 @@ export default function Discovery() {
           </section>
         )}
 
-        {/* Recent Updated */}
         {data.recent_books.length > 0 && (
           <section>
             <SectionTitle icon={Clock} title="最新更新" subtitle="最近更新的书籍" />
@@ -180,7 +271,6 @@ export default function Discovery() {
           </section>
         )}
 
-        {/* Categories */}
         {data.categories.length > 0 && (
           <section>
             <SectionTitle icon={Sparkles} title="分类探索" subtitle="按分类发现好书" />
@@ -207,7 +297,6 @@ export default function Discovery() {
           </section>
         )}
 
-        {/* All recent - compact list */}
         {data.recent_books.length > 6 && (
           <section>
             <SectionTitle icon={FileText} title="更多更新" />
@@ -237,7 +326,6 @@ export default function Discovery() {
         )}
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-card-border py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center text-xs text-text-muted">
           小说阅读器 · 发现好书，享受阅读
