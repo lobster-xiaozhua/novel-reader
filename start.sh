@@ -110,58 +110,51 @@ check_env() {
     log_success "环境检查通过"
 }
 
-draw_progress() {
-    local pkg="$1" current="$2" total="$3" status="$4"
-    local width=30
-    local filled=$((current * width / total))
-    local empty=$((width - filled))
-    local pct=$((current * 100 / total))
-    local bar=""
-    for ((i=0; i<filled; i++)); do bar+="█"; done
-    for ((i=0; i<empty; i++)); do bar+="░"; done
-    if [ "$status" = "done" ]; then
-        printf "  ${GREEN}✓${NC} %-30s [${GREEN}%s${NC}] %3d%% ${DIM}已完成${NC}\n" "$pkg" "$bar" "$pct"
-    else
-        printf "  ${CYAN}→${NC} %-30s [${CYAN}%s${NC}] %3d%% ${YELLOW}下载中...${NC}\n" "$pkg" "$bar" "$pct"
-    fi
-}
-
 install_python_deps() {
     log_step "安装 Python 依赖"
     SEPARATOR
-    log_detail "使用阿里云 PyPI 镜像加速下载"
-    log_detail "虚拟环境: $(realpath venv 2>/dev/null || echo 'venv/')"
     source venv/bin/activate
-    pip install -q --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ 2>/dev/null || true
 
-    local pkgs=(Django granian whitenoise django-environ django-unfold django-ninja pydantic redis celery requests beautifulsoup4 tenacity httpx orjson django-cors-headers pytest pytest-django pytest-cov ruff django-debug-toolbar)
-    local total=${#pkgs[@]}
-    local idx=0
-    local failed=0
+    local mirror="https://mirrors.aliyun.com/pypi/simple/"
+    log_detail "镜像源: ${mirror}"
+    log_detail "虚拟环境: $(realpath venv 2>/dev/null || echo 'venv/')"
 
-    for pkg in "${pkgs[@]}"; do
-        ((idx++))
-        draw_progress "$pkg" "$idx" "$total" "downloading"
-        if pip install -q "$pkg" -i https://mirrors.aliyun.com/pypi/simple/ 2>/dev/null; then
-            draw_progress "$pkg" "$idx" "$total" "done"
-        else
-            log_error "  ✗ $pkg 安装失败"
-            ((failed++))
+    if [ -f "requirements.txt" ]; then
+        local pkg_count=$(grep -c "^[^#]" requirements.txt 2>/dev/null || echo "?")
+        log_detail "从 requirements.txt 安装 (${pkg_count} 个依赖)"
+
+        pip install --upgrade pip -i "$mirror" 2>&1 | tail -1 || true
+
+        if pip install -r requirements.txt -i "$mirror" 2>&1 | while IFS= read -r line; do
+            if [[ "$line" == *"Successfully"* ]]; then
+                local installed=$(echo "$line" | grep -oP '\d+(?= package)' || echo "?")
+                log_detail "$line"
+            elif [[ "$line" == *"Requirement already satisfied"* ]]; then
+                :
+            elif [[ "$line" == *"error"* ]] || [[ "$line" == *"Error"* ]]; then
+                echo -e "  ${RED}$line${NC}" >&2
+            fi
+        done; then
+            :
         fi
-    done
+
+        local pip_list=$(pip list --format=columns 2>/dev/null | tail -n +3 | wc -l)
+        log_detail "已安装 ${pip_list} 个包"
+    else
+        log_error "requirements.txt 不存在"
+        return 1
+    fi
 
     echo ""
-    if [ $failed -gt 0 ]; then
-        log_warning "Python 依赖安装完成 ($total 个包, ${RED}${failed} 个失败${NC})"
-    else
-        log_success "Python 依赖安装完成 (${total} 个包)"
-    fi
+    log_success "Python 依赖安装完成"
 }
 
 install_node_deps() {
     log_step "安装 Node 依赖"
     SEPARATOR
-    log_detail "使用阿里云 npm 镜像加速下载"
+
+    local mirror="https://registry.npmmirror.com"
+    log_detail "镜像源: ${mirror}"
     cd frontend
 
     if [ -d "node_modules" ]; then
@@ -171,33 +164,30 @@ install_node_deps() {
         return
     fi
 
-    local pkgs=(@tailwindcss/vite @tanstack/react-query axios lucide-react react react-dom react-markdown react-router-dom react-syntax-highlighter recharts rehype-highlight remark-gfm tailwindcss zustand @eslint/js @types/node @types/react @types/react-dom @types/react-syntax-highlighter @vitejs/plugin-react eslint eslint-plugin-react-hooks eslint-plugin-react-refresh globals typescript typescript-eslint vite)
-    local total=${#pkgs[@]}
-    local idx=0
-    local failed=0
-
-    for pkg in "${pkgs[@]}"; do
-        ((idx++))
-        draw_progress "$pkg" "$idx" "$total" "downloading"
-        if npm install "$pkg" --registry https://registry.npmmirror.com --no-save --no-package-lock 2>/dev/null; then
-            draw_progress "$pkg" "$idx" "$total" "done"
-        else
-            log_error "  ✗ $pkg 安装失败"
-            ((failed++))
-        fi
-    done
+    if [ -f "package-lock.json" ]; then
+        log_detail "从 package-lock.json 安装 (确定性构建)"
+        npm ci --registry "$mirror" 2>&1 | while IFS= read -r line; do
+            if [[ "$line" == *"added"* ]] || [[ "$line" == *"audited"* ]]; then
+                log_detail "$line"
+            fi
+        done
+    elif [ -f "package.json" ]; then
+        log_detail "从 package.json 安装"
+        npm install --registry "$mirror" 2>&1 | while IFS= read -r line; do
+            if [[ "$line" == *"added"* ]] || [[ "$line" == *"audited"* ]]; then
+                log_detail "$line"
+            fi
+        done
+    fi
 
     cd ..
     echo ""
-    if [ $failed -gt 0 ]; then
-        log_warning "Node 依赖安装完成 ($total 个包, ${RED}${failed} 个失败${NC})"
-    else
-        log_success "Node 依赖安装完成 (${total} 个包)"
-    fi
+    log_success "Node 依赖安装完成"
 }
 
 install_deps() {
     log_step "安装项目依赖"
+    SEPARATOR
     if [ ! -d "venv" ]; then
         python3 -m venv venv
         log_success "Python 虚拟环境已创建"
@@ -218,14 +208,22 @@ migrate_db() {
 
     local db_path="data/db.sqlite3"
     if [ -f "$db_path" ]; then
-        log_detail "数据库: $(realpath $db_path 2>/dev/null || $db_path)"
+        log_detail "数据库: $(realpath $db_path 2>/dev/null || echo $db_path)"
         local db_size=$(du -h "$db_path" 2>/dev/null | cut -f1)
         log_detail "大小: ${db_size}"
     else
         log_detail "首次迁移，将创建新数据库"
     fi
 
-    python manage.py migrate
+    python manage.py migrate 2>&1 | while IFS= read -r line; do
+        if [[ "$line" == *"Applying"* ]]; then
+            log_detail "$line"
+        elif [[ "$line" == *"Running"* ]]; then
+            log_detail "$line"
+        elif [[ "$line" == *"WARNINGS"* ]] || [[ "$line" == *"System check"* ]]; then
+            log_detail "$line"
+        fi
+    done
     echo ""
     log_success "数据库迁移完成"
 }
@@ -234,23 +232,30 @@ create_superuser() {
     log_step "初始化管理员账户"
     SEPARATOR
     source venv/bin/activate
-    python manage.py shell -c "
+    local result=$(python manage.py shell -c "
 from django.contrib.auth.models import User
 if not User.objects.filter(username='admin').exists():
     import secrets, string
     pwd = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))
     User.objects.create_superuser('admin', 'admin@example.com', pwd)
-    print(f'Superuser created: admin / {pwd}')
-    print('请妥善保存此密码！')
+    print(f'CREATED:admin:{pwd}')
 else:
     print('EXISTS')
-" 2>/dev/null | while IFS= read -r line; do
-        if [ "$line" = "EXISTS" ]; then
-            log_detail "管理员账户 admin 已存在，跳过创建"
-        else
-            echo -e "  $line"
-        fi
-    done
+" 2>/dev/null)
+
+    if [[ "$result" == "EXISTS" ]]; then
+        log_detail "管理员账户 admin 已存在，跳过创建"
+    elif [[ "$result" == "CREATED:"* ]]; then
+        local creds="${result#CREATED:}"
+        local user="${creds%%:*}"
+        local pass="${creds#*:}"
+        echo ""
+        log_warning "新管理员账户已创建"
+        echo -e "  ${BOLD}用户名:${NC} ${user}"
+        echo -e "  ${BOLD}密码:${NC}   ${pass}"
+        echo -e "  ${YELLOW}请妥善保存此密码！${NC}"
+        echo ""
+    fi
     log_success "管理员账户就绪"
 }
 
@@ -261,7 +266,11 @@ build_frontend() {
     log_detail "输出: frontend/dist/"
 
     cd frontend
-    npm run build
+    npm run build 2>&1 | while IFS= read -r line; do
+        if [[ "$line" == *"built in"* ]]; then
+            log_detail "$line"
+        fi
+    done
     cd ..
 
     local js_size=$(du -h frontend/dist/static/js/main.js 2>/dev/null | cut -f1 || echo "?")
@@ -282,7 +291,9 @@ cmd_start() {
 
     source venv/bin/activate
     log_step "收集静态文件"
-    python manage.py collectstatic --noinput 2>/dev/null || true
+    python manage.py collectstatic --noinput 2>&1 | tail -1 | while IFS= read -r line; do
+        log_detail "$line"
+    done
     log_success "静态文件收集完成"
 
     log_step "启动 Granian ASGI 服务器"
