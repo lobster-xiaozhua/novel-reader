@@ -67,7 +67,7 @@ export default function ErrorPage({ code, title, message }: ErrorPageProps) {
             返回上一页
           </button>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/dashboard')}
             className="flex items-center gap-2 px-5 h-11 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors"
           >
             <Home className="w-4 h-4" />

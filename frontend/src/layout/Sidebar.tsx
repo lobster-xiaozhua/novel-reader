@@ -17,15 +17,15 @@ import { useAppStore } from '@/stores/appStore'
 import { MenuItem } from '@/types'
 
 const menuItems: MenuItem[] = [
-  { title: 'Dashboard', icon: 'LayoutDashboard', path: '/admin-dashboard' },
-  { title: '书籍', icon: 'BookOpen', path: '/admin-dashboard/books' },
-  { title: '章节', icon: 'FileText', path: '/admin-dashboard/chapters' },
-  { title: '标签', icon: 'Tag', path: '/admin-dashboard/tags' },
-  { title: '用户', icon: 'Users', path: '/admin-dashboard/users' },
-  { title: '阅读进度', icon: 'Bookmark', path: '/admin-dashboard/progress' },
-  { title: '阅读统计', icon: 'BarChart3', path: '/admin-dashboard/stats' },
-  { title: '收藏', icon: 'Heart', path: '/admin-dashboard/favorites' },
-  { title: '爬虫任务', icon: 'Bug', path: '/admin-dashboard/crawler' },
+  { title: 'Dashboard', icon: 'LayoutDashboard', path: '/dashboard' },
+  { title: '书籍', icon: 'BookOpen', path: '/books' },
+  { title: '章节', icon: 'FileText', path: '/chapters' },
+  { title: '标签', icon: 'Tag', path: '/tags' },
+  { title: '用户', icon: 'Users', path: '/users' },
+  { title: '阅读进度', icon: 'Bookmark', path: '/progress' },
+  { title: '阅读统计', icon: 'BarChart3', path: '/stats' },
+  { title: '收藏', icon: 'Heart', path: '/favorites' },
+  { title: '爬虫任务', icon: 'Bug', path: '/crawler' },
 ]
 
 const iconMap: Record<string, React.ElementType> = {
@@ -91,7 +91,7 @@ export default function Sidebar() {
         <nav className="flex-1 py-4 overflow-y-auto">
           {menuItems.map((item) => {
             const Icon = iconMap[item.icon]
-            const isActive = location.pathname === item.path || (item.path !== '/admin-dashboard' && location.pathname.startsWith(item.path))
+            const isActive = location.pathname === item.path
 
             return (
               <NavLink

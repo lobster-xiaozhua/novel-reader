@@ -1,1 +1,0 @@
-import{a as e,s as t}from"./main.js";function n(t){return e(`/books/`,{params:t})}function r(t){return e(`/books/${t}/chapters/`)}function i(t,n){return e(`/books/${t}/chapters/${n}/`)}function a(e){let n=new FormData;return e.forEach(e=>n.append(`files`,e)),t(`/books/import/`,n)}export{a as i,i as n,r,n as t};

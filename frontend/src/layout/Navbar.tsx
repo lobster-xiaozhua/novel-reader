@@ -13,7 +13,7 @@ export default function Navbar() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (searchQuery.trim()) {
-      navigate(`/admin-dashboard/books?search=${encodeURIComponent(searchQuery.trim())}`)
+      navigate(`/books?search=${encodeURIComponent(searchQuery.trim())}`)
       setSearchQuery('')
     }
   }
@@ -58,7 +58,7 @@ export default function Navbar() {
             <button
               onClick={() => {
                 logout()
-                navigate('/')
+                navigate('/login')
               }}
               className="p-2 rounded-lg hover:bg-white/5 text-text-secondary hover:text-danger transition-colors"
               title="退出登录"

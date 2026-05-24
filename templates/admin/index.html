@@ -1,18 +1,9 @@
-<!--
-  index.html - Django 管理后台首页仪表盘模板
-  =============================================================================
-  用途: 替换 Django admin 默认首页，展示数据统计卡片、图表和爬虫任务状态
-  数据源: Django 视图传入的 cards、last_7_days、category_data、crawler_stats 等上下文
-  图表库: Chart.js 4.4 (CDN 加载)
-  包含: 统计卡片网格、阅读趋势折线图、分类分布环形图、爬虫进度条
--->
 {% extends "admin/base_site.html" %}
 {% load static %}
 
 {% block content %}
-<!-- 仪表盘容器: 所有 dashboard 组件的根元素 -->
 <div class="dashboard-container">
-  <!-- 统计卡片区域: 展示关键数据指标 (书籍数、用户数等) -->
+  <!-- 统计卡片 -->
   <div class="stats-grid">
     {% for card in cards %}
     <div class="stat-card stat-card--{{ card.color }}">
@@ -27,9 +18,8 @@
     {% endfor %}
   </div>
 
-  <!-- 图表区域: 左右两列布局 (趋势图 + 分类图) -->
+  <!-- 图表区域 -->
   <div class="charts-grid">
-    <!-- 图表1: 最近 7 天阅读趋势折线图 -->
     <div class="chart-card">
       <h3 class="chart-card__title">
         <span class="material-symbols-outlined">trending_up</span>
@@ -41,7 +31,6 @@
       </div>
     </div>
 
-    <!-- 图表2: 书籍分类分布环形图 -->
     <div class="chart-card">
       <h3 class="chart-card__title">
         <span class="material-symbols-outlined">pie_chart</span>
@@ -53,16 +42,14 @@
     </div>
   </div>
 
-  <!-- 爬虫任务状态: 以进度条形式展示各状态任务占比 -->
+  <!-- 爬虫任务状态 -->
   <div class="chart-card">
     <h3 class="chart-card__title">
       <span class="material-symbols-outlined">spider</span>
       爬虫任务状态
     </h3>
     <div class="crawler-status">
-      <!-- 分段进度条容器: JS 动态填充各状态百分比 -->
       <div class="crawler-status__bar" id="crawlerBar"></div>
-      <!-- 图例: 标识各颜色对应状态 -->
       <div class="crawler-status__legend">
         <span class="crawler-status__legend-item"><span class="dot dot--pending"></span>等待中</span>
         <span class="crawler-status__legend-item"><span class="dot dot--running"></span>运行中</span>
@@ -73,17 +60,14 @@
   </div>
 </div>
 
-<!-- 引入 Chart.js 图表库 (CDN v4.4.1) -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // 从 Django 模板上下文注入图表数据
   const last7Days = {{ last_7_days|safe|default:"[]" }};
   const catData = {{ category_data|safe|default:"[]" }};
   const crawlerStats = {{ crawler_stats|safe|default:"{}" }};
 
-  // ===== 阅读趋势折线图 =====
-  // 使用双线展示阅读分钟数 (琥珀色) 和阅读章节数 (绿色)
+  // 阅读趋势图
   const trendCtx = document.getElementById('readTrendChart');
   if (trendCtx && last7Days.length > 0) {
     new Chart(trendCtx, {
@@ -129,8 +113,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // ===== 分类分布环形图 =====
-  // 使用 8 色调色盘按分类占比展示书籍分布
+  // 分类分布图
   const catCtx = document.getElementById('categoryChart');
   if (catCtx && catData.length > 0) {
     const colors = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#84cc16'];
@@ -154,8 +137,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // ===== 爬虫任务状态进度条 =====
-  // 根据各状态任务数量计算百分比，动态渲染分段进度条
+  // 爬虫任务状态条
   const bar = document.getElementById('crawlerBar');
   if (bar && crawlerStats.total > 0) {
     const segments = [
@@ -180,10 +162,8 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
-/* ===== 仪表盘布局 ===== */
 .dashboard-container { padding: 8px; }
 
-/* 统计卡片网格: 自动填充，最小宽度 200px */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -191,7 +171,6 @@ document.addEventListener('DOMContentLoaded', function() {
   margin-bottom: 24px;
 }
 
-/* 单个统计卡片: 图标 + 数值/标题布局 */
 .stat-card {
   display: flex;
   align-items: center;
@@ -207,7 +186,6 @@ document.addEventListener('DOMContentLoaded', function() {
   box-shadow: 0 8px 24px rgba(0,0,0,0.3);
 }
 
-/* 图标容器: 圆形背景 + 居中图标 */
 .stat-card__icon {
   width: 48px;
   height: 48px;
@@ -221,28 +199,24 @@ document.addEventListener('DOMContentLoaded', function() {
   font-size: 24px;
 }
 
-/* 不同颜色变体的图标背景 */
 .stat-card--primary .stat-card__icon { background: rgba(245,158,11,0.15); color: #f59e0b; }
 .stat-card--success .stat-card__icon { background: rgba(16,185,129,0.15); color: #10b981; }
 .stat-card--info .stat-card__icon { background: rgba(59,130,246,0.15); color: #3b82f6; }
 .stat-card--warning .stat-card__icon { background: rgba(245,158,11,0.15); color: #fbbf24; }
 .stat-card--danger .stat-card__icon { background: rgba(239,68,68,0.15); color: #ef4444; }
 
-/* 卡片数值: 大号加粗 */
 .stat-card__value {
   font-size: 28px;
   font-weight: 700;
   color: #f1f5f9;
   line-height: 1;
 }
-/* 卡片标题: 小号浅色文字 */
 .stat-card__title {
   font-size: 13px;
   color: #64748b;
   margin-top: 4px;
 }
 
-/* 图表网格: 两列响应式布局 */
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -250,7 +224,6 @@ document.addEventListener('DOMContentLoaded', function() {
   margin-bottom: 24px;
 }
 
-/* 图表卡片: 深色背景 + 圆角边框 */
 .chart-card {
   background: #1a2235;
   border: 1px solid rgba(255,255,255,0.06);
@@ -275,15 +248,12 @@ document.addEventListener('DOMContentLoaded', function() {
   color: #64748b;
   margin-bottom: 16px;
 }
-/* 图表 Canvas 容器: 固定高度 */
 .chart-container {
   height: 280px;
   position: relative;
 }
 
-/* ===== 爬虫任务状态条 ===== */
 .crawler-status { padding: 8px 0; }
-/* 进度条容器: 横向分段 */
 .crawler-status__bar {
   display: flex;
   height: 36px;
@@ -291,7 +261,6 @@ document.addEventListener('DOMContentLoaded', function() {
   overflow: hidden;
   background: rgba(255,255,255,0.05);
 }
-/* 分段标签: 居中显示状态名称和数量 */
 .crawler-status__segment {
   display: flex;
   align-items: center;
@@ -303,7 +272,6 @@ document.addEventListener('DOMContentLoaded', function() {
   transition: width 0.5s ease;
 }
 
-/* 图例: 水平居中排列 */
 .crawler-status__legend {
   display: flex;
   gap: 20px;
@@ -317,7 +285,6 @@ document.addEventListener('DOMContentLoaded', function() {
   font-size: 13px;
   color: #94a3b8;
 }
-/* 状态指示圆点 */
 .dot {
   width: 8px;
   height: 8px;

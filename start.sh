@@ -1,84 +1,23 @@
 #!/bin/bash
-# =============================================================================
-# start.sh - Novel Reader 项目启动脚本
-# =============================================================================
-# 用途: 统一管理项目的启动、停止、构建、迁移等生命周期操作
-# 功能: 环境检查、依赖安装、数据库迁移、前端构建、服务启动/停止
-# 支持命令: start | stop | restart | status | migrate | build | dev | help
-# =============================================================================
 set -e
 
 cd "$(dirname "$0")"
 
-# 定义终端颜色常量
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
-DIM='\033[2m'
-BOLD='\033[1m'
 NC='\033[0m'
+DIM='\033[2m'
 
-# 日志函数: 统一日志输出格式
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
 log_error() { echo -e "${RED}[✗]${NC} $1"; }
-log_step() { echo -e "\n${CYAN}[→]${NC} ${BOLD}$1${NC}"; }
-log_detail() { echo -e "  ${DIM}└─ $1${NC}"; }
+log_step() { echo -e "${CYAN}[→]${NC} $1"; }
 
-# 分隔线: 用于在日志中划分不同步骤
-SEPARATOR() { echo -e "${DIM}───────────────────────────────────────────────────${NC}"; }
-
-# 旋转动画相关变量
-SPINNER_FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-_SP_PID="" _SP_MSG="" _SP_START=0
-
-# _spin_start: 启动旋转加载动画 (内部函数)
-# 参数: $1 - 动画旁显示的任务描述文字
-_spin_start() {
-    _SP_MSG="$1"; _SP_START=$(date +%s)
-    ( while true; do
-        local e=$(($(date +%s)-_SP_START)) m=$((e/60)) s=$((e%60))
-        printf "\r  ${CYAN}%s${NC} %s  ${DIM}[%02d:%02d]${NC}   " "${SPINNER_FRAMES[$((SECONDS%10))]}" "$_SP_MSG" "$m" "$s"
-        sleep 0.08
-    done ) & _SP_PID=$!
-}
-
-# _spin_stop: 停止旋转加载动画 (内部函数)
-# 参数: $1 - 任务成功与否 (true/false), 默认为 true
-_spin_stop() {
-    local ok="${1:-true}"
-    [ -n "$_SP_PID" ] && kill "$_SP_PID" 2>/dev/null; wait "$_SP_PID" 2>/dev/null || true; _SP_PID=""
-    local e=$(($(date +%s)-_SP_START)) m=$((e/60)) s=$((e%60))
-    if [ "$ok" = "true" ]; then
-        printf "\r  ${GREEN}✓${NC} %s  ${DIM}[%02d:%02d]${NC}                              \n" "$_SP_MSG" "$m" "$s"
-    else
-        printf "\r  ${RED}✗${NC} %s  ${DIM}[%02d:%02d]${NC}                              \n" "$_SP_MSG" "$m" "$s"
-    fi
-}
-
-# run_spin: 执行带旋转动画的命令，自动捕获输出和错误
-# 参数: $1 - 任务描述文字; $@ - 要执行的命令及其参数
-# 返回: 0 表示成功，1 表示命令执行失败
-run_spin() {
-    local desc="$1"; shift
-    local tmp=$(mktemp /tmp/novel-XXXXXX.log)
-    _spin_start "$desc"
-    if "$@" &> "$tmp"; then
-        _spin_stop true
-        tail -3 "$tmp" 2>/dev/null | while IFS= read -r l; do [ -n "$l" ] && log_detail "$l"; done
-        rm -f "$tmp"; return 0
-    else
-        _spin_stop false
-        log_error "命令失败，日志:"; head -20 "$tmp" | while IFS= read -r l; do echo -e "  ${RED}$l${NC}"; done
-        rm -f "$tmp"; return 1
-    fi
-}
-
-# print_banner: 打印项目启动横幅
 print_banner() {
     echo ""
     echo -e "${MAGENTA}╔═══════════════════════════════════════════════════╗${NC}"
@@ -87,7 +26,6 @@ print_banner() {
     echo ""
 }
 
-# show_help: 显示命令帮助信息
 show_help() {
     print_banner
     cat << EOF
@@ -110,150 +48,116 @@ show_help() {
 EOF
 }
 
-# check_env: 检查运行环境是否满足要求
-# 检查项: Python3、Node.js、Redis(可选)、内存、磁盘空间
 check_env() {
-    log_step "检查运行环境"
-    SEPARATOR
+    log_step "检查环境..."
     local errors=0
 
-    # 检查 Python3 是否安装
     if ! command -v python3 &> /dev/null; then
         log_error "Python3 未安装"
-        log_detail "请安装 Python 3.12+ : https://www.python.org/downloads/"
         ((errors++))
     else
-        local py_ver=$(python3 --version | cut -d' ' -f2)
-        log_success "Python  ${py_ver}"
-        log_detail "路径: $(which python3)"
+        log_success "Python: $(python3 --version | cut -d' ' -f2)"
     fi
 
-    # 检查 Node.js 是否安装
     if ! command -v node &> /dev/null; then
         log_error "Node.js 未安装"
-        log_detail "请安装 Node.js 20+ : https://nodejs.org/"
         ((errors++))
     else
-        local node_ver=$(node --version)
-        log_success "Node   ${node_ver}"
-        log_detail "路径: $(which node)"
-        if command -v npm &> /dev/null; then
-            log_detail "npm    $(npm --version)"
-        fi
+        log_success "Node: $(node --version)"
     fi
 
-    # 检查 Redis 是否可用 (可选，仅影响爬虫功能)
-    if command -v redis-cli &> /dev/null; then
-        local redis_ok=$(redis-cli ping 2>/dev/null || echo "FAIL")
-        if [ "$redis_ok" = "PONG" ]; then
-            log_success "Redis  在线"
-        else
-            log_warning "Redis  未运行 (爬虫功能不可用)"
-        fi
-    else
-        log_warning "Redis  未安装 (爬虫功能不可用)"
-        log_detail "安装: apt install redis-server 或 docker run redis"
-    fi
-
-    # 显示内存使用情况
-    local mem_total=$(awk '/MemTotal/ {printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
-    local mem_avail=$(awk '/MemAvailable/ {printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
-    if [ "$mem_total" -gt 0 ]; then
-        log_detail "内存   ${mem_avail}MB 可用 / ${mem_total}MB 总计"
-    fi
-
-    # 显示磁盘可用空间
-    local disk_free=$(df -h . | awk 'NR==2 {print $4}' 2>/dev/null || echo "unknown")
-    log_detail "磁盘   ${disk_free} 可用"
-
-    # 汇总检查结果
     if [ $errors -gt 0 ]; then
-        echo ""
-        log_error "环境检查失败，请安装缺失的依赖后重试"
+        log_error "环境检查失败"
         exit 1
     fi
-    echo ""
     log_success "环境检查通过"
 }
 
-# install_python_deps: 安装 Python 项目依赖
-# 使用阿里云镜像加速 pip 安装
-install_python_deps() {
-    log_step "安装 Python 依赖"
-    SEPARATOR
-    source venv/bin/activate
-
-    local mirror="https://mirrors.aliyun.com/pypi/simple/"
-    log_detail "镜像源: ${mirror}"
-    log_detail "虚拟环境: $(realpath venv 2>/dev/null || echo 'venv/')"
-
-    if [ ! -f "requirements.txt" ]; then
-        log_error "requirements.txt 不存在"; return 1
+draw_progress() {
+    local pkg="$1" current="$2" total="$3" status="$4"
+    local width=30
+    local filled=$((current * width / total))
+    local empty=$((width - filled))
+    local pct=$((current * 100 / total))
+    local bar=""
+    for ((i=0; i<filled; i++)); do bar+="█"; done
+    for ((i=0; i<empty; i++)); do bar+="░"; done
+    if [ "$status" = "done" ]; then
+        printf "  ${GREEN}✓${NC} %-30s [${GREEN}%s${NC}] %3d%% ${DIM}已完成${NC}\n" "$pkg" "$bar" "$pct"
+    else
+        printf "  ${CYAN}→${NC} %-30s [${CYAN}%s${NC}] %3d%% ${YELLOW}下载中...${NC}\n" "$pkg" "$bar" "$pct"
     fi
-
-    local pkg_count=$(grep -c "^[^#]" requirements.txt 2>/dev/null || echo "?")
-    log_detail "从 requirements.txt 安装 (${pkg_count} 个依赖)"
-
-    run_spin "升级 pip" pip install --upgrade pip -i "$mirror"
-    run_spin "安装 Python 依赖 (${pkg_count} 个)" pip install -r requirements.txt -i "$mirror"
-
-    local pip_list=$(pip list --format=columns 2>/dev/null | tail -n +3 | wc -l)
-    log_detail "环境中已安装 ${pip_list} 个包"
-    echo ""
-    log_success "Python 依赖安装完成"
 }
 
-# install_node_deps: 安装前端 Node.js 依赖
-# 使用 npmmirror 镜像加速 npm 安装，智能检测依赖完整性
-install_node_deps() {
-    log_step "安装 Node 依赖"
-    SEPARATOR
+install_python_deps() {
+    log_step "安装 Python 依赖..."
+    log_info "使用阿里云 PyPI 镜像..."
+    source venv/bin/activate
+    pip install -q --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ 2>/dev/null || true
 
-    local mirror="https://registry.npmmirror.com"
-    log_detail "镜像源: ${mirror}"
+    local pkgs=(Django granian whitenoise django-environ django-unfold django-ninja pydantic redis celery requests beautifulsoup4 tenacity httpx orjson django-cors-headers pytest pytest-django pytest-cov ruff django-debug-toolbar)
+    local total=${#pkgs[@]}
+    local idx=0
+    local failed=0
+
+    for pkg in "${pkgs[@]}"; do
+        ((idx++))
+        draw_progress "$pkg" "$idx" "$total" "downloading"
+        if pip install -q "$pkg" -i https://mirrors.aliyun.com/pypi/simple/ 2>/dev/null; then
+            draw_progress "$pkg" "$idx" "$total" "done"
+        else
+            log_error "  ✗ $pkg 安装失败"
+            ((failed++))
+        fi
+    done
+
+    if [ $failed -gt 0 ]; then
+        log_warning "Python 依赖安装完成 ($total 个包, $failed 个失败)"
+    else
+        log_success "Python 依赖安装完成 ($total 个包)"
+    fi
+}
+
+install_node_deps() {
+    log_step "安装 Node 依赖..."
+    log_info "使用阿里云 npm 镜像..."
     cd frontend
 
-    # 如果已有完整的 node_modules，跳过安装
-    if [ -f "node_modules/.package-lock.json" ]; then
-        local pkg_count=$(ls -1 node_modules 2>/dev/null | wc -l)
+    if [ -d "node_modules" ]; then
         cd ..
-        log_success "Node 依赖已存在且完整 (${pkg_count} 个包)，跳过安装"
+        log_success "Node 依赖已存在，跳过安装"
         return
     fi
 
-    # 如果 node_modules 存在但不完整，删除后重新安装
-    if [ -d "node_modules" ]; then
-        local pkg_count=$(ls -1 node_modules 2>/dev/null | wc -l)
-        log_warning "node_modules 不完整 (${pkg_count} 个包)，重新安装"
-        rm -rf node_modules
-    fi
+    local pkgs=(@tailwindcss/vite @tanstack/react-query axios lucide-react react react-dom react-markdown react-router-dom react-syntax-highlighter recharts rehype-highlight remark-gfm tailwindcss zustand @eslint/js @types/node @types/react @types/react-dom @types/react-syntax-highlighter @vitejs/plugin-react eslint eslint-plugin-react-hooks eslint-plugin-react-refresh globals typescript typescript-eslint vite)
+    local total=${#pkgs[@]}
+    local idx=0
+    local failed=0
 
-    # 优先使用 npm ci (从 package-lock.json 确定性安装)
-    if [ -f "package-lock.json" ]; then
-        log_detail "从 package-lock.json 安装 (确定性构建)"
-        run_spin "安装 Node 依赖 (npm ci)" npm ci --registry "$mirror"
-    elif [ -f "package.json" ]; then
-        log_detail "从 package.json 安装"
-        run_spin "安装 Node 依赖 (npm install)" npm install --registry "$mirror"
-    fi
+    for pkg in "${pkgs[@]}"; do
+        ((idx++))
+        draw_progress "$pkg" "$idx" "$total" "downloading"
+        if npm install "$pkg" --registry https://registry.npmmirror.com --no-save --no-package-lock 2>/dev/null; then
+            draw_progress "$pkg" "$idx" "$total" "done"
+        else
+            log_error "  ✗ $pkg 安装失败"
+            ((failed++))
+        fi
+    done
 
     cd ..
-    echo ""
-    log_success "Node 依赖安装完成"
+    if [ $failed -gt 0 ]; then
+        log_warning "Node 依赖安装完成 ($total 个包, $failed 个失败)"
+    else
+        log_success "Node 依赖安装完成 ($total 个包)"
+    fi
 }
 
-# install_deps: 安装项目全部依赖 (Python + Node.js)
-# 流程: 创建虚拟环境 → 安装 Python 依赖 → 安装 Node 依赖 (如果有前端)
 install_deps() {
-    log_step "安装项目依赖"
-    SEPARATOR
-    # 创建 Python 虚拟环境 (如果不存在)
+    log_step "安装依赖..."
     if [ ! -d "venv" ]; then
         python3 -m venv venv
-        log_success "Python 虚拟环境已创建"
-        log_detail "位置: $(realpath venv)"
-    else
-        log_detail "虚拟环境已存在，跳过创建"
+        log_success "虚拟环境已创建"
     fi
     install_python_deps
     if [ -f "frontend/package.json" ]; then
@@ -261,112 +165,37 @@ install_deps() {
     fi
 }
 
-# migrate_db: 执行 Django 数据库迁移
-# 自动检测现有数据库大小，首次迁移会新建数据库
 migrate_db() {
-    log_step "执行数据库迁移"
-    SEPARATOR
+    log_step "执行数据库迁移..."
     source venv/bin/activate
-
-    local db_path="data/db.sqlite3"
-    if [ -f "$db_path" ]; then
-        log_detail "数据库: $(realpath $db_path 2>/dev/null || echo $db_path)"
-        local db_size=$(du -h "$db_path" 2>/dev/null | cut -f1)
-        log_detail "大小: ${db_size}"
-    else
-        log_detail "首次迁移，将创建新数据库"
-    fi
-
-    run_spin "执行数据库迁移" python manage.py migrate
-    echo ""
+    python manage.py migrate
     log_success "数据库迁移完成"
 }
 
-# create_superuser: 创建初始管理员账户
-# 如果 admin 用户已存在则跳过，否则生成随机 16 位安全密码并输出
 create_superuser() {
-    log_step "初始化管理员账户"
-    SEPARATOR
+    log_step "创建超级用户..."
     source venv/bin/activate
-    local result=$(python manage.py shell -c "
+    python manage.py shell -c "
 from django.contrib.auth.models import User
 if not User.objects.filter(username='admin').exists():
     import secrets, string
     pwd = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))
     User.objects.create_superuser('admin', 'admin@example.com', pwd)
-    print(f'CREATED:admin:{pwd}')
+    print(f'Superuser created: admin / {pwd}')
+    print('请妥善保存此密码！')
 else:
-    print('EXISTS')
-" 2>/dev/null)
-
-    if [[ "$result" == "EXISTS" ]]; then
-        log_detail "管理员账户 admin 已存在，跳过创建"
-    elif [[ "$result" == "CREATED:"* ]]; then
-        local creds="${result#CREATED:}"
-        local user="${creds%%:*}"
-        local pass="${creds#*:}"
-        echo ""
-        log_warning "新管理员账户已创建"
-        echo -e "  ${BOLD}用户名:${NC} ${user}"
-        echo -e "  ${BOLD}密码:${NC}   ${pass}"
-        echo -e "  ${YELLOW}请妥善保存此密码！${NC}"
-        echo ""
-    fi
-    log_success "管理员账户就绪"
+    print('Superuser admin already exists')
+" 2>/dev/null || true
 }
 
-# build_frontend: 构建前端 React 应用
-# 框架: React 19 + Vite + Tailwind CSS 4
-# 智能跳过: 已有构建产物则跳过，ARM 环境跳过类型检查
 build_frontend() {
-    log_step "构建前端应用"
-    SEPARATOR
-    log_detail "框架: React 19 + Vite + Tailwind CSS 4"
-    log_detail "输出: frontend/dist/"
-
-    # 检查预构建产物是否存在，存在则跳过
-    if [ -f "frontend/dist/static/js/main.js" ]; then
-        local js_size=$(du -h frontend/dist/static/js/main.js 2>/dev/null | cut -f1)
-        local css_size=$(du -h frontend/dist/static/css/main.css 2>/dev/null | cut -f1)
-        log_success "预构建产物已存在，跳过构建"
-        log_detail "JS  ${js_size}  →  static/js/main.js"
-        log_detail "CSS ${css_size}  →  static/css/main.css"
-        log_detail "如需重新构建，请先删除 frontend/dist/ 目录"
-        echo ""
-        return 0
-    fi
-
+    log_step "构建前端..."
     cd frontend
-    # 确保 node_modules 完整
-    if [ ! -f "node_modules/.package-lock.json" ]; then
-        cd ..
-        log_warning "node_modules 不完整，先安装依赖"
-        install_node_deps
-        cd frontend
-    fi
-    # 类型检查 (非 ARM 环境)
-    local arch=$(uname -m 2>/dev/null || echo "unknown")
-    if [ "$arch" != "aarch64" ] && [ "$arch" != "armv7l" ] && [ "$arch" != "armv8l" ]; then
-        run_spin "TypeScript 类型检查" npm run typecheck 2>&1 || log_warning "类型检查有警告，继续构建"
-    else
-        log_warning "ARM 环境，esbuild 可能不兼容，建议使用预构建产物"
-    fi
-
-    # Vite 构建
-    run_spin "Vite 构建中" npm run build
+    npm run build
     cd ..
-
-    # 输出构建产物大小
-    local js_size=$(du -h frontend/dist/static/js/main.js 2>/dev/null | cut -f1 || echo "?")
-    local css_size=$(du -h frontend/dist/static/css/main.css 2>/dev/null | cut -f1 || echo "?")
-    log_detail "JS  ${js_size}  →  static/js/main.js"
-    log_detail "CSS ${css_size}  →  static/css/main.css"
-    echo ""
     log_success "前端构建完成"
 }
 
-# cmd_start: 生产模式启动 - 完整启动流程
-# 流程: 环境检查 → 依赖安装 → 数据库迁移 → 管理员初始化 → 前端构建 → 收集静态文件 → Granian 启动
 cmd_start() {
     print_banner
     check_env
@@ -376,22 +205,17 @@ cmd_start() {
     build_frontend
 
     source venv/bin/activate
-    log_step "收集静态文件"
-    run_spin "收集静态文件" python manage.py collectstatic --noinput
-    log_success "静态文件收集完成"
+    python manage.py collectstatic --noinput 2>/dev/null || true
 
-    log_step "启动 Granian ASGI 服务器"
-    SEPARATOR
-    log_detail "服务器: Granian (ASGI, Rust 运行时)"
-    log_detail "监听:   0.0.0.0:8000"
+    log_step "启动 Granian ASGI 服务器..."
     echo ""
     echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}  🚀 服务已启动!${NC}"
+    echo -e "${GREEN}  服务已启动!${NC}"
     echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
     echo ""
-    echo -e "  ${GREEN}📖${NC} 访问地址:  ${CYAN}http://localhost:8000${NC}"
-    echo -e "  ${GREEN}🔧${NC} Admin 后台: ${CYAN}http://localhost:8000/admin${NC}"
-    echo -e "  ${GREEN}📋${NC} API 文档:   ${CYAN}http://localhost:8000/api/v1/docs/${NC}"
+    echo -e "  ${GREEN}📖${NC} 访问地址:  http://localhost:8000"
+    echo -e "  ${GREEN}🔧${NC} Admin 后台: http://localhost:8000/admin"
+    echo -e "  ${GREEN}📋${NC} API 文档:   http://localhost:8000/api/v1/docs/"
     echo ""
     echo -e "${YELLOW}按 Ctrl+C 停止服务${NC}"
     echo ""
@@ -399,8 +223,6 @@ cmd_start() {
     granian novel_reader.asgi:application --host 0.0.0.0 --port 8000 --interface asgi --workers 1
 }
 
-# cmd_dev: 开发模式启动 - 前后端分离运行或低内存模式
-# 流程: 环境检查 → 依赖安装 → 数据库迁移 → 管理员初始化 → (低内存时先构建前端)
 cmd_dev() {
     print_banner
     check_env
@@ -408,21 +230,20 @@ cmd_dev() {
     migrate_db
     create_superuser
 
-    # 检测内存，不足 1500MB 时切换为低内存模式 (先构建前端再启动后端)
     local mem_mb=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
     if [ "$mem_mb" -gt 0 ] && [ "$mem_mb" -lt 1500 ]; then
         log_warning "可用内存 ${mem_mb}MB，不足同时运行 Django + Vite"
         log_step "切换为低内存模式：构建前端 → 启动后端"
         build_frontend
         source venv/bin/activate
-        run_spin "收集静态文件" python manage.py collectstatic --noinput
+        python manage.py collectstatic --noinput 2>/dev/null || true
 
         echo ""
         echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-        echo -e "${GREEN}  🚀 低内存开发模式启动!${NC}"
+        echo -e "${GREEN}  低内存开发模式启动!${NC}"
         echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
         echo ""
-        echo -e "  ${GREEN}📖${NC} 访问地址: ${CYAN}http://localhost:8000${NC}"
+        echo -e "  ${GREEN}📖${NC} 访问地址: http://localhost:8000"
         echo -e "  ${YELLOW}⚠${NC}  前端变更需重新 ${CYAN}./start.sh build${NC}"
         echo ""
 
@@ -430,91 +251,60 @@ cmd_dev() {
     else
         echo ""
         echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-        echo -e "${GREEN}  🚀 开发模式启动!${NC}"
+        echo -e "${GREEN}  开发模式启动!${NC}"
         echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
         echo ""
-        echo -e "  ${GREEN}📖${NC} 前端: ${CYAN}http://localhost:5173${NC}  (Vite HMR)"
-        echo -e "  ${GREEN}🔧${NC} 后端: ${CYAN}http://localhost:8000${NC}  (Django runserver)"
-        echo -e "  ${GREEN}📋${NC} API:  ${CYAN}http://localhost:8000/api/v1/docs/${NC}"
-        echo ""
-        echo -e "${YELLOW}按 Ctrl+C 停止服务${NC}"
+        echo -e "  ${GREEN}📖${NC} 前端: http://localhost:5173"
+        echo -e "  ${GREEN}🔧${NC} 后端: http://localhost:8000"
         echo ""
 
-        # 同时启动 Django 开发服务器和 Vite 开发服务器
         source venv/bin/activate
         python manage.py runserver 0.0.0.0:8000 &
         cd frontend && npm run dev
     fi
 }
 
-# cmd_stop: 停止所有相关服务进程
-# 查找 granian、runserver、vite 进程并发送 kill 信号
 cmd_stop() {
-    log_step "停止服务"
-    SEPARATOR
+    log_step "停止服务..."
     local pids=$(pgrep -f "granian\|manage.py runserver\|vite" || true)
     if [ -n "$pids" ]; then
-        for pid in $pids; do
-            local cmd=$(ps -p "$pid" -o comm= 2>/dev/null || echo "unknown")
-            log_detail "终止进程 PID=$pid ($cmd)"
-        done
         echo "$pids" | xargs kill 2>/dev/null || true
-        sleep 1
         log_success "服务已停止"
     else
-        log_warning "没有正在运行的服务"
+        log_warning "服务未运行"
     fi
 }
 
-# cmd_status: 查看当前正在运行的服务状态
-# 检查 granian、Django runserver、Vite 进程
 cmd_status() {
     log_step "服务状态"
-    SEPARATOR
-    local found=0
     if pgrep -f "granian" > /dev/null; then
         log_success "Granian 服务: 运行中"
-        log_detail "PID:  $(pgrep -f "granian")"
-        log_detail "地址: http://localhost:8000"
-        found=1
-    fi
-    if pgrep -f "manage.py runserver" > /dev/null; then
+        echo "  PID: $(pgrep -f "granian")"
+        echo "  地址: http://localhost:8000"
+    elif pgrep -f "manage.py runserver" > /dev/null; then
         log_success "Django 开发服务器: 运行中"
-        log_detail "PID:  $(pgrep -f "manage.py runserver")"
-        log_detail "地址: http://localhost:8000"
-        found=1
-    fi
-    if pgrep -f "vite" > /dev/null; then
-        log_success "Vite 开发服务器: 运行中"
-        log_detail "PID:  $(pgrep -f "vite")"
-        log_detail "地址: http://localhost:5173"
-        found=1
-    fi
-    if [ $found -eq 0 ]; then
-        log_warning "没有正在运行的服务"
-        log_detail "使用 ./start.sh start 或 ./start.sh dev 启动"
+        echo "  PID: $(pgrep -f "manage.py runserver")"
+        echo "  地址: http://localhost:8000"
+    else
+        log_error "服务: 未运行"
     fi
 }
 
-# cmd_migrate: 仅执行数据库迁移 (不含启动)
 cmd_migrate() {
     check_env
     install_deps
     migrate_db
 }
 
-# cmd_build: 仅构建前端 + 收集静态文件 (不含启动)
 cmd_build() {
     check_env
     install_deps
     build_frontend
     source venv/bin/activate
-    log_step "收集静态文件"
-    run_spin "收集静态文件" python manage.py collectstatic --noinput
+    python manage.py collectstatic --noinput 2>/dev/null || true
     log_success "构建完成"
 }
 
-# main: 主入口函数 - 解析命令行参数并分发到对应子命令
 main() {
     local command="${1:-start}"
     case "$command" in
@@ -530,5 +320,4 @@ main() {
     esac
 }
 
-# 脚本入口: 将所有命令行参数传递给 main 函数
 main "$@"

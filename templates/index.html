@@ -1,25 +1,13 @@
-<!--
-  index.html - 小说阅读器前端应用入口模板 (Django Template)
-  =============================================================================
-  用途: 作为 Django 视图渲染的主 HTML 页面，承载 React 前端应用的挂载容器
-  加载: Django 通过 collectstatic 收集的 JS/CSS 静态文件
-  框架: React 19 + Vite 构建产物
--->
 {% load static %}<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <!-- 网站图标: 使用 SVG 格式的 favicon -->
-    <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>小说阅读器</title>
-    <!-- 全局样式表: Vite 构建产出的主 CSS 文件 -->
-    <link rel="stylesheet" crossorigin href="{% static 'css/main.css' %}">
   </head>
   <body>
-    <!-- React 应用挂载点: 前端 JavaScript 将在此 div 内渲染整个应用 -->
     <div id="root"></div>
-    <!-- React 入口脚本: Vite 构建产出的主 JS 文件 (ES Module) -->
-    <script type="module" crossorigin src="{% static 'js/main.js' %}"></script>
+    <script type="module" src="{% static 'js/main.js' %}"></script>
   </body>
 </html>
