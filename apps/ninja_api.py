@@ -887,7 +887,11 @@ def get_chapter_content(request, book_id: int, chapter_id: int):
     content = cache.get(cache_key)
     if content is None and chapter.file_path:
         # 路径安全校验：防止目录穿越攻击
-        file_path = os.path.normpath(chapter.file_path)
+        raw_path = chapter.file_path
+        # 兼容相对路径和绝对路径：统一转为绝对路径后再校验
+        file_path = os.path.normpath(raw_path)
+        if not os.path.isabs(file_path):
+            file_path = os.path.normpath(os.path.join(str(settings.BASE_DIR), file_path))
         books_root = os.path.normpath(str(settings.BOOKS_DIR))
         if not file_path.startswith(books_root):
             logger.error(f'章节文件路径越界: {chapter.file_path}')

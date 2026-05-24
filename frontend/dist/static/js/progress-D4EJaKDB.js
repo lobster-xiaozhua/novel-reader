@@ -1,1 +1,0 @@
-import{a as e,i as t}from"./main.js";function n(){return t(`/progress/`)}function r(t){return e(`/progress/`,t)}function i(t){return e(`/progress/track-stats/`,t)}export{r as n,i as r,n as t};
