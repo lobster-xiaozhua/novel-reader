@@ -279,6 +279,17 @@ build_frontend() {
     log_detail "框架: React 19 + Vite + Tailwind CSS 4"
     log_detail "输出: frontend/dist/"
 
+    if [ -f "frontend/dist/static/js/main.js" ]; then
+        local js_size=$(du -h frontend/dist/static/js/main.js 2>/dev/null | cut -f1)
+        local css_size=$(du -h frontend/dist/static/css/main.css 2>/dev/null | cut -f1)
+        log_success "预构建产物已存在，跳过构建"
+        log_detail "JS  ${js_size}  →  static/js/main.js"
+        log_detail "CSS ${css_size}  →  static/css/main.css"
+        log_detail "如需重新构建，请先删除 frontend/dist/ 目录"
+        echo ""
+        return 0
+    fi
+
     cd frontend
     if [ ! -f "node_modules/.package-lock.json" ]; then
         cd ..
@@ -290,7 +301,7 @@ build_frontend() {
     if [ "$arch" != "aarch64" ] && [ "$arch" != "armv7l" ] && [ "$arch" != "armv8l" ]; then
         run_spin "TypeScript 类型检查" npm run typecheck 2>&1 || log_warning "类型检查有警告，继续构建"
     else
-        log_detail "ARM 环境，跳过 tsc 类型检查 (esbuild 直接转译)"
+        log_warning "ARM 环境，esbuild 可能不兼容，建议使用预构建产物"
     fi
 
     run_spin "Vite 构建中" npm run build

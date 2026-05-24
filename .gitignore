@@ -33,3 +33,6 @@ data/logs/*
 !data/logs/.gitkeep
 data/cache/*
 !data/cache/.gitkeep
+
+# Frontend
+frontend/node_modules/
