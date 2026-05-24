@@ -1280,6 +1280,120 @@ def get_dashboard_stats(request):
 
 # ========== Search ==========
 
+class DiscoveryBookSchema(Schema):
+    """发现页书籍展示 Schema。
+
+    字段说明：
+        id: 书籍 ID
+        title: 书名
+        author: 作者
+        category: 分类
+        description: 简介
+        total_chapters: 总章节数
+        tags: 关联标签列表
+        gradient: 封面渐变色
+        updated_at: 更新时间
+    """
+    id: int
+    title: str
+    author: str
+    category: str = ''
+    description: str = ''
+    total_chapters: int
+    tags: List[TagSchema] = []
+    gradient: tuple = ('#667eea', '#764ba2')
+    updated_at: str
+
+
+class CategoryDiscoverySchema(Schema):
+    """发现页分类展示 Schema。
+
+    字段说明：
+        category: 分类名称
+        count: 书籍数量
+        books: 该分类下的热门书籍列表
+    """
+    category: str
+    count: int
+    books: List[DiscoveryBookSchema]
+
+
+class DiscoveryResponse(Schema):
+    """发现页响应 Schema。
+
+    字段说明：
+        hot_books: 热门书籍（按章节数排序）
+        recent_books: 最新更新书籍
+        categories: 各分类及代表书籍
+        stats: 基础统计信息
+    """
+    hot_books: List[DiscoveryBookSchema]
+    recent_books: List[DiscoveryBookSchema]
+    categories: List[CategoryDiscoverySchema]
+    stats: dict
+
+
+def _book_to_discovery(book):
+    """将 Book 对象转为 DiscoveryBookSchema 字典。"""
+    return {
+        'id': book.id,
+        'title': book.title,
+        'author': book.author,
+        'category': book.category or '',
+        'description': book.description or '',
+        'total_chapters': book.total_chapters,
+        'tags': [{'id': t.id, 'name': t.name, 'color': t.color} for t in book.tags.all()],
+        'gradient': book.cover_gradient,
+        'updated_at': book.updated_at.isoformat(),
+    }
+
+
+@api.get('/discovery/', response=DiscoveryResponse, auth=None)
+def discovery_page(request):
+    """GET /discovery/ — 发现页数据（免登录）。
+
+    返回:
+        DiscoveryResponse {hot_books, recent_books, categories, stats}
+    认证: 无需认证
+    """
+    from django.db.models import Sum
+    hot_books = Book.objects.prefetch_related('tags').order_by('-total_chapters')[:8]
+    recent_books = Book.objects.prefetch_related('tags').order_by('-updated_at')[:10]
+
+    category_stats = (
+        Book.objects.exclude(category='')
+        .values('category')
+        .annotate(count=Count('id'))
+        .order_by('-count')[:6]
+    )
+    categories = []
+    for cs in category_stats:
+        cat_name = cs['category']
+        cat_books = Book.objects.filter(category=cat_name).prefetch_related('tags').order_by('-total_chapters')[:4]
+        categories.append({
+            'category': cat_name,
+            'count': cs['count'],
+            'books': [_book_to_discovery(b) for b in cat_books],
+        })
+
+    total_books = Book.objects.count()
+    total_chapters = Chapter.objects.count()
+    total_words = Chapter.objects.aggregate(total=Sum('word_count'))['total'] or 0
+    total_users = User.objects.count()
+
+    return {
+        'hot_books': [_book_to_discovery(b) for b in hot_books],
+        'recent_books': [_book_to_discovery(b) for b in recent_books],
+        'categories': categories,
+        'stats': {
+            'total_books': total_books,
+            'total_chapters': total_chapters,
+            'total_words': total_words,
+            'total_users': total_users,
+        },
+    }
+
+
 @api.get('/search/', response=SearchResponse, auth=optional_auth)
 def search_books(request, q: str = ''):
     """GET /search/ — 搜索书籍（支持模糊匹配与自动补全）。
