@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { Minus, Plus, Type, Sun, Moon, BookOpen } from 'lucide-react'
 import { saveProgress, trackStats } from '@/api/progress'
+import { getAccessToken } from '@/utils/http'
 
 type ReaderTheme = 'dark' | 'sepia' | 'light'
 
@@ -8,6 +9,19 @@ const themeConfig: Record<ReaderTheme, { bg: string; text: string; name: string 
   dark: { bg: 'bg-card-bg', text: 'text-text-secondary', name: '深色' },
   sepia: { bg: 'bg-[#f5e6c8]', text: 'text-[#5b4636]', name: '护眼' },
   light: { bg: 'bg-white', text: 'text-gray-800', name: '浅色' },
+}
+
+function sendBeaconWithAuth(url: string, data: unknown) {
+  const token = getAccessToken()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(data),
+    keepalive: true,
+    credentials: 'include',
+  }).catch(() => {})
 }
 
 interface NovelReaderProps {
@@ -61,10 +75,8 @@ export default function NovelReader({
       if (savedRef.current) return
       const elapsed = Math.floor((Date.now() - readStartRef.current) / 1000)
       if (elapsed > 5) {
-        const payload = JSON.stringify({ book_id: bookId, chapter_id: chapterId, position: chapterNumber })
-        navigator.sendBeacon('/api/v1/progress/', new Blob([payload], { type: 'application/json' }))
-        const statsPayload = JSON.stringify({ seconds: elapsed, chapter_id: chapterId })
-        navigator.sendBeacon('/api/v1/progress/track-stats/', new Blob([statsPayload], { type: 'application/json' }))
+        sendBeaconWithAuth('/api/v1/progress/', { book_id: bookId, chapter_id: chapterId, position: chapterNumber })
+        sendBeaconWithAuth('/api/v1/progress/track-stats/', { seconds: elapsed, chapter_id: chapterId })
       }
     }
     window.addEventListener('beforeunload', handleBeforeUnload)

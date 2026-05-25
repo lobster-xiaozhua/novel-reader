@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useUserStore } from '@/stores/userStore'
-import { get } from '@/utils/http'
+import { get, getAccessToken, setTokens } from '@/utils/http'
+import axios from 'axios'
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
@@ -16,19 +17,36 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     hasFetchedRef.current = true
 
     const controller = new AbortController()
-    get<{ success: boolean; user?: { id: number; username: string; email: string; is_staff: boolean } }>('/auth/me/', { signal: controller.signal } as Record<string, unknown>)
-      .then((res) => {
+
+    const tryAuth = async () => {
+      try {
+        if (!getAccessToken()) {
+          try {
+            const refreshRes = await axios.post('/api/v1/auth/refresh/', null, {
+              withCredentials: true,
+              signal: controller.signal,
+            })
+            const newToken: string = refreshRes.data?.access_token
+            if (newToken) setTokens(newToken)
+          } catch {
+            navigate('/login', { state: { from: location.pathname }, replace: true })
+            return
+          }
+        }
+
+        const res = await get<{ success: boolean; user?: { id: number; username: string; email: string; is_staff: boolean } }>('/auth/me/', { signal: controller.signal } as Record<string, unknown>)
         if (res.success && res.user) {
           login(res.user)
+          setAuthChecked(true)
         } else {
           navigate('/login', { state: { from: location.pathname }, replace: true })
-          return
         }
-        setAuthChecked(true)
-      })
-      .catch(() => {
+      } catch {
         navigate('/login', { state: { from: location.pathname }, replace: true })
-      })
+      }
+    }
+
+    tryAuth()
     return () => controller.abort()
   }, [isLoggedIn, navigate, login, location.pathname])
 

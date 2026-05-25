@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
+    'apps.api',
     'apps.accounts',
     'apps.books',
     'apps.chapters',
@@ -58,11 +59,10 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'novel_reader.middleware.DisableCSRFForAPI',
+    'novel_reader.middleware.JWTAuthMiddleware',
 ]
 
 ROOT_URLCONF = 'novel_reader.urls'
@@ -248,6 +248,10 @@ CELERY_ACKS_LATE = True
 
 NINJA_PAGINATION_PER_PAGE = 20
 NINJA_PAGINATION_MAX_LIMIT = 100
+
+JWT_SECRET = env('JWT_SECRET', default=SECRET_KEY)
+JWT_ACCESS_LIFETIME_MINUTES = env.int('JWT_ACCESS_LIFETIME_MINUTES', default=15)
+JWT_REFRESH_LIFETIME_DAYS = env.int('JWT_REFRESH_LIFETIME_DAYS', default=7)
 
 UNFOLD = {
     "SITE_TITLE": "小说阅读器管理后台",

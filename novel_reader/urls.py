@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
 from django.views.generic import TemplateView
-from apps.ninja_api import api
+from apps.api.router import api
 
 urlpatterns = [
     path('admin/', admin.site.urls),

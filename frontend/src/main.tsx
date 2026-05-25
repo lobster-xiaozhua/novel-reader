@@ -5,7 +5,7 @@ import { BrowserRouter, useNavigate } from 'react-router-dom'
 import App from './App'
 import { ToastProvider } from './components/Toast'
 import { useUserStore } from './stores/userStore'
-import { onAuthExpired } from './utils/http'
+import { onAuthExpired, clearTokens } from './utils/http'
 import './styles/index.css'
 
 const queryClient = new QueryClient({
@@ -27,6 +27,7 @@ function AuthExpiredHandler({ children }: { children: React.ReactNode }) {
       if (isLoggedIn) {
         logout()
       }
+      clearTokens()
       navigate('/login', { replace: true })
     })
   }, [logout, navigate])

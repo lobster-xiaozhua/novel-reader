@@ -4,6 +4,14 @@ import { BookOpen, Eye, EyeOff } from 'lucide-react'
 import { post } from '@/utils/http'
 import { useUserStore } from '@/stores/userStore'
 
+interface AuthResponse {
+  success: boolean
+  user?: { id: number; username: string; email: string; is_staff: boolean }
+  error?: string
+  access_token?: string
+  refresh_token?: string
+}
+
 export default function Login() {
   const navigate = useNavigate()
   const { login: loginUser } = useUserStore()
@@ -25,10 +33,10 @@ export default function Login() {
       const payload: Record<string, string> = { username, password }
       if (mode === 'register' && email) payload.email = email
 
-      const res = await post<{ success: boolean; user?: { id: number; username: string; email: string; is_staff: boolean }; error?: string }>(endpoint, payload)
+      const res = await post<AuthResponse>(endpoint, payload)
 
       if (res.success && res.user) {
-        loginUser(res.user)
+        loginUser(res.user, res.access_token, res.refresh_token)
         navigate('/dashboard')
       } else {
         setError(res.error || '操作失败')

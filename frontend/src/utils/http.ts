@@ -1,6 +1,19 @@
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios'
+import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
 
 const AUTH_EXPIRED_EVENT = 'auth:expired'
+const ACCESS_TOKEN_KEY = 'access_token'
+
+export function getAccessToken(): string | null {
+  return localStorage.getItem(ACCESS_TOKEN_KEY)
+}
+
+export function setTokens(accessToken: string, _refreshToken?: string): void {
+  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
+}
+
+export function clearTokens(): void {
+  localStorage.removeItem(ACCESS_TOKEN_KEY)
+}
 
 export function onAuthExpired(callback: () => void): () => void {
   const handler = () => callback()
@@ -22,12 +35,71 @@ const http: AxiosInstance = axios.create({
   },
 })
 
+http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const token = getAccessToken()
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+let isRefreshing = false
+let refreshSubscribers: Array<(token: string) => void> = []
+
+function onRefreshed(token: string) {
+  refreshSubscribers.forEach((cb) => cb(token))
+  refreshSubscribers = []
+}
+
+function addRefreshSubscriber(cb: (token: string) => void) {
+  refreshSubscribers.push(cb)
+}
+
 http.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      emitAuthExpired()
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (originalRequest.url === '/auth/refresh/') {
+        clearTokens()
+        emitAuthExpired()
+        return Promise.reject(error)
+      }
+
+      if (isRefreshing) {
+        return new Promise((resolve) => {
+          addRefreshSubscriber((newToken: string) => {
+            originalRequest.headers.Authorization = `Bearer ${newToken}`
+            resolve(http(originalRequest))
+          })
+        })
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      try {
+        const res = await axios.post('/api/v1/auth/refresh/', null, { withCredentials: true })
+        const newToken: string = res.data?.access_token
+        if (newToken) {
+          setTokens(newToken)
+          onRefreshed(newToken)
+          originalRequest.headers.Authorization = `Bearer ${newToken}`
+          return http(originalRequest)
+        }
+        clearTokens()
+        emitAuthExpired()
+        return Promise.reject(error)
+      } catch {
+        clearTokens()
+        emitAuthExpired()
+        return Promise.reject(error)
+      } finally {
+        isRefreshing = false
+      }
     }
+
     return Promise.reject(error)
   }
 )
