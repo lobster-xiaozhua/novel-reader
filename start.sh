@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 cd "$(dirname "$0")"
 
@@ -12,11 +12,11 @@ MAGENTA='\033[0;35m'
 NC='\033[0m'
 DIM='\033[2m'
 
-log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
-log_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
-log_error() { echo -e "${RED}[✗]${NC} $1"; }
-log_step() { echo -e "${CYAN}[→]${NC} $1"; }
+log_warn()    { echo -e "${YELLOW}[⚠]${NC} $1"; }
+log_error()   { echo -e "${RED}[✗]${NC} $1"; }
+log_step()    { echo -e "${CYAN}[→]${NC} $1"; }
 
 print_banner() {
     echo ""
@@ -73,83 +73,64 @@ check_env() {
     log_success "环境检查通过"
 }
 
-draw_progress() {
-    local pkg="$1" current="$2" total="$3" status="$4"
-    local width=30
-    local filled=$((current * width / total))
-    local empty=$((width - filled))
-    local pct=$((current * 100 / total))
-    local bar=""
-    for ((i=0; i<filled; i++)); do bar+="█"; done
-    for ((i=0; i<empty; i++)); do bar+="░"; done
-    if [ "$status" = "done" ]; then
-        printf "  ${GREEN}✓${NC} %-30s [${GREEN}%s${NC}] %3d%% ${DIM}已完成${NC}\n" "$pkg" "$bar" "$pct"
-    else
-        printf "  ${CYAN}→${NC} %-30s [${CYAN}%s${NC}] %3d%% ${YELLOW}下载中...${NC}\n" "$pkg" "$bar" "$pct"
-    fi
-}
-
 install_python_deps() {
-    log_step "安装 Python 依赖..."
-    log_info "使用阿里云 PyPI 镜像..."
     source venv/bin/activate
-    pip install -q --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ 2>/dev/null || true
 
-    local pkgs=(Django granian whitenoise django-environ django-unfold django-ninja pydantic redis celery requests beautifulsoup4 tenacity httpx orjson django-cors-headers pytest pytest-django pytest-cov ruff django-debug-toolbar)
-    local total=${#pkgs[@]}
-    local idx=0
-    local failed=0
+    if python -c "import django, ninja, granian" 2>/dev/null; then
+        log_success "Python 依赖已就绪，跳过安装"
+        return
+    fi
 
-    for pkg in "${pkgs[@]}"; do
-        ((idx++))
-        draw_progress "$pkg" "$idx" "$total" "downloading"
-        if pip install -q "$pkg" -i https://mirrors.aliyun.com/pypi/simple/ 2>/dev/null; then
-            draw_progress "$pkg" "$idx" "$total" "done"
-        else
-            log_error "  ✗ $pkg 安装失败"
-            ((failed++))
-        fi
-    done
-
-    if [ $failed -gt 0 ]; then
-        log_warning "Python 依赖安装完成 ($total 个包, $failed 个失败)"
+    log_step "安装 Python 依赖..."
+    if [ -f requirements.txt ]; then
+        pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com 2>&1 | while IFS= read -r line; do
+            if [[ "$line" == *"Successfully"* ]] || [[ "$line" == *"Requirement already"* ]]; then
+                echo -e "  ${DIM}${line}${NC}"
+            elif [[ "$line" == *"error"* ]] || [[ "$line" == *"Error"* ]]; then
+                echo -e "  ${RED}${line}${NC}"
+            else
+                echo -e "  ${DIM}${line}${NC}"
+            fi
+        done
     else
-        log_success "Python 依赖安装完成 ($total 个包)"
+        log_error "requirements.txt 不存在"
+        exit 1
+    fi
+
+    if python -c "import django" 2>/dev/null; then
+        log_success "Python 依赖安装完成"
+    else
+        log_error "Python 依赖安装失败，请检查网络或镜像源"
+        exit 1
     fi
 }
 
 install_node_deps() {
-    log_step "安装 Node 依赖..."
-    log_info "使用阿里云 npm 镜像..."
-    cd frontend
-
-    if [ -d "node_modules" ]; then
-        cd ..
-        log_success "Node 依赖已存在，跳过安装"
+    if [ ! -f frontend/package.json ]; then
         return
     fi
 
-    local pkgs=(@tailwindcss/vite @tanstack/react-query axios lucide-react react react-dom react-markdown react-router-dom react-syntax-highlighter recharts rehype-highlight remark-gfm tailwindcss zustand @eslint/js @types/node @types/react @types/react-dom @types/react-syntax-highlighter @vitejs/plugin-react eslint eslint-plugin-react-hooks eslint-plugin-react-refresh globals typescript typescript-eslint vite)
-    local total=${#pkgs[@]}
-    local idx=0
-    local failed=0
+    if [ -d "frontend/node_modules" ]; then
+        log_success "Node 依赖已就绪，跳过安装"
+        return
+    fi
 
-    for pkg in "${pkgs[@]}"; do
-        ((idx++))
-        draw_progress "$pkg" "$idx" "$total" "downloading"
-        if npm install "$pkg" --registry https://registry.npmmirror.com --no-save --no-package-lock 2>/dev/null; then
-            draw_progress "$pkg" "$idx" "$total" "done"
+    log_step "安装 Node 依赖..."
+    cd frontend
+    npm install --registry https://registry.npmmirror.com 2>&1 | while IFS= read -r line; do
+        if [[ "$line" == *"error"* ]] || [[ "$line" == *"ERR"* ]]; then
+            echo -e "  ${RED}${line}${NC}"
         else
-            log_error "  ✗ $pkg 安装失败"
-            ((failed++))
+            echo -e "  ${DIM}${line}${NC}"
         fi
     done
-
     cd ..
-    if [ $failed -gt 0 ]; then
-        log_warning "Node 依赖安装完成 ($total 个包, $failed 个失败)"
+
+    if [ -d "frontend/node_modules" ]; then
+        log_success "Node 依赖安装完成"
     else
-        log_success "Node 依赖安装完成 ($total 个包)"
+        log_error "Node 依赖安装失败"
+        exit 1
     fi
 }
 
@@ -160,40 +141,79 @@ install_deps() {
         log_success "虚拟环境已创建"
     fi
     install_python_deps
-    if [ -f "frontend/package.json" ]; then
-        install_node_deps
-    fi
+    install_node_deps
 }
 
 migrate_db() {
     log_step "执行数据库迁移..."
     source venv/bin/activate
-    python manage.py migrate
-    log_success "数据库迁移完成"
+    if python manage.py migrate 2>&1; then
+        log_success "数据库迁移完成"
+    else
+        log_error "数据库迁移失败"
+        exit 1
+    fi
 }
 
 create_superuser() {
-    log_step "创建超级用户..."
+    log_step "初始化管理员..."
     source venv/bin/activate
-    python manage.py shell -c "
+    local result
+    result=$(python manage.py shell -c "
 from django.contrib.auth.models import User
 if not User.objects.filter(username='admin').exists():
     import secrets, string
     pwd = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))
     User.objects.create_superuser('admin', 'admin@example.com', pwd)
-    print(f'Superuser created: admin / {pwd}')
-    print('请妥善保存此密码！')
+    print(f'CREATED:admin:{pwd}')
 else:
-    print('Superuser admin already exists')
-" 2>/dev/null || true
+    print('EXISTS:admin')
+" 2>&1) || true
+
+    if [[ "$result" == CREATED:* ]]; then
+        local pwd="${result#CREATED:admin:}"
+        log_success "管理员账号已创建: admin / $pwd"
+        log_warn "请妥善保存此密码！"
+    else
+        log_success "管理员账号已存在: admin"
+    fi
 }
 
 build_frontend() {
     log_step "构建前端..."
+    if [ ! -d "frontend/node_modules" ]; then
+        install_node_deps
+    fi
     cd frontend
-    npm run build
-    cd ..
-    log_success "前端构建完成"
+    if npm run build 2>&1; then
+        cd ..
+        log_success "前端构建完成"
+    else
+        cd ..
+        log_error "前端构建失败"
+        exit 1
+    fi
+}
+
+start_server() {
+    local port="${1:-8000}"
+    source venv/bin/activate
+    python manage.py collectstatic --noinput 2>&1 | tail -1
+
+    log_step "启动 Granian ASGI 服务器..."
+    echo ""
+    echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  服务已启动!${NC}"
+    echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "  ${GREEN}📖${NC} 访问地址:  http://localhost:${port}"
+    echo -e "  ${GREEN}🔧${NC} Admin 后台: http://localhost:${port}/admin"
+    echo -e "  ${GREEN}📋${NC} API 文档:   http://localhost:${port}/api/v1/docs/"
+    echo ""
+    echo -e "${YELLOW}按 Ctrl+C 停止服务${NC}"
+    echo ""
+
+    exec granian novel_reader.asgi:application --host 0.0.0.0 --port "$port" --interface asgi --workers 1
 }
 
 cmd_start() {
@@ -203,24 +223,7 @@ cmd_start() {
     migrate_db
     create_superuser
     build_frontend
-
-    source venv/bin/activate
-    python manage.py collectstatic --noinput 2>/dev/null || true
-
-    log_step "启动 Granian ASGI 服务器..."
-    echo ""
-    echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}  服务已启动!${NC}"
-    echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-    echo ""
-    echo -e "  ${GREEN}📖${NC} 访问地址:  http://localhost:8000"
-    echo -e "  ${GREEN}🔧${NC} Admin 后台: http://localhost:8000/admin"
-    echo -e "  ${GREEN}📋${NC} API 文档:   http://localhost:8000/api/v1/docs/"
-    echo ""
-    echo -e "${YELLOW}按 Ctrl+C 停止服务${NC}"
-    echo ""
-
-    granian novel_reader.asgi:application --host 0.0.0.0 --port 8000 --interface asgi --workers 1
+    start_server 8000
 }
 
 cmd_dev() {
@@ -232,22 +235,10 @@ cmd_dev() {
 
     local mem_mb=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
     if [ "$mem_mb" -gt 0 ] && [ "$mem_mb" -lt 1500 ]; then
-        log_warning "可用内存 ${mem_mb}MB，不足同时运行 Django + Vite"
+        log_warn "可用内存 ${mem_mb}MB，不足同时运行 Django + Vite"
         log_step "切换为低内存模式：构建前端 → 启动后端"
         build_frontend
-        source venv/bin/activate
-        python manage.py collectstatic --noinput 2>/dev/null || true
-
-        echo ""
-        echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-        echo -e "${GREEN}  低内存开发模式启动!${NC}"
-        echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-        echo ""
-        echo -e "  ${GREEN}📖${NC} 访问地址: http://localhost:8000"
-        echo -e "  ${YELLOW}⚠${NC}  前端变更需重新 ${CYAN}./start.sh build${NC}"
-        echo ""
-
-        granian novel_reader.asgi:application --host 0.0.0.0 --port 8000 --interface asgi --workers 1
+        start_server 8000
     else
         echo ""
         echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
@@ -260,33 +251,31 @@ cmd_dev() {
 
         source venv/bin/activate
         python manage.py runserver 0.0.0.0:8000 &
-        cd frontend && npm run dev
+        cd frontend && exec npm run dev
     fi
 }
 
 cmd_stop() {
     log_step "停止服务..."
-    local pids=$(pgrep -f "granian\|manage.py runserver\|vite" || true)
+    local pids=$(pgrep -f "granian|manage.py runserver|vite" || true)
     if [ -n "$pids" ]; then
         echo "$pids" | xargs kill 2>/dev/null || true
         log_success "服务已停止"
     else
-        log_warning "服务未运行"
+        log_warn "服务未运行"
     fi
 }
 
 cmd_status() {
     log_step "服务状态"
     if pgrep -f "granian" > /dev/null; then
-        log_success "Granian 服务: 运行中"
-        echo "  PID: $(pgrep -f "granian")"
+        log_success "Granian 服务: 运行中 (PID: $(pgrep -f "granian" | head -1))"
         echo "  地址: http://localhost:8000"
     elif pgrep -f "manage.py runserver" > /dev/null; then
-        log_success "Django 开发服务器: 运行中"
-        echo "  PID: $(pgrep -f "manage.py runserver")"
+        log_success "Django 开发服务器: 运行中 (PID: $(pgrep -f "manage.py runserver" | head -1))"
         echo "  地址: http://localhost:8000"
     else
-        log_error "服务: 未运行"
+        log_warn "服务未运行"
     fi
 }
 
@@ -301,20 +290,20 @@ cmd_build() {
     install_deps
     build_frontend
     source venv/bin/activate
-    python manage.py collectstatic --noinput 2>/dev/null || true
+    python manage.py collectstatic --noinput 2>&1 | tail -1
     log_success "构建完成"
 }
 
 main() {
     local command="${1:-start}"
     case "$command" in
-        start) cmd_start ;;
-        dev) cmd_dev ;;
-        stop) cmd_stop ;;
+        start)   cmd_start ;;
+        dev)     cmd_dev ;;
+        stop)    cmd_stop ;;
         restart) cmd_stop; sleep 1; cmd_start ;;
-        status) cmd_status ;;
+        status)  cmd_status ;;
         migrate) cmd_migrate ;;
-        build) cmd_build ;;
+        build)   cmd_build ;;
         help|--help|-h) show_help ;;
         *) log_error "未知命令: $command"; show_help; exit 1 ;;
     esac
