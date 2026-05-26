@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useUserStore } from '@/stores/userStore'
-import { get, getAccessToken, setTokens } from '@/utils/http'
-import axios from 'axios'
+import { get, post, getAccessToken, setTokens } from '@/utils/http'
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
@@ -17,24 +16,29 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     hasFetchedRef.current = true
 
     const controller = new AbortController()
+    let cancelled = false
 
     const tryAuth = async () => {
       try {
         if (!getAccessToken()) {
           try {
-            const refreshRes = await axios.post('/api/v1/auth/refresh/', null, {
-              withCredentials: true,
+            const refreshRes = await post<{ access_token?: string }>('/auth/refresh/', null, {
               signal: controller.signal,
             })
-            const newToken: string = refreshRes.data?.access_token
-            if (newToken) setTokens(newToken)
+            if (refreshRes.access_token) setTokens(refreshRes.access_token)
           } catch {
-            navigate('/login', { state: { from: location.pathname }, replace: true })
+            if (!cancelled) navigate('/login', { state: { from: location.pathname }, replace: true })
             return
           }
         }
 
-        const res = await get<{ success: boolean; user?: { id: number; username: string; email: string; is_staff: boolean } }>('/auth/me/', { signal: controller.signal } as Record<string, unknown>)
+        const res = await get<{
+          success: boolean
+          user?: { id: number; username: string; email: string; is_staff: boolean }
+        }>('/auth/me/', { signal: controller.signal })
+
+        if (cancelled) return
+
         if (res.success && res.user) {
           login(res.user)
           setAuthChecked(true)
@@ -42,12 +46,16 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
           navigate('/login', { state: { from: location.pathname }, replace: true })
         }
       } catch {
-        navigate('/login', { state: { from: location.pathname }, replace: true })
+        if (!cancelled) navigate('/login', { state: { from: location.pathname }, replace: true })
       }
     }
 
     tryAuth()
-    return () => controller.abort()
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
   }, [isLoggedIn, navigate, login, location.pathname])
 
   if (!authChecked) {

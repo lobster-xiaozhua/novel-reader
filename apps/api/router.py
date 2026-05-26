@@ -1,6 +1,8 @@
 import logging
+import traceback
 
 from ninja import NinjaAPI
+from ninja.errors import HttpError, ValidationError
 
 from .routes_auth import router as auth_router
 from .routes_books import router as books_router
@@ -23,13 +25,22 @@ api = NinjaAPI(
 )
 
 
+@api.exception_handler(HttpError)
+def http_error_handler(request, exc):
+    logger.warning(f'[API {exc.status_code}] {request.method} {request.path}: {exc.message}')
+    return api.create_response(request, {'error': exc.message}, status=exc.status_code)
+
+
+@api.exception_handler(ValidationError)
+def validation_error_handler(request, exc):
+    logger.warning(f'[API 422] {request.method} {request.path}: {exc.errors}')
+    return api.create_response(request, {'error': '请求数据验证失败', 'details': str(exc.errors)}, status=422)
+
+
 @api.exception_handler(Exception)
 def global_exception_handler(request, exc):
-    from ninja.errors import HttpError
-    if isinstance(exc, HttpError):
-        raise exc
-    logger.error(f'[API] {request.path} - {type(exc).__name__}: {exc}')
-    return api.create_response(request, {'error': str(exc)}, status=500)
+    logger.error(f'[API 500] {request.method} {request.path}: {type(exc).__name__}: {exc}\n{traceback.format_exc()}')
+    return api.create_response(request, {'error': '服务器内部错误，请稍后重试'}, status=500)
 
 
 api.add_router('', health_router)

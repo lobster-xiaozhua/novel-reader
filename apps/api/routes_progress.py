@@ -1,5 +1,7 @@
 import logging
 
+from django.core.cache import cache
+from django.db.models import F
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import Router
@@ -14,6 +16,8 @@ from .schemas import MessageSchema, ProgressOut, ReadingProgressIn, StatsTrackIn
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+TRACK_DEDUP_TTL = 5
 
 
 @router.get('/progress/', response=list[ProgressOut], auth=jwt_auth)
@@ -59,6 +63,13 @@ def create_progress(request, payload: ReadingProgressIn) -> dict:
 def track_stats(request, payload: StatsTrackIn) -> dict:
     if payload.seconds < 5 or payload.seconds > 3600:
         return {'message': 'ok'}
+
+    user = request.user
+    dedup_key = f'track_stats:{user.id}:{payload.chapter_id or 0}:{payload.seconds}'
+    if cache.get(dedup_key):
+        return {'message': 'ok'}
+    cache.set(dedup_key, True, TRACK_DEDUP_TTL)
+
     today = timezone.now().date()
     words: int = 0
     if payload.chapter_id:
@@ -67,14 +78,18 @@ def track_stats(request, payload: StatsTrackIn) -> dict:
             words = ch.word_count or 0
         except Chapter.DoesNotExist:
             pass
-    stats, created = ReadingStats.objects.get_or_create(
-        user=request.user, date=today,
-        defaults={'read_seconds': payload.seconds, 'chapters_read': 1, 'words_read': words},
-    )
-    if not created:
-        stats.read_seconds += payload.seconds
-        stats.chapters_read += 1
-        stats.words_read += words
-        stats.save(update_fields=['read_seconds', 'chapters_read', 'words_read'])
+
+    created = not ReadingStats.objects.filter(user=user, date=today).exists()
+    if created:
+        ReadingStats.objects.create(
+            user=user, date=today,
+            read_seconds=payload.seconds, chapters_read=1, words_read=words,
+        )
+    else:
+        ReadingStats.objects.filter(user=user, date=today).update(
+            read_seconds=F('read_seconds') + payload.seconds,
+            chapters_read=F('chapters_read') + 1,
+            words_read=F('words_read') + words,
+        )
     logger.debug(f'[Stats] 记录阅读: {payload.seconds}s, {words}字')
     return {'message': 'ok'}

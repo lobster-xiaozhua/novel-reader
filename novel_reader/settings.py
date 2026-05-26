@@ -8,8 +8,7 @@ env = environ.Env(
     SECURE_SSL_REDIRECT=(bool, False),
     SECURE_HSTS_SECONDS=(int, 0),
     CONN_MAX_AGE=(int, 60),
-    CACHE_BACKEND=(str, 'django.core.cache.backends.locmem.LocMemCache'),
-    CACHE_LOCATION=(str, 'novelreader-cache'),
+    REDIS_URL=(str, ''),
     CELERY_BROKER_URL=(str, 'redis://localhost:6379/0'),
     CELERY_RESULT_BACKEND=(str, 'redis://localhost:6379/0'),
 )
@@ -62,6 +61,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'novel_reader.middleware.RequestTimingMiddleware',
     'novel_reader.middleware.JWTAuthMiddleware',
 ]
 
@@ -128,16 +128,27 @@ WHITENOISE_INDEX_FILE = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CACHES = {
-    'default': {
-        'BACKEND': env('CACHE_BACKEND'),
-        'LOCATION': env('CACHE_LOCATION'),
-        'OPTIONS': {
-            'MAX_ENTRIES': 5000,
-            'CULL_FREQUENCY': 3,
-        } if env('CACHE_BACKEND') == 'django.core.cache.backends.locmem.LocMemCache' else {},
+_REDIS_URL = env('REDIS_URL', default='')
+if _REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': _REDIS_URL,
+            'KEY_PREFIX': 'novelreader',
+            'TIMEOUT': 300,
+        }
     }
-}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'novelreader-cache',
+            'OPTIONS': {
+                'MAX_ENTRIES': 5000,
+                'CULL_FREQUENCY': 3,
+            },
+        }
+    }
 
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_AGE = 1209600

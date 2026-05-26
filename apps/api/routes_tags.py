@@ -1,5 +1,6 @@
 import logging
 
+from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from ninja import Router
 from ninja.pagination import paginate
@@ -16,13 +17,7 @@ router = Router()
 @router.get('/tags/', response=list[TagListSchema], auth=optional_jwt_auth)
 @paginate
 def list_tags(request):
-    qs = Tag.objects.all()
-    return [{
-        'id': t.id,
-        'name': t.name,
-        'color': t.color,
-        'book_count': t.books.count(),
-    } for t in qs]
+    return Tag.objects.annotate(book_count=Count('books'))
 
 
 @router.post('/tags/', response=TagListSchema, auth=jwt_auth)

@@ -23,7 +23,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    chunkSizeWarningLimit: 2000,
+    chunkSizeWarningLimit: 1000,
+    reportCompressedSize: true,
+    cssMinify: 'lightningcss',
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),
@@ -37,6 +39,15 @@ export default defineConfig({
             return 'static/css/[name][extname]'
           }
           return 'static/[ext]/[name]-[hash][extname]'
+        },
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react-dom') || id.includes('react/') || id.includes('react-router-dom')) return 'vendor-react'
+            if (id.includes('recharts')) return 'vendor-charts'
+            if (id.includes('@tanstack/react-query')) return 'vendor-query'
+            if (id.includes('lucide-react')) return 'vendor-icons'
+            if (id.includes('zustand')) return 'vendor-state'
+          }
         },
       },
     },

@@ -296,7 +296,7 @@ start_server() {
 
     exec granian novel_reader.asgi:application \
         --host 0.0.0.0 --port "$port" \
-        --interface asginl --workers 1
+        --interface asgi --workers 1
 }
 
 cmd_start() {

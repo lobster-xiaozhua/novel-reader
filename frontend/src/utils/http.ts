@@ -1,7 +1,7 @@
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
-
 const AUTH_EXPIRED_EVENT = 'auth:expired'
 const ACCESS_TOKEN_KEY = 'access_token'
+const BASE_URL = '/api/v1'
+const TIMEOUT = 30000
 
 export function getAccessToken(): string | null {
   return localStorage.getItem(ACCESS_TOKEN_KEY)
@@ -25,23 +25,41 @@ function emitAuthExpired() {
   window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
 }
 
-const http: AxiosInstance = axios.create({
-  baseURL: '/api/v1',
-  timeout: 30000,
-  withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest',
-  },
-})
-
-http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = getAccessToken()
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`
+export class HttpError extends Error {
+  readonly status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'HttpError'
+    this.status = status
   }
-  return config
-})
+}
+
+interface RequestOptions {
+  params?: Record<string, unknown>
+  signal?: AbortSignal
+  headers?: Record<string, string>
+  _retried?: boolean
+}
+
+function buildURL(url: string, params?: Record<string, unknown>): string {
+  const full = url.startsWith('http') ? url : `${BASE_URL}${url}`
+  if (!params) return full
+  const sp = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) sp.append(k, String(v))
+  }
+  const qs = sp.toString()
+  return qs ? `${full}?${qs}` : full
+}
+
+async function extractErrorMessage(response: Response): Promise<string> {
+  try {
+    const data = await response.json()
+    return data.detail || data.message || data.error || `请求失败 (${response.status})`
+  } catch {
+    return `请求失败 (${response.status})`
+  }
+}
 
 let isRefreshing = false
 let refreshSubscribers: Array<(token: string) => void> = []
@@ -55,81 +73,128 @@ function addRefreshSubscriber(cb: (token: string) => void) {
   refreshSubscribers.push(cb)
 }
 
-http.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+async function refreshAccessToken(): Promise<string> {
+  const res = await fetch(`${BASE_URL}/auth/refresh/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+  })
+  if (!res.ok) throw new HttpError(res.status, await extractErrorMessage(res))
+  const data = await res.json()
+  return data?.access_token
+}
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      if (originalRequest.url === '/auth/refresh/') {
-        clearTokens()
-        emitAuthExpired()
-        return Promise.reject(error)
-      }
+async function handleRefresh<T>(
+  method: string,
+  url: string,
+  data: unknown,
+  options: RequestOptions | undefined,
+): Promise<T> {
+  if (url === '/auth/refresh/') {
+    clearTokens()
+    emitAuthExpired()
+    throw new HttpError(401, '认证已过期')
+  }
 
-      if (isRefreshing) {
-        return new Promise((resolve) => {
-          addRefreshSubscriber((newToken: string) => {
-            originalRequest.headers.Authorization = `Bearer ${newToken}`
-            resolve(http(originalRequest))
-          })
-        })
-      }
+  if (isRefreshing) {
+    return new Promise<T>((resolve, reject) => {
+      addRefreshSubscriber(() => {
+        request<T>(method, url, data, { ...options, _retried: true }).then(resolve).catch(reject)
+      })
+    })
+  }
 
-      originalRequest._retry = true
-      isRefreshing = true
+  isRefreshing = true
 
-      try {
-        const res = await axios.post('/api/v1/auth/refresh/', null, { withCredentials: true })
-        const newToken: string = res.data?.access_token
-        if (newToken) {
-          setTokens(newToken)
-          onRefreshed(newToken)
-          originalRequest.headers.Authorization = `Bearer ${newToken}`
-          return http(originalRequest)
-        }
-        clearTokens()
-        emitAuthExpired()
-        return Promise.reject(error)
-      } catch {
-        clearTokens()
-        emitAuthExpired()
-        return Promise.reject(error)
-      } finally {
-        isRefreshing = false
-      }
+  try {
+    const newToken = await refreshAccessToken()
+    setTokens(newToken)
+    onRefreshed(newToken)
+    return request<T>(method, url, data, { ...options, _retried: true })
+  } catch (err) {
+    clearTokens()
+    emitAuthExpired()
+    refreshSubscribers = []
+    throw err instanceof HttpError ? err : new HttpError(401, '认证已过期')
+  } finally {
+    isRefreshing = false
+  }
+}
+
+async function request<T>(
+  method: string,
+  url: string,
+  data?: unknown,
+  options?: RequestOptions,
+): Promise<T> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT)
+
+  const signal = options?.signal
+    ? AbortSignal.any([options.signal, controller.signal])
+    : controller.signal
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+    ...options?.headers,
+  }
+
+  const token = getAccessToken()
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const fullURL = buildURL(url, options?.params)
+
+  let body: BodyInit | undefined
+  if (data !== undefined && data !== null) {
+    if (data instanceof FormData) {
+      delete headers['Content-Type']
+      body = data
+    } else {
+      body = JSON.stringify(data)
+    }
+  }
+
+  try {
+    const response = await fetch(fullURL, { method, headers, body, signal, credentials: 'include' })
+
+    if (response.status === 401 && !options?._retried) {
+      return handleRefresh<T>(method, url, data, options)
     }
 
-    return Promise.reject(error)
+    if (!response.ok) {
+      throw new HttpError(response.status, await extractErrorMessage(response))
+    }
+
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      return undefined as T
+    }
+
+    return response.json()
+  } finally {
+    clearTimeout(timeoutId)
   }
-)
-
-export async function get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-  const res = await http.get(url, config)
-  return res.data
 }
 
-export async function post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
-  const res = await http.post(url, data, config)
-  return res.data
+export async function get<T>(url: string, options?: RequestOptions): Promise<T> {
+  return request<T>('GET', url, undefined, options)
 }
 
-export async function put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
-  const res = await http.put(url, data, config)
-  return res.data
+export async function post<T>(url: string, data?: unknown, options?: RequestOptions): Promise<T> {
+  return request<T>('POST', url, data, options)
 }
 
-export async function del<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-  const res = await http.delete(url, config)
-  return res.data
+export async function put<T>(url: string, data?: unknown, options?: RequestOptions): Promise<T> {
+  return request<T>('PUT', url, data, options)
 }
 
-export async function upload<T>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<T> {
-  const res = await http.post(url, formData, {
-    ...config,
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
-  return res.data
+export async function del<T>(url: string, options?: RequestOptions): Promise<T> {
+  return request<T>('DELETE', url, undefined, options)
 }
 
-export default http
+export async function upload<T>(url: string, formData: FormData, options?: RequestOptions): Promise<T> {
+  return request<T>('POST', url, formData, options)
+}

@@ -4,7 +4,8 @@ import re
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import Q
+from django.db import models
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from ninja import Router
 from ninja.pagination import paginate
@@ -31,7 +32,9 @@ router = Router()
 @router.get('/books/', response=list[BookListSchema], auth=optional_jwt_auth)
 @paginate
 def list_books(request, tag: str = None, category: str = None, search: str = None):
-    qs = Book.objects.prefetch_related('tags').all()
+    qs = Book.objects.prefetch_related('tags').annotate(
+        _chapter_count=Count('chapters', output_field=models.IntegerField())
+    )
     if tag:
         qs = qs.filter(tags__name=tag)
     if category:
