@@ -45,4 +45,6 @@ class Book(models.Model):
 
     @property
     def chapter_count(self):
+        if hasattr(self, '_chapter_count'):
+            return self._chapter_count
         return self.chapters.count()
