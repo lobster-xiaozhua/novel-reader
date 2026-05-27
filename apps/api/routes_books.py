@@ -34,7 +34,7 @@ router = Router()
 def list_books(request, tag: str = None, category: str = None, search: str = None):
     qs = Book.objects.prefetch_related('tags').annotate(
         _chapter_count=Count('chapters', output_field=models.IntegerField())
-    )
+    ).order_by('-created_at')
     if tag:
         qs = qs.filter(tags__name=tag)
     if category:
@@ -160,13 +160,14 @@ def get_chapter_content(request, book_id: int, chapter_id: int) -> dict:
     chapter = get_object_or_404(Chapter, book_id=book_id, id=chapter_id)
     content: str = ''
     cache_key = f'chapter_content:{chapter.id}'
-    content = cache.get(cache_key)
-    if content is None and chapter.file_path:
+    cached = cache.get(cache_key)
+    if cached is not None:
+        content = cached
+    elif chapter.file_path:
         file_path = os.path.normpath(chapter.file_path)
         books_root = os.path.normpath(str(settings.BOOKS_DIR))
         if not file_path.startswith(books_root):
             logger.error(f'[Chapter] 文件路径越界: {chapter.file_path}')
-            content = ''
         elif os.path.exists(file_path):
             for enc in ('utf-8', 'gbk', 'gb2312', 'utf-16'):
                 try:

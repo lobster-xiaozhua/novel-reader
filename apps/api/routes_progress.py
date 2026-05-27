@@ -1,6 +1,7 @@
 import logging
 
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import F
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -79,17 +80,16 @@ def track_stats(request, payload: StatsTrackIn) -> dict:
         except Chapter.DoesNotExist:
             pass
 
-    created = not ReadingStats.objects.filter(user=user, date=today).exists()
-    if created:
-        ReadingStats.objects.create(
-            user=user, date=today,
-            read_seconds=payload.seconds, chapters_read=1, words_read=words,
+    with transaction.atomic():
+        stats_obj, created = ReadingStats.objects.select_for_update().get_or_create(
+            user=user,
+            date=today,
+            defaults={'read_seconds': payload.seconds, 'chapters_read': 1, 'words_read': words},
         )
-    else:
-        ReadingStats.objects.filter(user=user, date=today).update(
-            read_seconds=F('read_seconds') + payload.seconds,
-            chapters_read=F('chapters_read') + 1,
-            words_read=F('words_read') + words,
-        )
+        if not created:
+            stats_obj.read_seconds = F('read_seconds') + payload.seconds
+            stats_obj.chapters_read = F('chapters_read') + 1
+            stats_obj.words_read = F('words_read') + words
+            stats_obj.save(update_fields=['read_seconds', 'chapters_read', 'words_read'])
     logger.debug(f'[Stats] 记录阅读: {payload.seconds}s, {words}字')
     return {'message': 'ok'}

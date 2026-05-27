@@ -2,8 +2,7 @@ import { useState, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { BookOpen, Search, Eye, Tag, Upload, Loader2, Heart } from 'lucide-react'
-import { fetchBooks, importBooks } from '@/api/books'
-import { toggleFavorite } from '@/api/favorites'
+import { bookApi, favoriteApi } from '@/api'
 import { Book } from '@/types'
 import { useToast } from '@/components/Toast'
 import { Spinner } from '@/components/Loading'
@@ -20,7 +19,7 @@ export default function Books() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['books', search],
-    queryFn: () => fetchBooks({ search: search || undefined }),
+    queryFn: () => bookApi.list({ search: search || undefined }),
   })
 
   const books = data?.items || []
@@ -30,7 +29,7 @@ export default function Books() {
     if (!files?.length) return
     setImporting(true)
     try {
-      const result = await importBooks(Array.from(files))
+      const result = await bookApi.importBooks(Array.from(files))
       if (result.success) {
         toast.success(`成功导入 ${result.imported} 本书籍`)
         if (result.errors.length > 0) {
@@ -49,7 +48,7 @@ export default function Books() {
   const handleToggleFav = async (e: React.MouseEvent, bookId: number) => {
     e.stopPropagation()
     try {
-      const res = await toggleFavorite(bookId)
+      const res = await favoriteApi.toggle(bookId)
       toast.success(res.message)
       queryClient.invalidateQueries({ queryKey: ['books'] })
     } catch {

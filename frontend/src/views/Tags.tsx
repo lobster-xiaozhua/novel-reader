@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tag, Plus, Search, Trash2, X, Check } from 'lucide-react'
-import { fetchTags, createTag, deleteTag } from '@/api/tags'
+import { tagApi } from '@/api'
 import { TagItem } from '@/types'
 import { useDialog } from '@/components/ReDialog'
 import { useToast } from '@/components/Toast'
@@ -19,11 +19,11 @@ export default function Tags() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['tags'],
-    queryFn: fetchTags,
+    queryFn: tagApi.list,
   })
 
   const createMutation = useMutation({
-    mutationFn: createTag,
+    mutationFn: tagApi.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tags'] })
       setIsCreating(false)
@@ -35,7 +35,7 @@ export default function Tags() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: deleteTag,
+    mutationFn: tagApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tags'] })
       toast.success('标签已删除')

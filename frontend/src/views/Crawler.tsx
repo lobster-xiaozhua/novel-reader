@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bug, Clock, CheckCircle, AlertTriangle, Loader2, XCircle, Plus } from 'lucide-react'
-import { fetchCrawlerTasks, createCrawlerTask } from '@/api/crawler'
+import { crawlerApi } from '@/api'
 import { CrawlerTask } from '@/types'
 import { useToast } from '@/components/Toast'
 import { Spinner } from '@/components/Loading'
@@ -21,11 +21,11 @@ export default function Crawler() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['crawler-tasks'],
-    queryFn: () => fetchCrawlerTasks(),
+    queryFn: () => crawlerApi.list(),
   })
 
   const createMutation = useMutation({
-    mutationFn: createCrawlerTask,
+    mutationFn: crawlerApi.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['crawler-tasks'] })
       setUrl('')

@@ -57,6 +57,9 @@ def auth_register(request, payload: RegisterIn) -> JsonResponse:
 @router.post('/auth/logout/', response=MessageSchema, auth=optional_jwt_auth)
 def auth_logout(request) -> JsonResponse:
     username = request.user.username if request.user.is_authenticated else 'anonymous'
+    if request.user.is_authenticated:
+        from novel_reader.middleware import invalidate_user_cache
+        invalidate_user_cache(request.user.id)
     logger.info(f'[Auth] 用户登出: {username}')
     return clear_jwt_cookies(JsonResponse({'message': '已退出登录'}))
 

@@ -8,6 +8,10 @@ logger = logging.getLogger(__name__)
 _JWT_USER_CACHE_TTL = 300
 
 
+def invalidate_user_cache(user_id: int):
+    cache.delete(f'jwt_user:{user_id}')
+
+
 class JWTAuthMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response

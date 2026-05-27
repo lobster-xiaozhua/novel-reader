@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
 import { FileText, BookOpen, ArrowLeft } from 'lucide-react'
-import { fetchBooks } from '@/api/books'
-import { fetchChapters, fetchChapterContent } from '@/api/books'
+import { bookApi } from '@/api'
 import { Chapter, Book } from '@/types'
 import NovelReader from '@/components/NovelReader'
 import { Spinner } from '@/components/Loading'
@@ -16,12 +15,12 @@ export default function Chapters() {
 
   const { data: booksData } = useQuery({
     queryKey: ['books'],
-    queryFn: () => fetchBooks(),
+    queryFn: () => bookApi.list(),
   })
 
   const { data: chaptersData, isLoading: chaptersLoading } = useQuery({
     queryKey: ['chapters', selectedBookId],
-    queryFn: () => fetchChapters(selectedBookId!),
+    queryFn: () => bookApi.chapters(selectedBookId!),
     enabled: !!selectedBookId,
   })
 
@@ -30,7 +29,7 @@ export default function Chapters() {
 
   const { data: chapterContent, isLoading: contentLoading } = useQuery({
     queryKey: ['chapter-content', selectedBookId, readingChapter?.id],
-    queryFn: () => fetchChapterContent(selectedBookId!, readingChapter!.id),
+    queryFn: () => bookApi.chapterContent(selectedBookId!, readingChapter!.id),
     enabled: !!selectedBookId && !!readingChapter,
   })
 

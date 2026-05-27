@@ -9,26 +9,24 @@ import {
   Users,
 } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { fetchStats } from '@/api/stats'
-import { fetchDashboard } from '@/api/stats'
-import { fetchCrawlerTasks } from '@/api/crawler'
+import { statsApi, crawlerApi } from '@/api'
 import { CHART_COLORS, COLORS } from '@/config/colors'
 import { Spinner } from '@/components/Loading'
 
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['stats'],
-    queryFn: () => fetchStats(7),
+    queryFn: () => statsApi.user(7),
   })
 
   const { data: dashboard } = useQuery({
     queryKey: ['dashboard'],
-    queryFn: fetchDashboard,
+    queryFn: statsApi.dashboard,
   })
 
   const { data: crawlerData } = useQuery({
     queryKey: ['crawler-tasks'],
-    queryFn: () => fetchCrawlerTasks(),
+    queryFn: () => crawlerApi.list(),
   })
 
   const cards = [

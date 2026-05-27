@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { TrendingUp, BookOpen, Clock, Type } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
-import { fetchStats } from '@/api/stats'
+import { statsApi } from '@/api'
 import { COLORS } from '@/config/colors'
 import { Spinner } from '@/components/Loading'
 
@@ -17,7 +17,7 @@ export default function Stats() {
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['stats', days],
-    queryFn: () => fetchStats(days),
+    queryFn: () => statsApi.user(days),
   })
 
   const chartData = stats?.chart || []

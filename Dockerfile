@@ -18,4 +18,6 @@ RUN mkdir -p /app/data /app/data/logs /app/data/books /app/data/cache
 RUN python manage.py collectstatic --noinput 2>/dev/null || true
 
 EXPOSE 8000
-CMD ["granian", "novel_reader.asgi:application", "--host", "0.0.0.0", "--port", "8000", "--interface", "asgi", "--workers", "1"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/')" || exit 1
+CMD ["granian", "novel_reader.asgi:application", "--host", "0.0.0.0", "--port", "8000", "--interface", "asgi", "--workers", "2"]

@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { Minus, Plus, Type, Sun, Moon, BookOpen } from 'lucide-react'
-import { saveProgress, trackStats } from '@/api/progress'
+import { progressApi } from '@/api'
 import { getAccessToken } from '@/utils/http'
 
 type ReaderTheme = 'dark' | 'sepia' | 'light'
@@ -89,8 +89,8 @@ export default function NovelReader({
       const elapsed = Math.floor((Date.now() - readStartRef.current) / 1000)
       if (elapsed >= 30) {
         savedRef.current = true
-        saveProgress({ book_id: bookId, chapter_id: chapterId, position: chapterNumber }).catch(() => {})
-        trackStats({ seconds: elapsed, chapter_id: chapterId }).catch(() => {})
+        progressApi.save({ book_id: bookId, chapter_id: chapterId, position: chapterNumber }).catch(() => {})
+        progressApi.trackStats({ seconds: elapsed, chapter_id: chapterId }).catch(() => {})
       }
     }, 10000)
     return () => clearInterval(interval)

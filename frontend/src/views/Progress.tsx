@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Bookmark, BookOpen, ChevronRight } from 'lucide-react'
-import { fetchProgress } from '@/api/progress'
+import { progressApi } from '@/api'
 import { ProgressItem } from '@/types'
 import { Spinner } from '@/components/Loading'
 
@@ -9,7 +9,7 @@ export default function Progress() {
   const navigate = useNavigate()
   const { data, isLoading } = useQuery({
     queryKey: ['progress'],
-    queryFn: fetchProgress,
+    queryFn: progressApi.list,
   })
 
   const items = data?.items || []

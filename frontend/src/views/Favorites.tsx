@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Heart, BookOpen, Clock, Trash2 } from 'lucide-react'
-import { fetchFavorites, toggleFavorite } from '@/api/favorites'
+import { favoriteApi } from '@/api'
 import { FavoriteItem } from '@/types'
 import { useToast } from '@/components/Toast'
 import { Spinner } from '@/components/Loading'
@@ -11,11 +11,11 @@ export default function Favorites() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['favorites'],
-    queryFn: fetchFavorites,
+    queryFn: favoriteApi.list,
   })
 
   const toggleMutation = useMutation({
-    mutationFn: toggleFavorite,
+    mutationFn: favoriteApi.toggle,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['favorites'] })
       toast.success('已取消收藏')

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ninja import Schema
 from django.utils import timezone
@@ -19,7 +19,7 @@ class BookListSchema(Schema):
     total_chapters: int = 0
     chapter_count: int = 0
     tags: List[TagSchema] = []
-    gradient: tuple = ('#667eea', '#764ba2')
+    gradient: List[str] = ['#667eea', '#764ba2']
     created_at: str
     updated_at: str
 
@@ -46,7 +46,7 @@ class BookDetailSchema(Schema):
     description: str = ''
     total_chapters: int = 0
     tags: List[TagSchema] = []
-    gradient: tuple = ('#667eea', '#764ba2')
+    gradient: List[str] = ['#667eea', '#764ba2']
     is_favorited: bool = False
     reading_progress: Optional[dict] = None
     created_at: str
@@ -218,7 +218,7 @@ class HealthSchema(Schema):
     database: str = 'ok'
     cache: str = 'ok'
     disk_usage: str = 'ok'
-    version: str = '2.0.0'
+    version: str = '3.0.0'
 
 
 class SearchResult(Schema):

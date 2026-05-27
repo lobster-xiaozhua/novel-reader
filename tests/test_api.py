@@ -184,7 +184,7 @@ class HealthAPITest(TestCase):
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data['status'], 'ok')
-        self.assertEqual(data['version'], '2.0.0')
+        self.assertEqual(data['version'], '3.0.0')
 
 
 class BooksAPITest(TestCase):

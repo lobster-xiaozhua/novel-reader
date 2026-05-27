@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 api = NinjaAPI(
     title='NovelReader API',
-    version='2.0.0',
+    version='3.0.0',
     description='高性能小说阅读器 API',
     docs_url='/docs/',
     openapi_url='/openapi.json',
@@ -39,7 +39,10 @@ def validation_error_handler(request, exc):
 
 @api.exception_handler(Exception)
 def global_exception_handler(request, exc):
-    logger.error(f'[API 500] {request.method} {request.path}: {type(exc).__name__}: {exc}\n{traceback.format_exc()}')
+    logger.error(
+        f'[API 500] {request.method} {request.path}: {type(exc).__name__}: {exc}\n'
+        f'{traceback.format_exc()}'
+    )
     return api.create_response(request, {'error': '服务器内部错误，请稍后重试'}, status=500)
 
 

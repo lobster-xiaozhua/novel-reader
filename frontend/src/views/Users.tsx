@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { Users as UsersIcon, Shield, User, Clock } from 'lucide-react'
-import { fetchUsers } from '@/api/users'
+import { userApi } from '@/api'
 import { UserItem } from '@/types'
 import { Spinner } from '@/components/Loading'
 
 export default function Users() {
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
-    queryFn: fetchUsers,
+    queryFn: userApi.list,
   })
 
   const users = data?.items || []

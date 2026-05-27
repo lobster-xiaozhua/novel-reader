@@ -13,7 +13,7 @@ router = Router()
 
 @router.get('/health/', response=HealthSchema, auth=None)
 def health_check(request) -> dict:
-    checks: dict = {'status': 'ok', 'database': 'ok', 'cache': 'ok', 'disk_usage': 'ok', 'version': '2.0.0'}
+    checks: dict = {'status': 'ok', 'database': 'ok', 'cache': 'ok', 'disk_usage': 'ok', 'version': '3.0.0'}
     try:
         connection.ensure_connection()
     except Exception as exc:
