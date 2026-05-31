@@ -147,9 +147,14 @@ install_node_deps() {
         return 0
     fi
 
-    if [ -d "frontend/node_modules" ]; then
+    if [ -d "frontend/node_modules" ] && [ -d "frontend/node_modules/react" ]; then
         log_success "Node 依赖已就绪，跳过安装"
         return 0
+    fi
+
+    if [ -d "frontend/node_modules" ]; then
+        log_warn "Node 依赖目录损坏，正在清理并重新安装..."
+        rm -rf frontend/node_modules
     fi
 
     log_info "从阿里云 npm 镜像安装..."
@@ -172,7 +177,7 @@ install_node_deps() {
     fi
     cd ..
 
-    if [ -d "frontend/node_modules" ]; then
+    if [ -d "frontend/node_modules/react" ]; then
         return 0
     else
         log_error "Node 依赖安装失败"
