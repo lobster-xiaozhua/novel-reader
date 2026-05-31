@@ -26,6 +26,14 @@ staticfiles/
 .DS_Store
 Thumbs.db
 
+# Build
+dist/
+*.tar.gz
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
 # Data
 data/books/*
 !data/books/.gitkeep
