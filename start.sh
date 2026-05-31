@@ -252,7 +252,7 @@ else:
 
 build_frontend() {
     log_step "构建前端"
-    if [ ! -d "frontend/node_modules" ]; then
+    if [ ! -d "frontend/node_modules" ] || [ ! -d "frontend/node_modules/react" ]; then
         install_node_deps
     fi
 
@@ -264,6 +264,8 @@ build_frontend() {
         echo "$output" | grep -iE "error|failed" | head -5 | while read -r line; do
             log_error "  $line"
         done
+        echo ""
+        log_error "建议: cd frontend && rm -rf node_modules dist && npm install && npm run build"
         exit 1
     }
 
