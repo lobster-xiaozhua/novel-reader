@@ -7,6 +7,7 @@ from django.core.cache import cache
 from django.db import models
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from ninja import Router
 from ninja.pagination import paginate
 
@@ -20,8 +21,11 @@ from .schemas import (
     BatchImportResult,
     BookDetailSchema,
     BookListSchema,
+    CategoryWithCount,
     ChapterContentSchema,
     ChapterSchema,
+    RankingBookSchema,
+    RankingsResponse,
     SearchResponse,
 )
 
@@ -208,3 +212,102 @@ def search_books(request, q: str = '') -> dict:
             Book.objects.filter(title__istartswith=query).values_list('title', flat=True)[:10]
         )
     return {'query': query, 'results': results, 'total': total, 'suggestions': suggestions}
+
+@router.get('/books/rankings/', response=RankingsResponse, auth=optional_jwt_auth)
+def get_rankings(request) -> dict:
+    now = timezone.now()
+    limit = 10
+
+    today_cutoff = now - timezone.timedelta(hours=24)
+    hot_today_qs = (
+        Book.objects.prefetch_related('tags')
+        .annotate(
+            _today_favs=Count('favorites', filter=Q(favorites__created_at__gte=today_cutoff)),
+            _ch_count=Count('chapters'),
+        )
+        .filter(_today_favs__gt=0)
+        .order_by('-_today_favs', '-updated_at')[:limit]
+    )
+    if not hot_today_qs:
+        hot_today_qs = (
+            Book.objects.prefetch_related('tags')
+            .annotate(_ch_count=Count('chapters'))
+            .order_by('-updated_at')[:limit]
+        )
+
+    week_cutoff = now - timezone.timedelta(days=7)
+    hot_week_qs = (
+        Book.objects.prefetch_related('tags')
+        .annotate(
+            _week_favs=Count('favorites', filter=Q(favorites__created_at__gte=week_cutoff)),
+            _ch_count=Count('chapters'),
+        )
+        .filter(_week_favs__gt=0)
+        .order_by('-_week_favs', '-_ch_count', '-updated_at')[:limit]
+    )
+    if not hot_week_qs:
+        hot_week_qs = (
+            Book.objects.prefetch_related('tags')
+            .annotate(_ch_count=Count('chapters'))
+            .order_by('-_ch_count', '-updated_at')[:limit]
+        )
+
+    new_arrivals_qs = (
+        Book.objects.prefetch_related('tags')
+        .annotate(_ch_count=Count('chapters'))
+        .order_by('-created_at')[:30]
+    )
+
+    logger.info('[Rankings] 获取排行榜成功')
+    return {
+        'hot_today': [
+            {
+                'id': b.id,
+                'title': b.title,
+                'author': b.author,
+                'category': b.category,
+                'gradient': b.cover_gradient,
+                'tags': [{'id': t.id, 'name': t.name, 'color': t.color} for t in b.tags.all()],
+                'chapter_count': getattr(b, '_ch_count', None) or b.total_chapters or 0,
+            }
+            for b in hot_today_qs
+        ],
+        'hot_week': [
+            {
+                'id': b.id,
+                'title': b.title,
+                'author': b.author,
+                'category': b.category,
+                'gradient': b.cover_gradient,
+                'tags': [{'id': t.id, 'name': t.name, 'color': t.color} for t in b.tags.all()],
+                'chapter_count': getattr(b, '_ch_count', None) or b.total_chapters or 0,
+            }
+            for b in hot_week_qs
+        ],
+        'new_arrivals': [
+            {
+                'id': b.id,
+                'title': b.title,
+                'author': b.author,
+                'category': b.category,
+                'gradient': b.cover_gradient,
+                'tags': [{'id': t.id, 'name': t.name, 'color': t.color} for t in b.tags.all()],
+                'chapter_count': getattr(b, '_ch_count', None) or b.total_chapters or 0,
+            }
+            for b in new_arrivals_qs
+        ],
+    }
+
+
+@router.get('/books/categories/', response=list[CategoryWithCount], auth=optional_jwt_auth)
+def get_categories(request) -> list:
+    qs = (
+        Book.objects.filter(category__isnull=False)
+        .exclude(category='')
+        .values('category')
+        .annotate(count=Count('id'))
+        .order_by('-count', 'category')
+    )
+    logger.info(f'[Categories] 获取分类列表成功 ({qs.count()}个分类)')
+    return list(qs)
+

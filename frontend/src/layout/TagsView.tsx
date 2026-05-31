@@ -6,6 +6,7 @@ import { useTagsStore } from '@/stores/tagsStore'
 const routeTitleMap: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/books': '书籍',
+  '/rankings': '排行榜',
   '/chapters': '章节',
   '/tags': '标签',
   '/users': '用户',
@@ -13,6 +14,7 @@ const routeTitleMap: Record<string, string> = {
   '/stats': '阅读统计',
   '/favorites': '收藏',
   '/crawler': '爬虫任务',
+  '/search': '搜索结果',
 }
 
 export default function TagsView() {
