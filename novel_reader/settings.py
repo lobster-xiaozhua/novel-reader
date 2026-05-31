@@ -193,6 +193,22 @@ LOGGING = {
             'formatter': 'verbose',
             'level': 'ERROR',
         },
+        'request_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'data' / 'logs' / 'requests.log',
+            'maxBytes': 10 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'verbose',
+            'level': 'INFO',
+        },
+        'auth_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'data' / 'logs' / 'auth.log',
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 5,
+            'formatter': 'verbose',
+            'level': 'INFO',
+        },
         'crawler_file': {
             'class': 'logging.handlers.RotatingFileHandler',
             'filename': BASE_DIR / 'data' / 'logs' / 'crawler.log',
@@ -215,6 +231,21 @@ LOGGING = {
         'django.request': {
             'handlers': ['console', 'error_file'],
             'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'propagate': False,
+        },
+        'novel_reader.request': {
+            'handlers': ['console', 'request_file', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'novel_reader.auth': {
+            'handlers': ['console', 'auth_file', 'file', 'error_file'],
+            'level': 'INFO',
             'propagate': False,
         },
         'apps.crawler': {

@@ -18,7 +18,7 @@ from .auth import (
 )
 from .schemas import AuthResponse, LoginIn, MessageSchema, RefreshIn, RegisterIn
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('novel_reader.auth')
 router = Router()
 
 
@@ -35,21 +35,25 @@ def _build_auth_payload(user: User) -> dict:
 
 @router.post('/auth/login/', response=AuthResponse, auth=None)
 def auth_login(request, payload: LoginIn) -> JsonResponse:
+    ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '?'))
+    ua = request.META.get('HTTP_USER_AGENT', '')[:120]
     user = authenticate(request, username=payload.username, password=payload.password)
     if user is None:
-        logger.warning(f'[Auth] 登录失败: {payload.username}')
+        logger.warning(f'登录失败: username={payload.username} | IP={ip} | UA={ua}')
         return JsonResponse({'success': False, 'error': '用户名或密码错误'})
-    logger.info(f'[Auth] 用户登录: {user.username}')
+    logger.info(f'登录成功: user_id={user.id} username={user.username} | IP={ip} | UA={ua}')
     data = _build_auth_payload(user)
     return set_jwt_cookies(JsonResponse(data), data['access_token'], data['refresh_token'])
 
 
 @router.post('/auth/register/', response=AuthResponse, auth=None)
 def auth_register(request, payload: RegisterIn) -> JsonResponse:
+    ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '?'))
     if User.objects.filter(username=payload.username).exists():
+        logger.warning(f'注册失败-用户名冲突: username={payload.username} | IP={ip}')
         return JsonResponse({'success': False, 'error': '用户名已存在'})
     user = User.objects.create_user(username=payload.username, password=payload.password, email=payload.email)
-    logger.info(f'[Auth] 新用户注册: {user.username}')
+    logger.info(f'注册成功: user_id={user.id} username={user.username} email={payload.email} | IP={ip}')
     data = _build_auth_payload(user)
     return set_jwt_cookies(JsonResponse(data), data['access_token'], data['refresh_token'])
 
@@ -57,7 +61,9 @@ def auth_register(request, payload: RegisterIn) -> JsonResponse:
 @router.post('/auth/logout/', response=MessageSchema, auth=optional_jwt_auth)
 def auth_logout(request) -> JsonResponse:
     username = request.user.username if request.user.is_authenticated else 'anonymous'
-    logger.info(f'[Auth] 用户登出: {username}')
+    user_id = request.user.id if request.user.is_authenticated else None
+    ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '?'))
+    logger.info(f'登出: user_id={user_id} username={username} | IP={ip}')
     return clear_jwt_cookies(JsonResponse({'message': '已退出登录'}))
 
 
@@ -78,16 +84,19 @@ def auth_me(request) -> dict:
 
 @router.post('/auth/refresh/', response=AuthResponse, auth=None)
 def auth_refresh(request, payload: Optional[RefreshIn] = None) -> JsonResponse:
+    ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '?'))
     token: str = ''
     if payload and payload.refresh_token:
         token = payload.refresh_token
     if not token:
         token = request.COOKIES.get('refresh_token', '')
     if not token:
+        logger.warning(f'令牌刷新失败-无token: IP={ip}')
         raise HttpError(401, '未提供刷新令牌')
     user = get_user_from_token(token, token_type='refresh')
     if user is None:
+        logger.warning(f'令牌刷新失败-无效token: IP={ip}')
         raise HttpError(401, '刷新令牌无效或已过期')
-    logger.info(f'[Auth] 令牌刷新: {user.username}')
+    logger.info(f'令牌刷新成功: user_id={user.id} username={user.username} | IP={ip}')
     data = _build_auth_payload(user)
     return set_jwt_cookies(JsonResponse(data), data['access_token'], data['refresh_token'])
