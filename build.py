@@ -260,27 +260,36 @@ class Builder:
     def _step_backend(self):
         step("构建后端")
         venv = self.root / "venv"
-        python = str(venv / "bin" / "python") if venv.exists() else "python3"
+        if not venv.exists():
+            log_info("创建 Python 虚拟环境...")
+            if not self.dry_run:
+                run(f"python3 -m venv {venv}")
+                log_ok("虚拟环境已创建")
+        python = str(venv / "bin" / "python")
 
         if self.detector.has_requirements:
-            if venv.exists():
-                log_info("检查 Python 依赖...")
-                if self.dry_run:
-                    log_warn("[DRY-RUN] 跳过依赖检查")
-                else:
-                    try:
-                        run(f"{python} -c 'import django'", capture=True)
-                        log_ok("Python 依赖已就绪")
-                    except BuildError:
-                        log_info("安装 Python 依赖...")
-                        run(f"{python} -m pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --quiet", cwd=str(self.root))
+            log_info("检查 Python 依赖...")
+            if self.dry_run:
+                log_warn("[DRY-RUN] 跳过依赖安装")
+            else:
+                try:
+                    run(f"{python} -c 'import django'", capture=True)
+                    log_ok("Python 依赖已就绪")
+                except BuildError:
+                    log_info("安装 Python 依赖...")
+                    out = run(f"{python} -m pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --quiet", cwd=str(self.root), capture=True, check=False)
+                    installed = [l for l in out.splitlines() if "Successfully installed" in l]
+                    if installed:
+                        log_ok(installed[0].strip())
+                    else:
+                        log_ok("依赖安装完成")
 
         if self.detector.has_django:
             log_info("收集静态文件...")
             if self.dry_run:
                 log_warn("[DRY-RUN] 跳过 collectstatic")
             else:
-                out = run(f"{python} manage.py collectstatic --noinput", cwd=str(self.root), capture=True)
+                out = run(f"{python} manage.py collectstatic --noinput", cwd=str(self.root), capture=True, check=False)
                 count = [l for l in out.splitlines() if "static file" in l.lower()]
                 if count:
                     log_ok(count[0].strip())
