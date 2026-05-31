@@ -8,6 +8,8 @@ export interface Book {
   chapter_count: number
   tags: Tag[]
   gradient: [string, string]
+  is_favorited: boolean
+  reading_progress: { chapter_id: number; position: number } | null
   created_at: string
   updated_at: string
 }

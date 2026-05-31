@@ -1,0 +1,406 @@
+import { useState, useCallback, useMemo, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
+import {
+  Search, BookOpen, Clock, TrendingUp, Flame, Sparkles,
+  ChevronRight, Eye, Calendar, Star, AlertCircle
+} from 'lucide-react'
+import { fetchBooks, fetchRankings } from '@/api/books'
+import { fetchDashboard } from '@/api/stats'
+import { Book } from '@/types'
+import { useToast } from '@/components/Toast'
+
+const CATEGORIES = [
+  { name: '玄幻', icon: '✦', color: 'from-purple-500 to-indigo-600' },
+  { name: '都市', icon: '◆', color: 'from-blue-500 to-cyan-500' },
+  { name: '仙侠', icon: '❋', color: 'from-emerald-500 to-teal-500' },
+  { name: '科幻', icon: '◈', color: 'from-violet-500 to-purple-500' },
+  { name: '武侠', icon: '⚔', color: 'from-amber-500 to-orange-500' },
+  { name: '历史', icon: '◉', color: 'from-rose-500 to-pink-500' },
+  { name: '游戏', icon: '⬡', color: 'from-green-500 to-lime-500' },
+  { name: '奇幻', icon: '✧', color: 'from-fuchsia-500 to-pink-500' },
+  { name: '灵异', icon: '☽', color: 'from-slate-500 to-gray-600' },
+  { name: '同人', icon: '❂', color: 'from-sky-500 to-blue-500' },
+]
+
+const RANK_TABS = [
+  { key: 'hot-today', label: '今日最热' },
+  { key: 'hot-week', label: '本周最热' },
+  { key: 'new-arrival', label: '最新上架' },
+] as const
+
+function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
+  return (
+    <div className="flex items-center gap-2.5 mb-5">
+      <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
+        <Icon className="w-4 h-4 text-accent" />
+      </div>
+      <h2 className="text-lg font-bold text-text-primary">{title}</h2>
+    </div>
+  )
+}
+
+function BookCover({ book }: { book: Book }) {
+  return (
+    <div
+      className="w-36 h-48 rounded-xl flex-shrink-0 flex items-center justify-center relative overflow-hidden group-hover:scale-105 transition-transform duration-300"
+      style={{ background: `linear-gradient(135deg, ${book.gradient?.[0] || '#667eea'}, ${book.gradient?.[1] || '#764ba2'})` }}
+    >
+      <div className="absolute inset-0 bg-black/10" />
+      <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 30% 40%, rgba(255,255,255,0.3), transparent 60%)' }} />
+      <BookOpen className="w-10 h-10 text-white/80 relative z-10" />
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2 z-10">
+        <p className="text-white text-xs font-medium truncate">{book.title}</p>
+      </div>
+    </div>
+  )
+}
+
+function RankBadge({ rank }: { rank: number }) {
+  if (rank <= 3) {
+    const colors = ['bg-amber-400', 'bg-gray-400', 'bg-amber-700']
+    return (
+      <span className={`${colors[rank - 1]} w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg`}>
+        {rank}
+      </span>
+    )
+  }
+  return (
+    <span className="w-6 h-6 rounded-full bg-bg-tertiary border border-border flex items-center justify-center text-text-muted text-xs font-medium">
+      {rank}
+    </span>
+  )
+}
+
+function SkeletonCard({ className = '' }: { className?: string }) {
+  return (
+    <div className={`rounded-xl bg-bg-tertiary animate-pulse ${className}`} />
+  )
+}
+
+export default function HomePortal() {
+  const [search, setSearch] = useState('')
+  const [activeRankTab, setActiveRankTab] = useState<string>('hot-today')
+  const hotScrollRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
+  const toast = useToast()
+
+  const { data: booksData, isLoading: booksLoading, error: booksError } = useQuery({
+    queryKey: ['books', 'portal'],
+    queryFn: () => fetchBooks({}),
+  })
+
+  const { data: rankingsData } = useQuery({
+    queryKey: ['rankings'],
+    queryFn: fetchRankings,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: dashboardData } = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: fetchDashboard,
+  })
+
+  const books = useMemo(() => booksData?.items ?? [], [booksData])
+  const rankings = useMemo(() => rankingsData ?? { hot_today: [], hot_week: [], new_arrivals: [] }, [rankingsData])
+
+  const hotBooks = useMemo(() => {
+    const src = rankings.hot_today.length > 0 ? rankings.hot_today : books
+    return src.slice(0, 15)
+  }, [rankings.hot_today, books])
+
+  const latestBooks = useMemo(
+    () => {
+      const src = rankings.new_arrivals.length > 0 ? rankings.new_arrivals : [...books].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      return src.slice(0, 10)
+    },
+    [rankings.new_arrivals, books]
+  )
+
+  const rankTabMap: Record<string, Book[]> = {
+    'hot-today': rankings.hot_today.length > 0 ? rankings.hot_today : books.slice(0, 10),
+    'hot-week': rankings.hot_week.length > 0 ? rankings.hot_week : books.slice(0, 10),
+    'new-arrival': rankings.new_arrivals.length > 0 ? rankings.new_arrivals : books.slice(0, 10),
+  }
+  const rankBooks = rankTabMap[activeRankTab]
+
+  const handleSearch = useCallback((e: React.FormEvent) => {
+    e.preventDefault()
+    if (!search.trim()) {
+      toast.warning('请输入搜索关键词')
+      return
+    }
+    navigate(`/books?search=${encodeURIComponent(search.trim())}`)
+  }, [search, navigate, toast])
+
+  const scrollHot = useCallback((dir: 'left' | 'right') => {
+    const el = hotScrollRef.current
+    if (!el) return
+    el.scrollBy({ left: dir === 'left' ? -400 : 400, behavior: 'smooth' })
+  }, [])
+
+  const formatTime = (dateStr: string) => {
+    const now = new Date()
+    const date = new Date(dateStr)
+    const diff = Math.floor((now.getTime() - date.getTime()) / 1000)
+    if (diff < 60) return '刚刚'
+    if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`
+    if (diff < 604800) return `${Math.floor(diff / 86400)}天前`
+    return date.toLocaleDateString('zh-CN')
+  }
+
+  const totalBooks = dashboardData?.total_books ?? 0
+  const totalChapters = dashboardData?.total_chapters ?? 0
+  const totalWords = dashboardData?.total_words ?? 0
+  const categoryStats = dashboardData?.category_stats ?? []
+
+  return (
+    <div className="min-h-[calc(100vh-var(--navbar-height))] bg-bg-primary">
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-purple-500/5" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute bottom-0 left-0 w-72 h-72 bg-purple-500/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
+
+        <div className="relative max-w-6xl mx-auto px-6 py-16 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent/10 border border-accent/20 mb-6">
+            <Sparkles className="w-3.5 h-3.5 text-accent" />
+            <span className="text-accent text-sm font-medium">海量好书，畅享阅读</span>
+          </div>
+
+          <h1 className="text-4xl md:text-5xl font-extrabold text-text-primary mb-4 tracking-tight">
+            发现你的下一本<span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-amber-300">好书</span>
+          </h1>
+          <p className="text-text-secondary text-lg mb-8 max-w-xl mx-auto">
+            探索 {totalBooks > 0 ? `${totalBooks}` : '海量'} 本精彩小说，涵盖玄幻、都市、仙侠等十大分类
+          </p>
+
+          <form onSubmit={handleSearch} className="max-w-2xl mx-auto">
+            <div className="relative group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted group-focus-within:text-accent transition-colors" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="搜索书名、作者、标签..."
+                className="w-full h-14 pl-12 pr-32 rounded-2xl bg-bg-secondary/80 backdrop-blur-xl border border-border-strong text-text-primary placeholder:text-text-muted text-base focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all shadow-lg shadow-black/10"
+              />
+              <button
+                type="submit"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-10 px-6 rounded-xl bg-gradient-to-r from-accent to-amber-500 text-white font-semibold text-sm hover:shadow-lg hover:shadow-accent/25 active:scale-95 transition-all"
+              >
+                搜索
+              </button>
+            </div>
+          </form>
+
+          <div className="flex items-center justify-center gap-6 mt-6 text-sm text-text-muted">
+            <span className="flex items-center gap-1.5">
+              <BookOpen className="w-4 h-4" /> {totalBooks} 本书
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Eye className="w-4 h-4" /> {totalChapters > 0 ? `${(totalChapters / 1000).toFixed(0)}K` : '0'} 章节
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Star className="w-4 h-4" /> {totalWords > 0 ? `${(totalWords / 10000).toFixed(0)}万` : '0'} 字
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <div className="max-w-6xl mx-auto px-6 pb-16 space-y-12">
+        {/* Hot Recommendations */}
+        <section>
+          <SectionHeader icon={Flame} title="热门推荐" />
+
+          {booksLoading ? (
+            <div className="flex gap-4 overflow-hidden">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonCard key={i} className="w-36 h-48 flex-shrink-0" />
+              ))}
+            </div>
+          ) : booksError ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-text-muted">
+              <AlertCircle className="w-5 h-5 text-danger" />
+              <span>加载失败，请稍后重试</span>
+            </div>
+          ) : (
+            <div className="relative group/scroll">
+              <button
+                onClick={() => scrollHot('left')}
+                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-bg-elevated border border-border shadow-md flex items-center justify-center hover:bg-accent/10 transition-colors opacity-0 group-hover/scroll:opacity-100"
+                aria-label="向左滚动"
+              >
+                <ChevronRight className="w-4 h-4 text-text-secondary rotate-180" />
+              </button>
+              <button
+                onClick={() => scrollHot('right')}
+                className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-bg-elevated border border-border shadow-md flex items-center justify-center hover:bg-accent/10 transition-colors opacity-0 group-hover/scroll:opacity-100"
+                aria-label="向右滚动"
+              >
+                <ChevronRight className="w-4 h-4 text-text-secondary" />
+              </button>
+
+              <div
+                ref={hotScrollRef}
+                className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              >
+                {hotBooks.map((book) => (
+                  <button
+                    key={book.id}
+                    onClick={() => navigate(`/books/${book.id}`)}
+                    className="snap-start flex-shrink-0 group cursor-pointer text-left"
+                  >
+                    <BookCover book={book} />
+                    <div className="mt-2 w-36">
+                      <p className="text-sm font-medium text-text-primary truncate group-hover:text-accent transition-colors">{book.title}</p>
+                      <p className="text-xs text-text-secondary mt-0.5 truncate">{book.author || '未知作者'}</p>
+                      {book.tags.length > 0 && (
+                        <p className="text-xs text-text-muted mt-0.5 truncate">{book.tags[0].name}</p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Latest Updates & Rankings */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+          {/* Latest Updates */}
+          <section className="lg:col-span-3">
+            <SectionHeader icon={Clock} title="最新更新" />
+
+            {booksLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <SkeletonCard key={i} className="h-14" />
+                ))}
+              </div>
+            ) : booksError ? (
+              <div className="flex items-center justify-center gap-2 py-12 text-text-muted">
+                <AlertCircle className="w-5 h-5 text-danger" />
+                <span>加载失败，请稍后重试</span>
+              </div>
+            ) : latestBooks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-text-muted">
+                <BookOpen className="w-10 h-10 mb-3 opacity-30" />
+                <p>暂无书籍</p>
+              </div>
+            ) : (
+              <div className="bg-bg-secondary/50 backdrop-blur-sm rounded-2xl border border-border overflow-hidden">
+                {latestBooks.map((book, idx) => (
+                  <button
+                    key={book.id}
+                    onClick={() => navigate(`/books/${book.id}`)}
+                    className={`w-full flex items-center gap-4 px-5 py-3.5 hover:bg-accent/5 transition-colors text-left group ${
+                      idx !== latestBooks.length - 1 ? 'border-b border-border/50' : ''
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `linear-gradient(135deg, ${book.gradient?.[0] || '#667eea'}, ${book.gradient?.[1] || '#764ba2'})` }}>
+                      <BookOpen className="w-5 h-5 text-white/80" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-text-primary truncate group-hover:text-accent transition-colors">{book.title}</p>
+                      <p className="text-xs text-text-secondary mt-0.5">{book.author || '未知作者'}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-xs text-text-muted">{book.chapter_count} 章</p>
+                      <p className="text-xs text-text-muted">{formatTime(book.updated_at)}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Rankings */}
+          <section className="lg:col-span-2">
+            <SectionHeader icon={TrendingUp} title="排行榜" />
+
+            <div className="bg-bg-secondary/50 backdrop-blur-sm rounded-2xl border border-border overflow-hidden">
+              <div className="flex border-b border-border/50">
+                {RANK_TABS.map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveRankTab(tab.key)}
+                    className={`flex-1 px-3 py-3 text-sm font-medium transition-colors relative ${
+                      activeRankTab === tab.key ? 'text-accent' : 'text-text-muted hover:text-text-secondary'
+                    }`}
+                  >
+                    {tab.label}
+                    {activeRankTab === tab.key && (
+                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-accent" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div className="p-3">
+                {booksLoading ? (
+                  <div className="space-y-2">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <SkeletonCard key={i} className="h-12" />
+                    ))}
+                  </div>
+                ) : rankBooks.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-text-muted">
+                    <Star className="w-8 h-8 mb-2 opacity-30" />
+                    <p className="text-sm">暂无排行数据</p>
+                  </div>
+                ) : (
+                  rankBooks.map((book, idx) => (
+                    <button
+                      key={`${book.id}-${idx}`}
+                      onClick={() => navigate(`/books/${book.id}`)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-accent/5 transition-colors text-left group"
+                    >
+                      <RankBadge rank={idx + 1} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-text-primary truncate group-hover:text-accent transition-colors">{book.title}</p>
+                        <p className="text-xs text-text-secondary mt-0.5">{book.author || '未知作者'}</p>
+                      </div>
+                      {book.category && (
+                        <span className="px-2 py-0.5 rounded bg-accent/10 text-accent text-xs flex-shrink-0">
+                          {book.category}
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {/* Category Navigation */}
+        <section>
+          <SectionHeader icon={Calendar} title="分类导航" />
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {CATEGORIES.map((cat) => {
+              const catBookCount = categoryStats.find((s) => s.category === cat.name)?.count ?? 0
+              return (
+                <button
+                  key={cat.name}
+                  onClick={() => navigate(`/books?category=${cat.name}`)}
+                  className="group relative overflow-hidden rounded-2xl border border-border p-5 text-left hover:border-accent/30 transition-all hover:shadow-lg hover:shadow-accent/5 active:scale-[0.98]"
+                >
+                  <div className={`absolute inset-0 bg-gradient-to-br ${cat.color} opacity-0 group-hover:opacity-10 transition-opacity duration-300`} />
+                  <div className="relative z-10">
+                    <span className="text-2xl mb-2 block group-hover:scale-110 transition-transform duration-300">{cat.icon}</span>
+                    <p className="text-sm font-semibold text-text-primary group-hover:text-accent transition-colors">{cat.name}</p>
+                    <p className="text-xs text-text-muted mt-1">{catBookCount > 0 ? `${catBookCount} 本` : '探索更多'}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}

@@ -10,9 +10,11 @@ import { Spinner } from '@/components/Loading'
 
 export default function Chapters() {
   const location = useLocation()
-  const initialBookId = (location.state as { bookId?: number })?.bookId || null
+  const state = location.state as { bookId?: number; chapterIdx?: number } | null
+  const initialBookId = state?.bookId ?? null
+  const initialChapterIdx = state?.chapterIdx ?? null
   const [selectedBookId, setSelectedBookId] = useState<number | null>(initialBookId)
-  const [readingChapterIdx, setReadingChapterIdx] = useState<number | null>(null)
+  const [readingChapterIdx, setReadingChapterIdx] = useState<number | null>(initialChapterIdx)
 
   const { data: booksData } = useQuery({
     queryKey: ['books'],

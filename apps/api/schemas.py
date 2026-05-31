@@ -240,6 +240,27 @@ class CategoryStat(Schema):
     count: int
 
 
+class RankingsResponse(Schema):
+    hot_today: List['RankingBookSchema'] = []
+    hot_week: List['RankingBookSchema'] = []
+    new_arrivals: List['RankingBookSchema'] = []
+
+
+class RankingBookSchema(Schema):
+    id: int
+    title: str
+    author: str = ''
+    category: str = ''
+    gradient: tuple = ('#667eea', '#764ba2')
+    tags: List[TagSchema] = []
+    chapter_count: int = 0
+
+
+class CategoryWithCount(Schema):
+    category: str
+    count: int
+
+
 class DashboardStatsSchema(Schema):
     total_books: int
     total_users: int
