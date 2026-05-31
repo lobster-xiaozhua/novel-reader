@@ -27,10 +27,34 @@ function emitAuthExpired() {
 
 export class HttpError extends Error {
   readonly status: number
-  constructor(status: number, message: string) {
+  readonly detail?: string
+  readonly code?: string
+
+  constructor(status: number, message: string, detail?: string, code?: string) {
     super(message)
     this.name = 'HttpError'
     this.status = status
+    this.detail = detail
+    this.code = code
+  }
+
+  get userMessage(): string {
+    switch (this.status) {
+      case 400: return '请求参数错误：' + this.message
+      case 401: return '身份验证失败，请重新登录'
+      case 403: return '权限不足，您没有执行此操作的权限'
+      case 404: return '请求的资源不存在'
+      case 409: return '数据冲突：' + this.message
+      case 422: return '数据验证失败：' + this.message
+      case 429: return '请求过于频繁，请稍后重试'
+      case 500: return '服务器内部错误，请稍后重试或联系管理员'
+      case 502: return '网关错误，服务器暂时不可用'
+      case 503: return '服务暂时不可用，请稍后重试'
+      case 504: return '请求超时，服务器响应太慢'
+      default:
+        if (this.status >= 500) return `服务器错误 (${this.status})：${this.message}`
+        return this.message
+    }
   }
 }
 

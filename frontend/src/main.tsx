@@ -3,9 +3,9 @@ import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, useNavigate } from 'react-router-dom'
 import App from './App'
-import { ToastProvider } from './components/Toast'
+import { ToastProvider, useToast } from './components/Toast'
 import { useUserStore } from './stores/userStore'
-import { onAuthExpired, clearTokens } from './utils/http'
+import { onAuthExpired, clearTokens, HttpError } from './utils/http'
 import './styles/index.css'
 
 const queryClient = new QueryClient({
@@ -16,6 +16,54 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+function GlobalErrorHandler({ children }: { children: React.ReactNode }) {
+  const toast = useToast()
+
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      const error = event.error
+      console.error('[全局错误]', error)
+
+      if (error instanceof HttpError) {
+        toast.error(error.userMessage)
+        event.preventDefault()
+        return
+      }
+
+      toast.error(`运行时错误: ${error?.message || '未知错误'}`)
+      event.preventDefault()
+    }
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason
+      console.error('[未捕获的Promise拒绝]', reason)
+
+      if (reason instanceof HttpError) {
+        toast.error(reason.userMessage)
+        event.preventDefault()
+        return
+      }
+
+      if (reason instanceof Error) {
+        toast.error(`异步错误: ${reason.message}`)
+      } else {
+        toast.error('发生未知错误')
+      }
+      event.preventDefault()
+    }
+
+    window.addEventListener('error', handleError)
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
+    return () => {
+      window.removeEventListener('error', handleError)
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+    }
+  }, [toast])
+
+  return <>{children}</>
+}
 
 function AuthExpiredHandler({ children }: { children: React.ReactNode }) {
   const logout = useUserStore((s) => s.logout)
@@ -40,9 +88,11 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ToastProvider>
-          <AuthExpiredHandler>
-            <App />
-          </AuthExpiredHandler>
+          <GlobalErrorHandler>
+            <AuthExpiredHandler>
+              <App />
+            </AuthExpiredHandler>
+          </GlobalErrorHandler>
         </ToastProvider>
       </BrowserRouter>
     </QueryClientProvider>

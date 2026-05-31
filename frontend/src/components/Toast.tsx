@@ -26,6 +26,29 @@ export function useToast() {
   return ctx
 }
 
+export function useErrorReporter() {
+  const toast = useToast()
+
+  const reportError = useCallback((error: unknown, context?: string) => {
+    console.error(`[错误报告] ${context || ''}`, error)
+
+    if (error instanceof Error && 'status' in error) {
+      const httpErr = error as { userMessage?: string; message: string }
+      toast.error(httpErr.userMessage || httpErr.message)
+      return
+    }
+
+    if (error instanceof Error) {
+      toast.error(`${context || '错误'}: ${error.message}`)
+      return
+    }
+
+    toast.error(`${context || '发生'}未知错误`)
+  }, [toast])
+
+  return { reportError }
+}
+
 const iconMap = {
   success: CheckCircle,
   error: XCircle,

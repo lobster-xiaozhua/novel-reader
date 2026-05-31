@@ -267,3 +267,24 @@ class DashboardStatsSchema(Schema):
     total_chapters: int
     total_words: int
     category_stats: List[CategoryStat] = []
+
+
+class ErrorResponse(Schema):
+    success: bool = False
+    error: str
+    message: str = ''
+    detail: str = ''
+    code: str = ''
+    suggestion: str = ''
+
+
+ERROR_SUGGESTIONS = {
+    400: '请检查请求参数是否正确',
+    401: '请先登录后再执行此操作',
+    403: '您没有执行此操作的权限，请联系管理员',
+    404: '请求的资源不存在，请检查路径',
+    409: '数据存在冲突，请检查后重试',
+    422: '请检查数据格式是否符合要求',
+    429: '请求过于频繁，请稍后重试',
+    500: '服务器暂时出现问题，请稍后重试',
+}
