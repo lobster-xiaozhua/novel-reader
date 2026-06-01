@@ -135,3 +135,39 @@ export interface DashboardStats {
   total_words: number
   category_stats: CategoryStat[]
 }
+
+export interface RecommendBook {
+  id: number
+  title: string
+  author: string
+  category: string
+  description: string
+  tags: Tag[]
+  gradient: [string, string]
+  chapter_count: number
+  reason: string
+  score: number
+  is_new: boolean
+  updated_at: string
+  created_at: string
+}
+
+export interface AdvancedSearchResult {
+  id: number
+  book_id: number
+  title: string
+  author: string
+  category: string
+  description: string
+  tags: string[]
+  total_score: number
+  matched_chapters: Array<{
+    id: number
+    title: string
+    score: number
+    content_preview: string
+    chapter_number: number
+  }>
+  total_matches: number
+  match_reasons: string[]
+}

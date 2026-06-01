@@ -4,11 +4,11 @@ import {
   ArrowLeft, BookOpen, Heart, BookmarkPlus,
   FileText, Clock, PenTool, Star,
   ChevronRight, MessageSquare, MessageSquarePlus,
-  Loader2, AlertCircle, Eye,
+  Loader2, AlertCircle, Eye, Sparkles,
 } from 'lucide-react'
-import { fetchBook, fetchChapters, fetchBooks } from '@/api/books'
+import { fetchBook, fetchChapters, fetchSimilarBooks } from '@/api/books'
 import { toggleFavorite } from '@/api/favorites'
-import { Book, Chapter } from '@/types'
+import { Chapter, RecommendBook } from '@/types'
 import { useToast } from '@/components/Toast'
 import { Spinner } from '@/components/Loading'
 
@@ -32,10 +32,14 @@ export default function BookDetail() {
     enabled: !!bookId,
   })
 
-  const { data: booksData } = useQuery({
-    queryKey: ['books'],
-    queryFn: () => fetchBooks(),
+  const { data: similarData, isLoading: similarLoading } = useQuery({
+    queryKey: ['similar-books', bookId],
+    queryFn: () => fetchSimilarBooks(bookId, 8),
+    enabled: !!bookId,
+    staleTime: 5 * 60 * 1000,
   })
+
+  const similarBooks = similarData?.data ?? []
 
   const favMutation = useMutation({
     mutationFn: toggleFavorite,
@@ -67,12 +71,6 @@ export default function BookDetail() {
   const handleChapterClick = (idx: number) => {
     navigate(`/chapters`, { state: { bookId, chapterIdx: idx } })
   }
-
-  const similarBooks = book
-    ? (booksData?.items || []).filter(
-        (b: Book) => b.category === book.category && b.id !== book.id
-      ).slice(0, 8)
-    : []
 
   const totalWords = chapters?.reduce((sum, c) => sum + c.word_count, 0) ?? 0
 
@@ -282,17 +280,23 @@ export default function BookDetail() {
       {/* Similar Books */}
       <div>
         <div className="flex items-center gap-2 mb-5">
-          <Star className="w-5 h-5 text-primary-500" />
-          <h2 className="text-lg font-bold text-text-primary">同类推荐</h2>
+          <Sparkles className="w-5 h-5 text-accent" />
+          <h2 className="text-lg font-bold text-text-primary">相似推荐</h2>
         </div>
 
-        {similarBooks.length === 0 ? (
-          <div className="bg-card-bg border border-card-border rounded-xl p-8 text-center text-text-muted text-sm">
-            暂无同类书籍
+        {similarLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-xl bg-bg-tertiary animate-pulse h-44" />
+            ))}
+          </div>
+        ) : similarBooks.length === 0 ? (
+          <div className="bg-bg-secondary/50 border border-border rounded-xl p-8 text-center text-text-muted text-sm">
+            暂无相似推荐
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {similarBooks.map((sb: Book) => (
+            {similarBooks.map((sb: RecommendBook) => (
               <button
                 key={sb.id}
                 onClick={() => {
@@ -300,7 +304,7 @@ export default function BookDetail() {
                   navigate(`/books/${sb.id}`)
                   window.scrollTo(0, 0)
                 }}
-                className="group text-left bg-card-bg border border-card-border rounded-xl p-4 card-hover"
+                className="group text-left bg-bg-secondary/50 border border-border rounded-xl p-4 card-hover"
               >
                 <div
                   className="w-full h-28 rounded-xl mb-3 flex items-center justify-center relative overflow-hidden"
@@ -311,7 +315,12 @@ export default function BookDetail() {
                 </div>
                 <h3 className="text-sm font-medium text-text-primary truncate group-hover:text-accent transition-colors">{sb.title}</h3>
                 <p className="text-xs text-text-secondary mt-0.5 truncate">{sb.author || '未知作者'}</p>
-                <p className="text-xs text-text-muted mt-1">{sb.chapter_count} 章</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="text-xs text-text-muted">{sb.chapter_count} 章</p>
+                  {sb.reason && (
+                    <span className="text-[10px] text-accent">{sb.reason}</span>
+                  )}
+                </div>
               </button>
             ))}
           </div>

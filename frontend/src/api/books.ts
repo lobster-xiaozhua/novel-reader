@@ -1,5 +1,5 @@
 import { get, upload } from '@/utils/http'
-import { Book, Chapter } from '@/types'
+import { Book, Chapter, RecommendBook, AdvancedSearchResult } from '@/types'
 
 export function fetchBooks(params?: { tag?: string; category?: string; search?: string; page?: number }) {
   return get<{ items: Book[]; total: number }>('/books/', { params })
@@ -42,4 +42,28 @@ export function fetchSearch(q: string) {
     total: number
     suggestions: string[]
   }>('/search/', { params: { q } })
+}
+
+export function fetchRecommendations(strategy: string = 'hybrid', limit: number = 20, page: number = 1) {
+  return get<{
+    success: boolean
+    data: RecommendBook[]
+    pagination: { page: number; per_page: number; total: number; has_next: boolean }
+  }>('/recommendations/', { params: { strategy, limit, page } })
+}
+
+export function fetchSimilarBooks(bookId: number, limit: number = 6) {
+  return get<{
+    success: boolean
+    data: RecommendBook[]
+  }>(`/books/${bookId}/similar/`, { params: { limit } })
+}
+
+export function fetchAdvancedSearch(q: string, limit: number = 20, page: number = 1) {
+  return get<{
+    success: boolean
+    data: AdvancedSearchResult[]
+    pagination: { page: number; per_page: number; total: number; has_next: boolean }
+    search_time_ms: number
+  }>('/search/advanced/', { params: { q, limit, page } })
 }

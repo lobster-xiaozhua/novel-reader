@@ -3,12 +3,18 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, BookOpen, Clock, TrendingUp, Flame, Sparkles,
-  ChevronRight, Eye, Calendar, Star, AlertCircle
+  ChevronRight, Eye, Calendar, Star, AlertCircle, Zap, Cpu
 } from 'lucide-react'
-import { fetchBooks, fetchRankings } from '@/api/books'
+import { fetchBooks, fetchRankings, fetchRecommendations } from '@/api/books'
 import { fetchDashboard } from '@/api/stats'
-import { Book } from '@/types'
+import { Book, RecommendBook } from '@/types'
 import { useToast } from '@/components/Toast'
+
+const STRATEGY_TABS = [
+  { key: 'hybrid', label: '智能推荐', icon: Cpu },
+  { key: 'hot', label: '热门', icon: Flame },
+  { key: 'new', label: '新书', icon: Zap },
+] as const
 
 const CATEGORIES = [
   { name: '玄幻', icon: '✦', color: 'from-purple-500 to-indigo-600' },
@@ -29,30 +35,111 @@ const RANK_TABS = [
   { key: 'new-arrival', label: '最新上架' },
 ] as const
 
-function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
+function SectionHeader({ icon: Icon, title, action }: { icon: React.ElementType; title: string; action?: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2.5 mb-5">
-      <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
-        <Icon className="w-4 h-4 text-accent" />
+    <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center gap-2.5">
+        <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
+          <Icon className="w-4 h-4 text-accent" />
+        </div>
+        <h2 className="text-lg font-bold text-text-primary">{title}</h2>
       </div>
-      <h2 className="text-lg font-bold text-text-primary">{title}</h2>
+      {action}
     </div>
   )
 }
 
-function BookCover({ book }: { book: Book }) {
+function RecommendCard({ book, onClick }: { book: RecommendBook; onClick: () => void }) {
+  const formatTime = (dateStr: string) => {
+    if (!dateStr) return ''
+    const now = new Date()
+    const date = new Date(dateStr)
+    const diff = Math.floor((now.getTime() - date.getTime()) / 1000)
+    if (diff < 60) return '刚刚'
+    if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`
+    if (diff < 604800) return `${Math.floor(diff / 86400)}天前`
+    return date.toLocaleDateString('zh-CN')
+  }
+
   return (
-    <div
-      className="w-36 h-48 rounded-xl flex-shrink-0 flex items-center justify-center relative overflow-hidden group-hover:scale-105 transition-transform duration-300"
-      style={{ background: `linear-gradient(135deg, ${book.gradient?.[0] || '#667eea'}, ${book.gradient?.[1] || '#764ba2'})` }}
+    <button
+      onClick={onClick}
+      className="group relative bg-bg-secondary/50 backdrop-blur-sm rounded-2xl border border-border overflow-hidden text-left card-hover"
     >
-      <div className="absolute inset-0 bg-black/10" />
-      <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 30% 40%, rgba(255,255,255,0.3), transparent 60%)' }} />
-      <BookOpen className="w-10 h-10 text-white/80 relative z-10" />
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2 z-10">
-        <p className="text-white text-xs font-medium truncate">{book.title}</p>
+      <div
+        className="h-1.5"
+        style={{ background: `linear-gradient(90deg, ${book.gradient?.[0] || '#667eea'}, ${book.gradient?.[1] || '#764ba2'})` }}
+      />
+
+      {book.reason && (
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-bg-elevated/80 backdrop-blur-sm border border-border text-xs">
+          <span className="text-accent">{book.reason}</span>
+          {book.score > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full bg-accent/10 text-accent font-bold text-[10px]">
+              {book.score}分
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className="p-5 flex gap-4">
+        <div
+          className="w-[88px] h-[116px] rounded-xl flex-shrink-0 flex flex-col items-center justify-center relative overflow-hidden"
+          style={{ background: `linear-gradient(135deg, ${book.gradient?.[0] || '#667eea'}, ${book.gradient?.[1] || '#764ba2'})` }}
+        >
+          <span className="text-3xl font-extrabold text-white/90 relative z-10">
+            {(book.title || '书')[0]}
+          </span>
+          <span className="text-[10px] text-white/70 mt-1 relative z-10">
+            {book.chapter_count}章
+          </span>
+          <div className="absolute inset-0 bg-black/5" />
+        </div>
+
+        <div className="flex-1 min-w-0 flex flex-col">
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-base font-bold text-text-primary truncate group-hover:text-accent transition-colors">
+              {book.title}
+            </h3>
+            {book.is_new && (
+              <span className="px-1.5 py-0.5 rounded-full bg-danger/90 text-white text-[10px] font-bold tracking-wider">
+                NEW
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-text-secondary mb-2">
+            <span>{book.author || '未知作者'}</span>
+            <span className="text-text-muted">•</span>
+            <span>{formatTime(book.updated_at)}</span>
+          </div>
+
+          <p className="text-xs text-text-secondary line-clamp-2 flex-1 mb-3">
+            {book.description || '暂无简介'}
+          </p>
+
+          {book.tags && book.tags.length > 0 && (
+            <div className="flex gap-1.5 flex-wrap mb-3">
+              {book.tags.slice(0, 3).map((tag) => (
+                <span
+                  key={tag.id}
+                  className="px-2 py-0.5 rounded-full bg-bg-tertiary text-text-secondary text-[10px] border border-border"
+                >
+                  {tag.name}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 mt-auto">
+            <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-gradient-to-r from-accent to-amber-500 text-white text-xs font-semibold hover:shadow-lg hover:shadow-accent/25 active:scale-95 transition-all">
+              <BookOpen className="w-3 h-3" /> 查看详情
+            </span>
+          </div>
+        </div>
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -80,6 +167,7 @@ function SkeletonCard({ className = '' }: { className?: string }) {
 
 export default function HomePortal() {
   const [search, setSearch] = useState('')
+  const [activeStrategy, setActiveStrategy] = useState<string>('hybrid')
   const [activeRankTab, setActiveRankTab] = useState<string>('hot-today')
   const hotScrollRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -101,8 +189,15 @@ export default function HomePortal() {
     queryFn: fetchDashboard,
   })
 
+  const { data: recData, isLoading: recLoading } = useQuery({
+    queryKey: ['recommendations', activeStrategy],
+    queryFn: () => fetchRecommendations(activeStrategy, 12),
+    staleTime: 2 * 60 * 1000,
+  })
+
   const books = useMemo(() => booksData?.items ?? [], [booksData])
   const rankings = useMemo(() => rankingsData ?? { hot_today: [], hot_week: [], new_arrivals: [] }, [rankingsData])
+  const recommendations = useMemo(() => recData?.data ?? [], [recData])
 
   const hotBooks = useMemo(() => {
     const src = rankings.hot_today.length > 0 ? rankings.hot_today : books
@@ -130,7 +225,7 @@ export default function HomePortal() {
       toast.warning('请输入搜索关键词')
       return
     }
-    navigate(`/books?search=${encodeURIComponent(search.trim())}`)
+    navigate(`/search?q=${encodeURIComponent(search.trim())}`)
   }, [search, navigate, toast])
 
   const scrollHot = useCallback((dir: 'left' | 'right') => {
@@ -166,7 +261,7 @@ export default function HomePortal() {
         <div className="relative max-w-6xl mx-auto px-6 py-16 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent/10 border border-accent/20 mb-6">
             <Sparkles className="w-3.5 h-3.5 text-accent" />
-            <span className="text-accent text-sm font-medium">海量好书，畅享阅读</span>
+            <span className="text-accent text-sm font-medium">智能推荐 · 海量好书</span>
           </div>
 
           <h1 className="text-4xl md:text-5xl font-extrabold text-text-primary mb-4 tracking-tight">
@@ -210,6 +305,58 @@ export default function HomePortal() {
       </section>
 
       <div className="max-w-6xl mx-auto px-6 pb-16 space-y-12">
+        {/* AI Recommendations */}
+        <section>
+          <SectionHeader
+            icon={Cpu}
+            title="智能推荐"
+            action={
+              <div className="flex gap-1 p-1 rounded-full bg-bg-secondary border border-border">
+                {STRATEGY_TABS.map((tab) => {
+                  const Icon = tab.icon
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveStrategy(tab.key)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                        activeStrategy === tab.key
+                          ? 'bg-accent text-white shadow-md shadow-accent/25'
+                          : 'text-text-secondary hover:bg-bg-tertiary'
+                      }`}
+                    >
+                      <Icon className="w-3 h-3" />
+                      {tab.label}
+                    </button>
+                  )
+                })}
+              </div>
+            }
+          />
+
+          {recLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonCard key={i} className="h-52" />
+              ))}
+            </div>
+          ) : recommendations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-text-muted">
+              <BookOpen className="w-10 h-10 mb-3 opacity-30" />
+              <p>暂无推荐数据</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recommendations.map((book) => (
+                <RecommendCard
+                  key={book.id}
+                  book={book}
+                  onClick={() => navigate(`/books/${book.id}`)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
         {/* Hot Recommendations */}
         <section>
           <SectionHeader icon={Flame} title="热门推荐" />
@@ -253,7 +400,17 @@ export default function HomePortal() {
                     onClick={() => navigate(`/books/${book.id}`)}
                     className="snap-start flex-shrink-0 group cursor-pointer text-left"
                   >
-                    <BookCover book={book} />
+                    <div
+                      className="w-36 h-48 rounded-xl flex-shrink-0 flex items-center justify-center relative overflow-hidden group-hover:scale-105 transition-transform duration-300"
+                      style={{ background: `linear-gradient(135deg, ${book.gradient?.[0] || '#667eea'}, ${book.gradient?.[1] || '#764ba2'})` }}
+                    >
+                      <div className="absolute inset-0 bg-black/10" />
+                      <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 30% 40%, rgba(255,255,255,0.3), transparent 60%)' }} />
+                      <BookOpen className="w-10 h-10 text-white/80 relative z-10" />
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2 z-10">
+                        <p className="text-white text-xs font-medium truncate">{book.title}</p>
+                      </div>
+                    </div>
                     <div className="mt-2 w-36">
                       <p className="text-sm font-medium text-text-primary truncate group-hover:text-accent transition-colors">{book.title}</p>
                       <p className="text-xs text-text-secondary mt-0.5 truncate">{book.author || '未知作者'}</p>
@@ -270,7 +427,6 @@ export default function HomePortal() {
 
         {/* Latest Updates & Rankings */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-          {/* Latest Updates */}
           <section className="lg:col-span-3">
             <SectionHeader icon={Clock} title="最新更新" />
 
@@ -318,7 +474,6 @@ export default function HomePortal() {
             )}
           </section>
 
-          {/* Rankings */}
           <section className="lg:col-span-2">
             <SectionHeader icon={TrendingUp} title="排行榜" />
 

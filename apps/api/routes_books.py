@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import time
 
 from django.conf import settings
 from django.core.cache import cache
@@ -15,6 +16,8 @@ from apps.books.models import Book
 from apps.chapters.models import Chapter
 from apps.favorites.models import Favorite
 from apps.reader.models import ReadingProgress
+from apps.recommender.engine import recommend_for_user, recommend_similar_books, get_engine as get_rec_engine
+from apps.recommender.search import search as hybrid_search, build_index as build_search_index, get_stats as get_search_stats
 
 from .auth import jwt_auth, optional_jwt_auth
 from .schemas import (
@@ -310,4 +313,82 @@ def get_categories(request) -> list:
     )
     logger.info(f'[Categories] 获取分类列表成功 ({qs.count()}个分类)')
     return list(qs)
+
+
+@router.get('/recommendations/', auth=optional_jwt_auth)
+def get_recommendations(request, strategy: str = 'hybrid', limit: int = 20, page: int = 1):
+    user = request.user if request.user.is_authenticated else None
+    limit = min(limit, 50)
+    all_recs = recommend_for_user(user=user, limit=limit * page, strategy=strategy)
+    start = (page - 1) * limit
+    page_recs = all_recs[start:start + limit]
+    has_next = len(all_recs) > start + limit
+    logger.info(f'[Recommendations] strategy={strategy}, page={page}, limit={limit}, returned={len(page_recs)}')
+    return {
+        'success': True,
+        'data': page_recs,
+        'pagination': {
+            'page': page,
+            'per_page': limit,
+            'total': len(all_recs),
+            'has_next': has_next,
+        },
+    }
+
+
+@router.get('/books/{book_id}/similar/', auth=optional_jwt_auth)
+def get_similar_books(request, book_id: int, limit: int = 6):
+    results = recommend_similar_books(book_id, limit)
+    logger.info(f'[Similar] book_id={book_id}, found={len(results)}')
+    return {'success': True, 'data': results}
+
+
+@router.get('/search/advanced/', auth=optional_jwt_auth)
+def advanced_search(request, q: str = '', limit: int = 20, page: int = 1):
+    query = q.strip()
+    if not query or len(query) < 2:
+        return {
+            'success': False,
+            'data': [],
+            'pagination': {'page': page, 'per_page': limit, 'total': 0, 'has_next': False},
+            'search_time_ms': 0,
+        }
+
+    start_time = time.monotonic()
+    all_results = hybrid_search(query, limit=100)
+    search_time_ms = (time.monotonic() - start_time) * 1000
+
+    total = len(all_results)
+    start = (page - 1) * limit
+    page_results = all_results[start:start + limit]
+    has_next = total > start + limit
+
+    logger.info(f'[AdvancedSearch] query="{query}", total={total}, time={search_time_ms:.0f}ms')
+    return {
+        'success': True,
+        'data': page_results,
+        'pagination': {'page': page, 'per_page': limit, 'total': total, 'has_next': has_next},
+        'search_time_ms': round(search_time_ms, 1),
+    }
+
+
+@router.get('/search/stats/', auth=optional_jwt_auth)
+def search_engine_stats(request):
+    stats = get_search_stats()
+    return {'success': True, 'data': stats}
+
+
+@router.post('/search/build-index/', auth=jwt_auth)
+def build_search_engine_index(request, force: bool = False):
+    count = build_search_index(force=force)
+    logger.info(f'[SearchIndex] 索引构建完成: {count}本书')
+    return {'success': True, 'message': f'索引构建完成: {count}本书'}
+
+
+@router.post('/recommendations/build-index/', auth=jwt_auth)
+def build_recommendation_index(request, force: bool = False):
+    engine = get_rec_engine()
+    count = engine.build_index(force=force)
+    logger.info(f'[RecIndex] 推荐索引构建完成: {count}本书')
+    return {'success': True, 'message': f'推荐索引构建完成: {count}本书'}
 
