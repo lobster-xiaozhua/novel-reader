@@ -130,92 +130,7 @@ def batch_import(request) -> dict:
     return {'success': True, 'imported': imported, 'errors': errors, 'total': len(files)}
 
 
-@router.get('/books/{book_id}/', response=BookDetailSchema, auth=optional_jwt_auth)
-def get_book(request, book_id: int) -> dict:
-    book = get_object_or_404(Book.objects.prefetch_related('tags'), id=book_id)
-    is_fav: bool = False
-    progress = None
-    if request.user.is_authenticated:
-        is_fav = Favorite.objects.filter(user=request.user, book=book).exists()
-        rp = ReadingProgress.objects.filter(user=request.user, book=book).first()
-        if rp:
-            progress = {'chapter_id': rp.chapter_id, 'position': rp.position}
-    return {
-        'id': book.id,
-        'title': book.title,
-        'author': book.author,
-        'category': book.category,
-        'description': book.description,
-        'total_chapters': book.total_chapters,
-        'tags': [{'id': t.id, 'name': t.name, 'color': t.color} for t in book.tags.all()],
-        'gradient': book.cover_gradient,
-        'is_favorited': is_fav,
-        'reading_progress': progress,
-        'created_at': book.created_at.isoformat(),
-        'updated_at': book.updated_at.isoformat(),
-    }
-
-
-@router.get('/books/{book_id}/chapters/', response=list[ChapterSchema], auth=optional_jwt_auth)
-def list_chapters(request, book_id: int):
-    book = get_object_or_404(Book, id=book_id)
-    return book.chapters.all()
-
-
-@router.get('/books/{book_id}/chapters/{chapter_id}/', response=ChapterContentSchema, auth=optional_jwt_auth)
-def get_chapter_content(request, book_id: int, chapter_id: int) -> dict:
-    chapter = get_object_or_404(Chapter, book_id=book_id, id=chapter_id)
-    content: str = ''
-    cache_key = f'chapter_content:{chapter.id}'
-    content = cache.get(cache_key)
-    if content is None and chapter.file_path:
-        file_path = os.path.normpath(chapter.file_path)
-        books_root = os.path.normpath(str(settings.BOOKS_DIR))
-        if not file_path.startswith(books_root):
-            logger.error(f'[Chapter] 文件路径越界: {chapter.file_path}')
-            content = ''
-        elif os.path.exists(file_path):
-            for enc in ('utf-8', 'gbk', 'gb2312', 'utf-16'):
-                try:
-                    with open(file_path, 'r', encoding=enc) as f:
-                        content = f.read()
-                    cache.set(cache_key, content, 300)
-                    break
-                except UnicodeDecodeError:
-                    continue
-                except Exception as exc:
-                    logger.error(f'[Chapter] 读取失败 {file_path}: {exc}')
-                    break
-    return {
-        'id': chapter.id,
-        'chapter_number': chapter.chapter_number,
-        'title': chapter.title,
-        'word_count': chapter.word_count,
-        'content': content or '',
-    }
-
-
-@router.get('/search/', response=SearchResponse, auth=optional_jwt_auth)
-def search_books(request, q: str = '') -> dict:
-    query: str = q.strip()
-    results: list[dict] = []
-    suggestions: list[str] = []
-    total: int = 0
-    if query:
-        qs = Book.objects.filter(
-            Q(title__icontains=query) | Q(author__icontains=query) | Q(description__icontains=query)
-        )
-        total = qs.count()
-        results = [
-            {'id': b.id, 'title': b.title, 'author': b.author, 'category': b.category}
-            for b in qs[:20]
-        ]
-    if len(query) >= 2:
-        suggestions = list(
-            Book.objects.filter(title__istartswith=query).values_list('title', flat=True)[:10]
-        )
-    return {'query': query, 'results': results, 'total': total, 'suggestions': suggestions}
-
+# Specific routes MUST be defined before parameterized routes
 @router.get('/books/rankings/', response=RankingsResponse, auth=optional_jwt_auth)
 def get_rankings(request) -> dict:
     now = timezone.now()
@@ -225,7 +140,7 @@ def get_rankings(request) -> dict:
     hot_today_qs = (
         Book.objects.prefetch_related('tags')
         .annotate(
-            _today_favs=Count('favorites', filter=Q(favorites__created_at__gte=today_cutoff)),
+            _today_favs=Count('favorite', filter=Q(favorite__created_at__gte=today_cutoff)),
             _ch_count=Count('chapters'),
         )
         .filter(_today_favs__gt=0)
@@ -242,7 +157,7 @@ def get_rankings(request) -> dict:
     hot_week_qs = (
         Book.objects.prefetch_related('tags')
         .annotate(
-            _week_favs=Count('favorites', filter=Q(favorites__created_at__gte=week_cutoff)),
+            _week_favs=Count('favorite', filter=Q(favorite__created_at__gte=week_cutoff)),
             _ch_count=Count('chapters'),
         )
         .filter(_week_favs__gt=0)
@@ -302,6 +217,28 @@ def get_rankings(request) -> dict:
     }
 
 
+@router.get('/search/', response=SearchResponse, auth=optional_jwt_auth)
+def search_books(request, q: str = '') -> dict:
+    query: str = q.strip()
+    results: list[dict] = []
+    suggestions: list[str] = []
+    total: int = 0
+    if query:
+        qs = Book.objects.filter(
+            Q(title__icontains=query) | Q(author__icontains=query) | Q(description__icontains=query)
+        )
+        total = qs.count()
+        results = [
+            {'id': b.id, 'title': b.title, 'author': b.author, 'category': b.category}
+            for b in qs[:20]
+        ]
+    if len(query) >= 2:
+        suggestions = list(
+            Book.objects.filter(title__istartswith=query).values_list('title', flat=True)[:10]
+        )
+    return {'query': query, 'results': results, 'total': total, 'suggestions': suggestions}
+
+
 @router.get('/books/categories/', response=list[CategoryWithCount], auth=optional_jwt_auth)
 def get_categories(request) -> list:
     qs = (
@@ -313,6 +250,93 @@ def get_categories(request) -> list:
     )
     logger.info(f'[Categories] 获取分类列表成功 ({qs.count()}个分类)')
     return list(qs)
+
+
+@router.get('/books/', response=list[BookListSchema], auth=optional_jwt_auth)
+@paginate
+def list_books(request, tag: str = None, category: str = None, search: str = None):
+    qs = Book.objects.prefetch_related('tags').annotate(
+        _chapter_count=Count('chapters', output_field=models.IntegerField())
+    )
+    if tag:
+        qs = qs.filter(tags__name=tag)
+    if category:
+        qs = qs.filter(category=category)
+    if search:
+        qs = qs.filter(Q(title__icontains=search) | Q(author__icontains=search))
+    return qs
+
+
+@router.get('/books/{book_id}/', response=BookDetailSchema, auth=optional_jwt_auth)
+def get_book(request, book_id: int) -> dict:
+    book = get_object_or_404(Book.objects.prefetch_related('tags'), id=book_id)
+    is_fav: bool = False
+    progress = None
+    if request.user.is_authenticated:
+        is_fav = Favorite.objects.filter(user=request.user, book=book).exists()
+        rp = ReadingProgress.objects.filter(user=request.user, book=book).first()
+        if rp:
+            progress = {'chapter_id': rp.chapter_id, 'position': rp.position}
+    return {
+        'id': book.id,
+        'title': book.title,
+        'author': book.author,
+        'category': book.category,
+        'description': book.description,
+        'total_chapters': book.total_chapters,
+        'tags': [{'id': t.id, 'name': t.name, 'color': t.color} for t in book.tags.all()],
+        'gradient': book.cover_gradient,
+        'is_favorited': is_fav,
+        'reading_progress': progress,
+        'created_at': book.created_at.isoformat(),
+        'updated_at': book.updated_at.isoformat(),
+    }
+
+
+@router.get('/books/{book_id}/similar/', auth=optional_jwt_auth)
+def get_similar_books(request, book_id: int, limit: int = 6):
+    results = recommend_similar_books(book_id, limit)
+    logger.info(f'[Similar] book_id={book_id}, found={len(results)}')
+    return {'success': True, 'data': results}
+
+
+@router.get('/books/{book_id}/chapters/', response=list[ChapterSchema], auth=optional_jwt_auth)
+def list_chapters(request, book_id: int):
+    book = get_object_or_404(Book, id=book_id)
+    return book.chapters.all()
+
+
+@router.get('/books/{book_id}/chapters/{chapter_id}/', response=ChapterContentSchema, auth=optional_jwt_auth)
+def get_chapter_content(request, book_id: int, chapter_id: int) -> dict:
+    chapter = get_object_or_404(Chapter, book_id=book_id, id=chapter_id)
+    content: str = ''
+    cache_key = f'chapter_content:{chapter.id}'
+    content = cache.get(cache_key)
+    if content is None and chapter.file_path:
+        file_path = os.path.normpath(chapter.file_path)
+        books_root = os.path.normpath(str(settings.BOOKS_DIR))
+        if not file_path.startswith(books_root):
+            logger.error(f'[Chapter] 文件路径越界: {chapter.file_path}')
+            content = ''
+        elif os.path.exists(file_path):
+            for enc in ('utf-8', 'gbk', 'gb2312', 'utf-16'):
+                try:
+                    with open(file_path, 'r', encoding=enc) as f:
+                        content = f.read()
+                    cache.set(cache_key, content, 300)
+                    break
+                except UnicodeDecodeError:
+                    continue
+                except Exception as exc:
+                    logger.error(f'[Chapter] 读取失败 {file_path}: {exc}')
+                    break
+    return {
+        'id': chapter.id,
+        'chapter_number': chapter.chapter_number,
+        'title': chapter.title,
+        'word_count': chapter.word_count,
+        'content': content or '',
+    }
 
 
 @router.get('/recommendations/', auth=optional_jwt_auth)

@@ -84,7 +84,7 @@ class RecommendationEngine:
 
         books = Book.objects.prefetch_related('tags').annotate(
             _ch_count=Count('chapters'),
-            _fav_count=Count('favorites'),
+            _fav_count=Count('favorite'),
         ).order_by('-_fav_count', '-updated_at')[:limit]
 
         results = []
