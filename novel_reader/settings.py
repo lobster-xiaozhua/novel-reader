@@ -159,6 +159,13 @@ CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[]) if not DEBUG else []
 
+BOOKS_DIR = BASE_DIR / 'data' / 'books'
+LOGS_DIR = BASE_DIR / 'data' / 'logs'
+CACHE_DIR = BASE_DIR / 'data' / 'cache'
+
+for _d in [BOOKS_DIR, LOGS_DIR, CACHE_DIR]:
+    _d.mkdir(parents=True, exist_ok=True)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -270,13 +277,6 @@ LOGGING = {
 LOGIN_URL = '/login'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login'
-
-BOOKS_DIR = BASE_DIR / 'data' / 'books'
-LOGS_DIR = BASE_DIR / 'data' / 'logs'
-CACHE_DIR = BASE_DIR / 'data' / 'cache'
-
-for _d in [BOOKS_DIR, LOGS_DIR, CACHE_DIR]:
-    _d.mkdir(parents=True, exist_ok=True)
 
 CELERY_BROKER_URL = env('CELERY_BROKER_URL')
 CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND')
