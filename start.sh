@@ -257,23 +257,74 @@ build_frontend() {
     fi
 
     cd frontend
+
+    # 显示前端环境信息
+    log_detail "Node: $(node --version) | npm: $(npm --version)"
+    log_detail "工作目录：$(pwd)"
+
     local output
-    output=$(npm run build 2>&1) || {
+    local start_time=$SECONDS
+    output=$(npm run build 2>&1)
+    local exit_code=$?
+    local build_seconds=$((SECONDS - start_time))
+
+    if [ $exit_code -ne 0 ]; then
         cd ..
-        log_error "前端构建失败"
-        echo "$output" | grep -iE "error|failed" | head -5 | while read -r line; do
-            log_error "  $line"
-        done
+        log_error "前端构建失败 (退出码：$exit_code, 耗时：${build_seconds}s)"
         echo ""
-        log_error "建议: cd frontend && rm -rf node_modules dist && npm install && npm run build"
+
+        # 输出完整日志（不截断）
+        echo -e "${DIM}===== 完整构建日志 =====${NC}"
+        echo "$output"
+        echo -e "${DIM}===== 日志结束 =====${NC}"
+        echo ""
+
+        # 单独提取错误和警告行（高亮显示）
+        local error_lines
+        error_lines=$(echo "$output" | grep -niE "error|failed|cannot|unable" || true)
+        if [ -n "$error_lines" ]; then
+            log_error "错误摘要:"
+            echo "$error_lines" | head -10 | while IFS= read -r line; do
+                log_error "  $line"
+            done
+            echo ""
+        fi
+
+        # 常见错误诊断
+        if echo "$output" | grep -qiE "ENOENT|Cannot find module|Module not found"; then
+            log_error "诊断：缺少依赖模块"
+            log_detail "建议：cd frontend && rm -rf node_modules && npm install && npm run build"
+        elif echo "$output" | grep -qiE "SyntaxError|Unexpected token"; then
+            log_error "诊断：代码语法错误"
+            log_detail "建议：检查最近修改的 TypeScript/JSX 文件"
+        elif echo "$output" | grep -qiE "Type.*error|TS[0-9]+"; then
+            log_error "诊断：TypeScript 类型错误"
+            log_detail "建议：cd frontend && npx tsc --noEmit 查看详细信息"
+        elif echo "$output" | grep -qiE "EACCES|permission denied"; then
+            log_error "诊断：权限不足"
+            log_detail "建议：sudo chown -R $USER:$USER frontend/"
+        else
+            log_error "诊断：未知错误，请查看上方完整日志"
+            log_detail "建议：cd frontend && rm -rf node_modules dist && npm install && npm run build"
+        fi
+
         exit 1
-    }
+    fi
 
     local build_time
-    build_time=$(echo "$output" | grep -oE 'built in [0-9]+ms' || true)
+    build_time=$(echo "$output" | grep -oE 'built in [0-9]+ms' || echo "耗时 ${build_seconds}s")
     local chunk_count
     chunk_count=$(echo "$output" | grep -cE "^dist/" || true)
-    log_detail "${chunk_count} 个文件, ${build_time}"
+
+    # 显示构建产物大小
+    local total_size
+    if command -v du &> /dev/null; then
+        total_size=$(du -sh dist/ 2>/dev/null | cut -f1 || echo "?")
+        log_detail "${chunk_count} 个文件，${build_time}, 总大小：${total_size}"
+    else
+        log_detail "${chunk_count} 个文件，${build_time}"
+    fi
+
     cd ..
     step_done
 }
