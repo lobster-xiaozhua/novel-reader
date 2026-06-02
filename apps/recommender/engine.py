@@ -1,5 +1,5 @@
+import hashlib
 import logging
-import math
 import time
 from collections import defaultdict
 from threading import Lock
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 _cache_lock = Lock()
 _ENGINE_CACHE_KEY = 'recommender:engine_data'
 _ENGINE_CACHE_TTL = 600
+_RESULT_CACHE_TTL = 300
 
 
 class RecommendationEngine:
@@ -32,6 +33,21 @@ class RecommendationEngine:
         self._tags_index = {}
         self._category_index = {}
         self._last_build = 0
+        self._stats = {'cache_hits': 0, 'cache_misses': 0, 'total_queries': 0}
+
+    def _cache_key(self, prefix, **kwargs):
+        raw = f'{prefix}:{sorted(kwargs.items())}'
+        return f'rec:{prefix}:{hashlib.md5(raw.encode()).hexdigest()[:12]}'
+
+    def _get_cached(self, key):
+        result = cache.get(key)
+        if result is not None:
+            self._stats['cache_hits'] += 1
+        return result
+
+    def _set_cached(self, key, value, ttl=_RESULT_CACHE_TTL):
+        cache.set(key, value, ttl)
+        self._stats['cache_misses'] += 1
 
     def build_index(self, force=False):
         from apps.books.models import Book
@@ -80,6 +96,13 @@ class RecommendationEngine:
 
     def get_hot_recommendations(self, limit=20):
         from apps.books.models import Book
+
+        cache_key = self._cache_key('hot', limit=limit)
+        cached = self._get_cached(cache_key)
+        if cached:
+            logger.debug(f'[Recommender] 命中缓存: {cache_key}')
+            return cached
+
         self._ensure_index()
 
         books = Book.objects.prefetch_related('tags').annotate(
@@ -90,10 +113,19 @@ class RecommendationEngine:
         results = []
         for b in books:
             results.append(self._book_to_recommendation(b, reason='🔥 热门推荐'))
+
+        self._set_cached(cache_key, results)
         return results
 
     def get_new_recommendations(self, limit=10):
         from apps.books.models import Book
+
+        cache_key = self._cache_key('new', limit=limit)
+        cached = self._get_cached(cache_key)
+        if cached:
+            logger.debug(f'[Recommender] 命中缓存: {cache_key}')
+            return cached
+
         self._ensure_index()
 
         books = Book.objects.prefetch_related('tags').annotate(
@@ -103,15 +135,26 @@ class RecommendationEngine:
         results = []
         for b in books:
             results.append(self._book_to_recommendation(b, reason='✨ 新书上架'))
+
+        self._set_cached(cache_key, results)
         return results
 
     def get_personalized_recommendations(self, user, limit=20):
         from apps.books.models import Book
         from apps.reader.models import ReadingProgress
+
+        cache_key = self._cache_key('personalized', user_id=user.id if user and user.is_authenticated else 'anon', limit=limit)
+        cached = self._get_cached(cache_key)
+        if cached:
+            logger.debug(f'[Recommender] 命中个性化缓存: {cache_key}')
+            return cached
+
         self._ensure_index()
 
         if not user or not user.is_authenticated:
-            return self.get_hot_recommendations(limit)
+            results = self.get_hot_recommendations(limit)
+            self._set_cached(cache_key, results)
+            return results
 
         read_books = ReadingProgress.objects.filter(user=user).select_related('book')
         read_tags = set()
@@ -123,7 +166,9 @@ class RecommendationEngine:
                 read_categories.add(rp.book.category)
 
         if not read_tags and not read_categories:
-            return self.get_hot_recommendations(limit)
+            results = self.get_hot_recommendations(limit)
+            self._set_cached(cache_key, results)
+            return results
 
         qs = Book.objects.prefetch_related('tags').annotate(
             _ch_count=Count('chapters'),
@@ -151,10 +196,18 @@ class RecommendationEngine:
                 if r['id'] not in existing_ids:
                     results.append(r)
 
+        self._set_cached(cache_key, results)
         return results
 
     def get_similar_books(self, book_id, limit=6):
         from apps.books.models import Book
+
+        cache_key = self._cache_key('similar', book_id=book_id, limit=limit)
+        cached = self._get_cached(cache_key)
+        if cached:
+            logger.debug(f'[Recommender] 命中相似缓存: {cache_key}')
+            return cached
+
         self._ensure_index()
 
         try:
@@ -166,7 +219,9 @@ class RecommendationEngine:
         target_cat = target.category
 
         if not target_tags and not target_cat:
-            return self.get_hot_recommendations(limit)
+            results = self.get_hot_recommendations(limit)
+            self._set_cached(cache_key, results)
+            return results
 
         qs = Book.objects.prefetch_related('tags').annotate(
             _ch_count=Count('chapters'),
@@ -190,6 +245,8 @@ class RecommendationEngine:
             results.append(self._book_to_recommendation(
                 b, reason=f'📚 相似度 {pct}%', score=pct
             ))
+
+        self._set_cached(cache_key, results)
         return results
 
     def get_hybrid_recommendations(self, user=None, limit=30):
@@ -207,6 +264,26 @@ class RecommendationEngine:
                 results.append(rec)
 
         return results[:limit]
+
+    def invalidate_cache(self, pattern=None):
+        if pattern:
+            keys = cache.keys(f'rec:{pattern}:*')
+            for k in keys:
+                cache.delete(k)
+        else:
+            cache.delete_pattern('rec:*')
+        logger.info(f'[Recommender] 缓存已清除: {pattern or "all"}')
+
+    def get_stats(self):
+        total = self._stats['cache_hits'] + self._stats['cache_misses']
+        hit_rate = (self._stats['cache_hits'] / total * 100) if total > 0 else 0
+        return {
+            'cache_hits': self._stats['cache_hits'],
+            'cache_misses': self._stats['cache_misses'],
+            'cache_hit_rate': f'{hit_rate:.1f}%',
+            'total_queries': total,
+            'index_size': len(self._books_cache) if self._books_cache else 0,
+        }
 
     def _book_to_recommendation(self, book, reason='', score=0):
         from django.utils import timezone

@@ -61,6 +61,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'novel_reader.middleware.APIMonitorMiddleware',
     'novel_reader.middleware.RequestTimingMiddleware',
     'novel_reader.middleware.JWTAuthMiddleware',
 ]

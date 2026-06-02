@@ -9,6 +9,8 @@ from django.core.cache import cache
 logger = logging.getLogger(__name__)
 
 _search_lock = Lock()
+_SEARCH_RESULT_TTL = 300
+_SEARCH_STATS_TTL = 60
 
 
 class HybridSearchEngine:
@@ -30,6 +32,14 @@ class HybridSearchEngine:
         self.is_ready = False
         self.total_books = 0
         self.total_chapters = 0
+        self._perf_stats = {'total_searches': 0, 'cache_hits': 0, 'total_ms': 0}
+
+    def _cache_key(self, query, limit):
+        raw = f'search:{query.lower().strip()}:{limit}'
+        return f'srch:{hashlib.md5(raw.encode()).hexdigest()[:12]}'
+
+    def _get_stats_key(self):
+        return 'search:perf_stats'
 
     def build_index(self, force=False):
         from apps.books.models import Book
@@ -111,6 +121,13 @@ class HybridSearchEngine:
         self._ensure_index()
         if not query or not self.is_ready:
             return []
+
+        cache_key = self._cache_key(query, limit)
+        cached = cache.get(cache_key)
+        if cached is not None:
+            self._perf_stats['cache_hits'] += 1
+            logger.debug(f'[SearchEngine] 命中缓存: {query}')
+            return cached
 
         start = time.time()
         query_lower = query.lower()
@@ -197,7 +214,13 @@ class HybridSearchEngine:
             })
 
         elapsed = time.time() - start
-        logger.info(f'[SearchEngine] 搜索 "{query}": {len(results)}本书, 耗时{int(elapsed*1000)}ms')
+        elapsed_ms = int(elapsed * 1000)
+        self._perf_stats['total_searches'] += 1
+        self._perf_stats['total_ms'] += elapsed_ms
+
+        logger.info(f'[SearchEngine] 搜索 "{query}": {len(results)}本书, 耗时{elapsed_ms}ms')
+
+        cache.set(cache_key, results, _SEARCH_RESULT_TTL)
         return results
 
     def _expand_query(self, query):
@@ -240,12 +263,35 @@ class HybridSearchEngine:
         if not self.is_ready:
             self.build_index()
 
+    def invalidate_cache(self, query=None):
+        if query:
+            key = self._cache_key(query, 50)
+            cache.delete(key)
+            logger.info(f'[SearchEngine] 缓存已清除: {query}')
+        else:
+            cache.delete_pattern('srch:*')
+            logger.info('[SearchEngine] 搜索缓存已全部清除')
+
     def get_stats(self):
-        return {
+        stats = cache.get(self._get_stats_key())
+        if stats:
+            return stats
+
+        total = self._perf_stats['total_searches']
+        cache_hits = self._perf_stats['cache_hits']
+        avg_ms = (self._perf_stats['total_ms'] / total) if total > 0 else 0
+
+        stats = {
             'total_books': self.total_books,
             'total_chapters': self.total_chapters,
             'is_ready': self.is_ready,
+            'total_searches': total,
+            'cache_hits': cache_hits,
+            'cache_misses': total - cache_hits,
+            'avg_response_ms': round(avg_ms, 1),
         }
+        cache.set(self._get_stats_key(), stats, _SEARCH_STATS_TTL)
+        return stats
 
 
 _engine = None
@@ -271,3 +317,8 @@ def build_index(force=False):
 def get_stats():
     engine = get_engine()
     return engine.get_stats()
+
+
+def invalidate_cache(query=None):
+    engine = get_engine()
+    return engine.invalidate_cache(query)

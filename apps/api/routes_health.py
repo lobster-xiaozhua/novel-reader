@@ -53,7 +53,6 @@ def health_detail(request) -> dict:
     from apps.books.models import Book
     from apps.crawler.models import CrawlerTask
     
-    # 数据库
     db_status = 'ok'
     db_query_time = 0
     try:
@@ -66,7 +65,6 @@ def health_detail(request) -> dict:
         db_status = 'error'
         db_query_time = -1
 
-    # 缓存
     cache_status = 'ok'
     try:
         cache.set('_health_detail', 'ok', 10)
@@ -75,13 +73,11 @@ def health_detail(request) -> dict:
     except Exception:
         cache_status = 'error'
 
-    # 统计
     user_count = User.objects.count()
     book_count = Book.objects.count()
     crawler_count = CrawlerTask.objects.count()
     active_crawlers = CrawlerTask.objects.filter(status='running').count()
 
-    # 磁盘
     disk_info = {'total_gb': 0, 'free_gb': 0, 'used_pct': 0}
     try:
         usage = shutil.disk_usage('/')
@@ -91,7 +87,6 @@ def health_detail(request) -> dict:
     except Exception:
         pass
 
-    # 日志文件状态
     log_files = {}
     log_dir = settings.BASE_DIR / 'data' / 'logs'
     for fname in ['app.log', 'requests.log', 'auth.log', 'errors.log', 'crawler.log']:
@@ -104,7 +99,6 @@ def health_detail(request) -> dict:
         else:
             log_files[fname] = {'exists': False}
 
-    # 进程信息
     process_info = {
         'pid': os.getpid(),
         'start_time': datetime.fromtimestamp(os.path.getmtime(__file__)).isoformat(),
@@ -137,4 +131,26 @@ def health_detail(request) -> dict:
         },
         'logs': log_files,
         'process': process_info,
+    }
+
+
+@router.get('/health/perf/', auth=None)
+def health_perf(request) -> dict:
+    """API 性能监控数据"""
+    from novel_reader.middleware import APIMonitorMiddleware
+    from apps.recommender.engine import get_engine as get_rec_engine
+    from apps.recommender.search import get_engine as get_search_engine
+
+    api_summary = APIMonitorMiddleware.get_summary()
+    rec_stats = get_rec_engine().get_stats()
+    search_stats = get_search_engine().get_stats()
+
+    return {
+        'api': api_summary,
+        'recommender': rec_stats,
+        'search': search_stats,
+        'cache': {
+            'backend': settings.CACHES['default']['BACKEND'].split('.')[-1],
+            'timeout': settings.CACHES['default'].get('TIMEOUT', 300),
+        },
     }

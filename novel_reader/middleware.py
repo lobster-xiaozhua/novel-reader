@@ -1,6 +1,8 @@
 import logging
 import time
 import json
+from collections import defaultdict
+from threading import Lock
 
 from django.core.cache import cache
 
@@ -8,6 +10,75 @@ logger = logging.getLogger('novel_reader.request')
 auth_logger = logging.getLogger('novel_reader.auth')
 
 _JWT_USER_CACHE_TTL = 300
+
+_perf_lock = Lock()
+_api_perf_data = {
+    'total_requests': 0,
+    'total_errors': 0,
+    'path_stats': defaultdict(lambda: {'count': 0, 'total_ms': 0, 'errors': 0}),
+    'window_start': time.time(),
+    'window_requests': 0,
+}
+
+
+class APIMonitorMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        start = time.monotonic()
+        response = self.get_response(request)
+        elapsed_ms = (time.monotonic() - start) * 1000
+
+        self._record(request.path, request.method, response.status_code, elapsed_ms)
+        return response
+
+    def _record(self, path, method, status, elapsed_ms):
+        with _perf_lock:
+            _api_perf_data['total_requests'] += 1
+            _api_perf_data['window_requests'] += 1
+            if status >= 500:
+                _api_perf_data['total_errors'] += 1
+
+            key = f'{method} {path}'
+            stats = _api_perf_data['path_stats'][key]
+            stats['count'] += 1
+            stats['total_ms'] += elapsed_ms
+            if status >= 500:
+                stats['errors'] += 1
+
+    @staticmethod
+    def get_summary():
+        now = time.time()
+        with _perf_lock:
+            window_duration = now - _api_perf_data['window_start']
+            window_reqs = _api_perf_data['window_requests']
+            qps = round(window_reqs / window_duration, 1) if window_duration > 0 else 0
+
+            path_summary = {}
+            for path, stats in sorted(
+                _api_perf_data['path_stats'].items(),
+                key=lambda x: x[1]['total_ms'],
+                reverse=True
+            )[:20]:
+                count = stats['count']
+                path_summary[path] = {
+                    'count': count,
+                    'avg_ms': round(stats['total_ms'] / count, 1) if count else 0,
+                    'errors': stats['errors'],
+                }
+
+            if window_duration > 60:
+                _api_perf_data['window_start'] = now
+                _api_perf_data['window_requests'] = 0
+
+            return {
+                'total_requests': _api_perf_data['total_requests'],
+                'total_errors': _api_perf_data['total_errors'],
+                'qps': qps,
+                'uptime_seconds': round(window_duration, 0),
+                'top_paths': path_summary,
+            }
 
 
 class JWTAuthMiddleware:
