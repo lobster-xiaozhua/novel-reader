@@ -106,8 +106,15 @@ async function refreshAccessToken(): Promise<string> {
       'X-Requested-With': 'XMLHttpRequest',
     },
   })
-  if (!res.ok) throw new HttpError(res.status, await extractErrorMessage(res))
+  if (!res.ok) {
+    clearTokens()
+    emitAuthExpired()
+    throw new HttpError(res.status, await extractErrorMessage(res))
+  }
   const data = await res.json()
+  if (data?.access_token) {
+    setTokens(data.access_token)
+  }
   return data?.access_token
 }
 

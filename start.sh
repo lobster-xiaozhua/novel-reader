@@ -408,6 +408,28 @@ build_frontend() {
     fi
 
     cd ..
+
+    # 同步 index.html 到 Django 模板（自动更新 JS/CSS 引用）
+    if [ -f "frontend/dist/index.html" ]; then
+        python3 -c "
+import re, sys
+with open('frontend/dist/index.html', 'r') as f:
+    html = f.read()
+# 将 /static/ 替换为 {% static '' %} 标签
+html = html.replace('src=\"/static/', 'src=\"{% static \\'')
+html = html.replace('.js\"></script>', '.js\\' %}\"></script>')
+html = html.replace('href=\"/static/', 'href=\"{% static \\'')
+html = html.replace('.js\">', '.js\\' %}\">')
+html = html.replace('.css\">', '.css\\' %}\">')
+# 添加 Django static tag
+if '{% load static %}' not in html:
+    html = '{% load static %}' + html
+with open('templates/index.html', 'w') as f:
+    f.write(html)
+print('index.html 已同步')
+" 2>/dev/null && log_detail "Django 模板已同步"
+    fi
+
     step_done
 }
 

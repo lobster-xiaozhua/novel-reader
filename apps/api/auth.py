@@ -10,8 +10,8 @@ from django.http import JsonResponse
 logger = logging.getLogger(__name__)
 
 JWT_ALGORITHM: str = 'HS256'
-JWT_ACCESS_LIFETIME: timedelta = timedelta(minutes=15)
-JWT_REFRESH_LIFETIME: timedelta = timedelta(days=7)
+JWT_ACCESS_LIFETIME: timedelta = timedelta(hours=2)
+JWT_REFRESH_LIFETIME: timedelta = timedelta(days=30)
 JWT_COOKIE_SAMESITE: str = 'Lax'
 
 
@@ -20,7 +20,9 @@ def _get_secret() -> str:
 
 
 def _is_secure() -> bool:
-    return not settings.DEBUG
+    # 仅在 HTTPS 环境下启用 Secure 标志
+    # http://localhost 不应设置 Secure，否则浏览器不会发送 cookie
+    return getattr(settings, 'SECURE_SSL_REDIRECT', False)
 
 
 def create_access_token(user_id: int) -> str:
