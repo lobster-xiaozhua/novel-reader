@@ -76,6 +76,13 @@ check_env() {
     log_step "环境检查"
     local errors=0
 
+    # 检测 Termux 环境
+    IS_TERMUX=false
+    if [ -d "/data/data/com.termux" ] || [ -n "${TERMUX_VERSION:-}" ] || [ "$(uname -o 2>/dev/null)" = "Android" ]; then
+        IS_TERMUX=true
+        log_info "检测到 Termux 环境"
+    fi
+
     if ! command -v python3 &> /dev/null; then
         log_error "Python3 未安装"
         ((errors++))
@@ -87,7 +94,27 @@ check_env() {
         log_error "Node.js 未安装"
         ((errors++))
     else
-        log_success "Node $(node --version)"
+        local node_ver=$(node --version)
+        log_success "Node ${node_ver}"
+
+        # Termux 下检测 Node 兼容性
+        if [ "$IS_TERMUX" = true ]; then
+            local node_path=$(which node)
+            if [[ "$node_path" == *".nvm"* ]]; then
+                log_warn "当前 Node 通过 nvm 安装，在 Termux 下可能不兼容"
+                log_info "建议执行: nvm uninstall $(nvm current) && pkg install nodejs-lts"
+            fi
+
+            # 快速检测 Node 是否能正常运行
+            if ! node -e "console.log('ok')" 2>/dev/null; then
+                log_error "Node.js 无法正常运行 (Illegal instruction?)"
+                log_info "修复方法:"
+                log_detail "1. nvm uninstall $(nvm current 2>/dev/null || echo '版本')"
+                log_detail "2. pkg install nodejs-lts"
+                log_detail "3. 重新运行 ./start.sh"
+                ((errors++))
+            fi
+        fi
     fi
 
     if [ $errors -gt 0 ]; then
@@ -262,13 +289,32 @@ build_frontend() {
     log_detail "Node: $(node --version) | npm: $(npm --version)"
     log_detail "工作目录：$(pwd)"
 
+    # Termux 环境直接用 vite build（跳过 tsc 类型检查，避免 Illegal instruction）
+    local build_cmd="npm run build"
+    if [ "$IS_TERMUX" = true ]; then
+        log_info "Termux 环境：使用 vite build（跳过 tsc 类型检查）"
+        build_cmd="npx vite build"
+    fi
+
     local output
     local start_time=$SECONDS
-    output=$(npm run build 2>&1)
+    output=$($build_cmd 2>&1)
     local exit_code=$?
     local build_seconds=$((SECONDS - start_time))
 
     if [ $exit_code -ne 0 ]; then
+        # 检测 Illegal instruction 错误
+        if echo "$output" | grep -qiE "Illegal instruction|SIGILL"; then
+            cd ..
+            log_error "Node.js 与当前 CPU 不兼容 (Illegal instruction)"
+            log_info "修复方法:"
+            log_detail "1. 卸载当前 Node: nvm uninstall $(nvm current 2>/dev/null || echo '版本')"
+            log_detail "2. 安装 Termux 原生 Node: pkg install nodejs-lts"
+            log_detail "3. 清理并重建: cd frontend && rm -rf node_modules && npm install"
+            log_detail "4. 重新运行: ./start.sh"
+            exit 1
+        fi
+
         cd ..
         log_error "前端构建失败 (退出码：$exit_code, 耗时：${build_seconds}s)"
         echo ""
