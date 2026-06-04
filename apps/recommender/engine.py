@@ -78,10 +78,10 @@ class RecommendationEngine:
             if cat:
                 self._category_index[cat].append(bid)
 
-        # 一次性获取所有书籍的标签
-        from apps.books.models import BookTag
+        # 一次性获取所有书籍的标签（通过 ManyToMany 中间表）
+        from apps.books.models import Book
         tag_map = defaultdict(list)
-        for bt in BookTag.objects.select_related('tag').all():
+        for bt in Book.tags.through.objects.select_related('tag').all():
             tag_map[bt.book_id].append(bt.tag.name)
 
         for book in books:

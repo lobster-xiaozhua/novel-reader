@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'apps.reader',
     'apps.favorites',
     'apps.crawler',
+    'apps.recommender',
     'ninja',
 ]
 
