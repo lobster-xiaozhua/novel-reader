@@ -167,6 +167,7 @@ export interface AdvancedSearchResult {
     score: number
     content_preview: string
     chapter_number: number
+    total_occurrences: number
   }>
   total_matches: number
   match_reasons: string[]

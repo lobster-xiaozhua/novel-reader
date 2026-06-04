@@ -185,12 +185,15 @@ class HybridSearchEngine:
             chapters = self._chapters_index.get(book_id, {})
             for ch_id, chapter in chapters.items():
                 ch_score = 0
+                total_occurrences = 0
                 for term in query_terms:
                     tl = term.lower()
                     if tl in chapter.get('title_lower', ''):
                         ch_score += 15
+                        total_occurrences += chapter['title_lower'].count(tl)
                     if tl in chapter.get('content_lower', ''):
                         count = chapter['content_lower'].count(tl)
+                        total_occurrences += count
                         ch_score += count * 5
                         pos = chapter['content_lower'].find(tl)
                         pos_ratio = pos / max(chapter.get('content_length', 1), 1)
@@ -204,6 +207,7 @@ class HybridSearchEngine:
                         'score': ch_score,
                         'content_preview': preview,
                         'chapter_number': chapter.get('chapter_number', 0),
+                        'total_occurrences': total_occurrences,
                     })
                     book_score += ch_score
 
@@ -243,20 +247,47 @@ class HybridSearchEngine:
     def _expand_query(self, query):
         terms = [query]
         synonyms = {
-            '科幻': ['三体', '刘慈欣', '未来'],
-            '悬疑': ['推理', '东野圭吾', '侦探'],
-            '经典': ['名著', '文学'],
-            '爱情': ['言情', '浪漫'],
-            '武侠': ['江湖', '功夫'],
-            '修仙': ['仙侠', '修真'],
+            '科幻': ['三体', '刘慈欣', '未来', '太空', '星际', '宇宙'],
+            '悬疑': ['推理', '东野圭吾', '侦探', '破案', '谜案', '惊悚'],
+            '经典': ['名著', '文学', '传统', '大师'],
+            '爱情': ['言情', '浪漫', '恋爱', '情感', '甜宠'],
+            '武侠': ['江湖', '功夫', '武林', '侠客', '武功'],
+            '修仙': ['仙侠', '修真', '丹药', '飞升', '灵气', '道法'],
+            '都市': ['现代', '职场', '商战', '都市'],
+            '玄幻': ['魔法', '异界', '穿越', '系统', '重生'],
+            '历史': ['古代', '朝代', '三国', '大明', '大唐'],
+            '游戏': ['电竞', '网游', '副本', '升级', '装备'],
         }
+        # 直接匹配
         for key, syns in synonyms.items():
             if key in query:
                 terms.extend(syns)
             for s in syns:
                 if s in query:
-                    terms.append(key)
+                    if key not in terms:
+                        terms.append(key)
                     break
+        # 词组组合扩展（如"乳胶" → 乳胶文胸、乳胶手套等）
+        query_stripped = query.strip()
+        if 2 <= len(query_stripped) <= 4:
+            prefixes = ['全身式', '紧身', '超薄', '加厚', '透气', '防水']
+            suffixes_map = {
+                '乳胶': ['文胸', '手套', '衣服', '连体衣', '紧身衣', '裙装', '靴子', '面具', '头套', '长裤', '内裤', '袜子'],
+            }
+            for keyword, suffixes in suffixes_map.items():
+                if keyword in query_stripped:
+                    for suf in suffixes:
+                        combo = keyword + suf
+                        if combo != query_stripped:
+                            terms.append(combo)
+                    for pre in prefixes:
+                        combo = pre + query_stripped
+                        terms.append(combo)
+                elif query_stripped in suffixes:
+                    terms.append(keyword)
+                    for other_suf in suffixes:
+                        if other_suf != query_stripped:
+                            terms.append(keyword + other_suf)
         return list(set(terms))
 
     def _get_preview(self, content, query, length=120):

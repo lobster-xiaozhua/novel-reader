@@ -17,7 +17,7 @@ const FILTER_TABS = [
 ]
 
 const SEARCH_MODES = [
-  { key: 'basic', label: '快速', icon: Zap },
+  { key: 'fast', label: '快速', icon: Zap },
   { key: 'advanced', label: '深度', icon: Cpu },
 ] as const
 
@@ -121,7 +121,12 @@ function AdvancedResultCard({ result, query }: { result: AdvancedSearchResult; q
                   </p>
                 )}
               </div>
-              <span className="text-[10px] text-text-muted flex-shrink-0">{ch.score}分</span>
+              <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                <span className="text-[10px] text-text-muted">{ch.score}分</span>
+                {ch.total_occurrences > 0 && (
+                  <span className="text-[10px] text-accent/80">{ch.total_occurrences}次</span>
+                )}
+              </div>
             </button>
           ))}
           {result.total_matches > 2 && (
@@ -144,12 +149,12 @@ export default function SearchPage() {
   const q = searchParams.get('q') || ''
   const [inputVal, setInputVal] = useState(q)
   const [filter, setFilter] = useState('all')
-  const [searchMode, setSearchMode] = useState<'basic' | 'advanced'>('basic')
+  const [searchMode, setSearchMode] = useState<'fast' | 'advanced'>('fast')
 
   const { data: basicData, isLoading: basicLoading } = useQuery({
     queryKey: ['search', q],
     queryFn: () => fetchSearch(q),
-    enabled: q.length > 0 && searchMode === 'basic',
+    enabled: q.length > 0 && searchMode === 'fast',
     staleTime: 2 * 60 * 1000,
   })
 
@@ -166,8 +171,8 @@ export default function SearchPage() {
   const advTotal = advData?.pagination?.total ?? 0
   const searchTimeMs = advData?.search_time_ms ?? 0
 
-  const isLoading = searchMode === 'basic' ? basicLoading : advLoading
-  const total = searchMode === 'basic' ? basicTotal : advTotal
+  const isLoading = searchMode === 'fast' ? basicLoading : advLoading
+  const total = searchMode === 'fast' ? basicTotal : advTotal
 
   const filteredResults = useMemo(() => {
     if (searchMode === 'advanced') {

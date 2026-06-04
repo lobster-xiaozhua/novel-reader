@@ -219,6 +219,7 @@ def get_rankings(request) -> dict:
 
 @router.get('/search/', response=SearchResponse, auth=optional_jwt_auth)
 def search_books(request, q: str = '') -> dict:
+    """快速搜索端点 - 使用SQL进行书名/作者/简介匹配"""
     query: str = q.strip()
     results: list[dict] = []
     suggestions: list[str] = []
