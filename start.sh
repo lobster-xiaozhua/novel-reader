@@ -279,6 +279,13 @@ else:
 
 build_frontend() {
     log_step "构建前端"
+
+    # 如果已有构建产物，跳过
+    if [ -f "frontend/dist/index.html" ]; then
+        log_success "前端已构建，跳过（删除 frontend/dist 可强制重建）"
+        return 0
+    fi
+
     if [ ! -d "frontend/node_modules" ] || [ ! -d "frontend/node_modules/react" ]; then
         install_node_deps
     fi
@@ -289,12 +296,28 @@ build_frontend() {
     log_detail "Node: $(node --version) | npm: $(npm --version)"
     log_detail "工作目录：$(pwd)"
 
-    # Termux 环境直接用 vite build（跳过 tsc 类型检查，避免 Illegal instruction）
-    local build_cmd="npm run build"
-    if [ "$IS_TERMUX" = true ]; then
-        log_info "Termux 环境：使用 vite build（跳过 tsc 类型检查）"
-        build_cmd="npx vite build"
+    # 内存检查
+    local mem_mb=0
+    if [ -f "/proc/meminfo" ]; then
+        mem_mb=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
     fi
+    log_detail "可用内存: ${mem_mb}MB"
+
+    # Termux / 低内存环境优化
+    local build_cmd="./node_modules/.bin/vite build"
+    local node_opts=""
+
+    if [ "$IS_TERMUX" = true ]; then
+        log_info "Termux 环境：优化构建配置"
+        # 限制 Node 堆内存，防止 OOM
+        if [ "$mem_mb" -gt 0 ] && [ "$mem_mb" -lt 2048 ]; then
+            local heap_mb=$((mem_mb * 70 / 100))
+            node_opts="--max-old-space-size=${heap_mb}"
+            log_detail "内存限制: ${heap_mb}MB (--max-old-space-size)"
+        fi
+    fi
+
+    export NODE_OPTIONS="${node_opts}"
 
     local output
     local start_time=$SECONDS
@@ -302,13 +325,26 @@ build_frontend() {
     local exit_code=$?
     local build_seconds=$((SECONDS - start_time))
 
+    unset NODE_OPTIONS
+
     if [ $exit_code -ne 0 ]; then
+        # 检测 OOM / 内存不足
+        if echo "$output" | grep -qiE "OOM|out of memory|Cannot allocate|killed"; then
+            cd ..
+            log_error "内存不足，前端构建失败"
+            log_info "解决方案:"
+            log_detail "1. 关闭其他应用释放内存后重试"
+            log_detail "2. 使用预构建版本: 从仓库拉取 frontend/dist/"
+            log_detail "3. 在电脑上构建后拷贝 dist/ 到手机"
+            exit 1
+        fi
+
         # 检测 Illegal instruction 错误
         if echo "$output" | grep -qiE "Illegal instruction|SIGILL"; then
             cd ..
             log_error "Node.js 与当前 CPU 不兼容 (Illegal instruction)"
             log_info "修复方法:"
-            log_detail "1. 卸载当前 Node: nvm uninstall $(nvm current 2>/dev/null || echo '版本')"
+            log_detail "1. 卸载 nvm Node: nvm uninstall $(nvm current 2>/dev/null || echo '版本')"
             log_detail "2. 安装 Termux 原生 Node: pkg install nodejs-lts"
             log_detail "3. 清理并重建: cd frontend && rm -rf node_modules && npm install"
             log_detail "4. 重新运行: ./start.sh"
