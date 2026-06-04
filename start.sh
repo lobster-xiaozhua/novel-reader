@@ -449,9 +449,14 @@ start_server() {
     echo -e "  ${DIM}按 Ctrl+C 停止服务${NC}"
     echo ""
 
+    # 后台预热 API 缓存，避免首次请求慢
+    (sleep 3 && curl -sf http://localhost:${port}/api/v1/books/ > /dev/null 2>&1 && \
+     curl -sf http://localhost:${port}/api/v1/books/rankings/ > /dev/null 2>&1 && \
+     log_detail "API 缓存预热完成") &
+
     exec granian novel_reader.asgi:application \
         --host 0.0.0.0 --port "$port" \
-        --interface asgi --workers 1
+        --interface asginl --workers 1
 }
 
 cmd_start() {

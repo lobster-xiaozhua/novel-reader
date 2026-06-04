@@ -91,6 +91,13 @@ class JWTAuthMiddleware:
             self._authenticate(request)
         return self.get_response(request)
 
+    # 公开 API 路径前缀，无需认证，无效 token 不记录 WARNING
+    _PUBLIC_PREFIXES = (
+        '/api/v1/books/', '/api/v1/books/rankings/', '/api/v1/books/categories/',
+        '/api/v1/search/', '/api/v1/recommendations/', '/api/v1/auth/',
+        '/api/v1/health/', '/static/', '/admin/',
+    )
+
     def _authenticate(self, request):
         from apps.api.auth import _extract_token, decode_token
         token = _extract_token(request)
@@ -99,7 +106,11 @@ class JWTAuthMiddleware:
 
         payload = decode_token(token)
         if not payload or payload.get('type') != 'access':
-            auth_logger.warning(f'认证失败: {request.path} | IP: {self._get_client_ip(request)} | token_type={payload.get("type") if payload else "invalid"}')
+            # 公开接口上的无效 token 降级为 DEBUG，避免刷屏
+            path = request.path
+            is_public = any(path.startswith(p) for p in self._PUBLIC_PREFIXES)
+            log_fn = auth_logger.debug if is_public else auth_logger.warning
+            log_fn(f'认证失败: {path} | IP: {self._get_client_ip(request)} | token_type={payload.get("type") if payload else "invalid"}')
             return
 
         try:
