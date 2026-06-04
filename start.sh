@@ -417,10 +417,18 @@ start_server() {
 
     log_step "启动服务"
     local static_output
-    static_output=$(python manage.py collectstatic --noinput 2>&1) || true
+    static_output=$(python manage.py collectstatic --noinput --clear 2>&1)
     local static_count
     static_count=$(echo "$static_output" | grep -oE '[0-9]+ static files' || true)
     log_detail "静态文件: ${static_count}"
+
+    # 如果 collectstatic 失败，显示错误
+    if [ -z "$static_count" ]; then
+        log_warn "静态文件收集异常"
+        echo "$static_output" | tail -5 | while IFS= read -r line; do
+            log_detail "$line"
+        done
+    fi
 
     # 初始化引擎（推荐/搜索/缓存预热）
     log_info "初始化系统引擎..."
