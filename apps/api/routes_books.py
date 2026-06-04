@@ -18,6 +18,7 @@ from apps.favorites.models import Favorite
 from apps.reader.models import ReadingProgress
 from apps.recommender.engine import recommend_for_user, recommend_similar_books, get_engine as get_rec_engine
 from apps.recommender.search import search as hybrid_search, build_index as build_search_index, get_stats as get_search_stats
+from apps.search.services import search as es_search, rebuild_index as es_rebuild_index
 
 from .auth import jwt_auth, optional_jwt_auth
 from .schemas import (
@@ -136,84 +137,71 @@ def get_rankings(request) -> dict:
     now = timezone.now()
     limit = 10
 
+    # Hot Today: 先从 Favorite 子查询取 top book_ids，再按序取 Book
     today_cutoff = now - timezone.timedelta(hours=24)
-    hot_today_qs = (
-        Book.objects.prefetch_related('tags')
-        .annotate(
-            _today_favs=Count('favorite', filter=Q(favorite__created_at__gte=today_cutoff)),
-            _ch_count=Count('chapters'),
-        )
-        .filter(_today_favs__gt=0)
-        .order_by('-_today_favs', '-updated_at')[:limit]
+    today_top = (
+        Favorite.objects
+        .filter(created_at__gte=today_cutoff)
+        .values('book_id')
+        .annotate(cnt=Count('id'))
+        .order_by('-cnt')[:limit]
     )
-    if not hot_today_qs:
-        hot_today_qs = (
-            Book.objects.prefetch_related('tags')
-            .annotate(_ch_count=Count('chapters'))
-            .order_by('-updated_at')[:limit]
+    today_book_ids = [item['book_id'] for item in today_top]
+
+    if today_book_ids:
+        _books = {
+            b.id: b for b in Book.objects.filter(id__in=today_book_ids)
+            .prefetch_related('tags').annotate(_ch_count=Count('chapters'))
+        }
+        hot_today_qs = [_books[bid] for bid in today_book_ids if bid in _books]
+    else:
+        hot_today_qs = list(
+            Book.objects.order_by('-updated_at')[:limit]
+            .prefetch_related('tags').annotate(_ch_count=Count('chapters'))
         )
 
+    # Hot Week: 同样子查询策略
     week_cutoff = now - timezone.timedelta(days=7)
-    hot_week_qs = (
-        Book.objects.prefetch_related('tags')
-        .annotate(
-            _week_favs=Count('favorite', filter=Q(favorite__created_at__gte=week_cutoff)),
-            _ch_count=Count('chapters'),
-        )
-        .filter(_week_favs__gt=0)
-        .order_by('-_week_favs', '-_ch_count', '-updated_at')[:limit]
+    week_top = (
+        Favorite.objects
+        .filter(created_at__gte=week_cutoff)
+        .values('book_id')
+        .annotate(cnt=Count('id'))
+        .order_by('-cnt')[:limit]
     )
-    if not hot_week_qs:
-        hot_week_qs = (
-            Book.objects.prefetch_related('tags')
-            .annotate(_ch_count=Count('chapters'))
-            .order_by('-_ch_count', '-updated_at')[:limit]
+    week_book_ids = [item['book_id'] for item in week_top]
+
+    if week_book_ids:
+        _books = {
+            b.id: b for b in Book.objects.filter(id__in=week_book_ids)
+            .prefetch_related('tags').annotate(_ch_count=Count('chapters'))
+        }
+        hot_week_qs = [_books[bid] for bid in week_book_ids if bid in _books]
+    else:
+        hot_week_qs = list(
+            Book.objects.order_by('-updated_at')[:limit]
+            .prefetch_related('tags').annotate(_ch_count=Count('chapters'))
         )
 
-    new_arrivals_qs = (
-        Book.objects.prefetch_related('tags')
-        .annotate(_ch_count=Count('chapters'))
-        .order_by('-created_at')[:30]
+    # New Arrivals: 直接按创建时间排序
+    new_arrivals_qs = list(
+        Book.objects.order_by('-created_at')[:limit]
+        .prefetch_related('tags').annotate(_ch_count=Count('chapters'))
     )
+
+    def _fmt(b):
+        return {
+            'id': b.id, 'title': b.title, 'author': b.author,
+            'category': b.category, 'gradient': b.cover_gradient,
+            'tags': [{'id': t.id, 'name': t.name, 'color': t.color} for t in b.tags.all()],
+            'chapter_count': getattr(b, '_ch_count', None) or b.total_chapters or 0,
+        }
 
     logger.info('[Rankings] 获取排行榜成功')
     return {
-        'hot_today': [
-            {
-                'id': b.id,
-                'title': b.title,
-                'author': b.author,
-                'category': b.category,
-                'gradient': b.cover_gradient,
-                'tags': [{'id': t.id, 'name': t.name, 'color': t.color} for t in b.tags.all()],
-                'chapter_count': getattr(b, '_ch_count', None) or b.total_chapters or 0,
-            }
-            for b in hot_today_qs
-        ],
-        'hot_week': [
-            {
-                'id': b.id,
-                'title': b.title,
-                'author': b.author,
-                'category': b.category,
-                'gradient': b.cover_gradient,
-                'tags': [{'id': t.id, 'name': t.name, 'color': t.color} for t in b.tags.all()],
-                'chapter_count': getattr(b, '_ch_count', None) or b.total_chapters or 0,
-            }
-            for b in hot_week_qs
-        ],
-        'new_arrivals': [
-            {
-                'id': b.id,
-                'title': b.title,
-                'author': b.author,
-                'category': b.category,
-                'gradient': b.cover_gradient,
-                'tags': [{'id': t.id, 'name': t.name, 'color': t.color} for t in b.tags.all()],
-                'chapter_count': getattr(b, '_ch_count', None) or b.total_chapters or 0,
-            }
-            for b in new_arrivals_qs
-        ],
+        'hot_today': [_fmt(b) for b in hot_today_qs],
+        'hot_week': [_fmt(b) for b in hot_week_qs],
+        'new_arrivals': [_fmt(b) for b in new_arrivals_qs],
     }
 
 
@@ -588,4 +576,41 @@ def build_recommendation_index(request, force: bool = False):
     count = engine.build_index(force=force)
     logger.info(f'[RecIndex] 推荐索引构建完成: {count}本书')
     return {'success': True, 'message': f'推荐索引构建完成: {count}本书'}
+
+
+# ── Elasticsearch 全文搜索 ──
+
+@router.get('/search/es/', auth=optional_jwt_auth)
+def es_search_endpoint(request, q: str = '', page: int = 1, page_size: int = 20):
+    """Elasticsearch 全文搜索（不可用时自动降级为数据库搜索）"""
+    query = q.strip()
+    if not query:
+        return {'success': False, 'books': [], 'chapters': [], 'total': 0, 'search_time_ms': 0}
+    
+    page = max(1, page)
+    page_size = min(page_size, 100)
+    
+    result = es_search(query, page=page, page_size=page_size)
+    return {'success': True, **result}
+
+
+@router.post('/search/es/rebuild/', auth=jwt_auth)
+def es_rebuild_index_endpoint(request):
+    """重建 Elasticsearch 索引"""
+    result = es_rebuild_index()
+    if result:
+        return {'success': True, **result}
+    return {'success': False, 'message': 'Elasticsearch 不可用'}
+
+
+@router.get('/search/es/status/', auth=optional_jwt_auth)
+def es_status_endpoint(request):
+    """检查 Elasticsearch 服务状态"""
+    from apps.search.services import get_service
+    svc = get_service()
+    return {
+        'success': True,
+        'available': svc.available,
+        'host': es_search.__module__ and 'http://localhost:9200' or '',
+    }
 

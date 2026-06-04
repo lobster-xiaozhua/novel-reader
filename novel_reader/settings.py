@@ -4,6 +4,10 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+CACHE_DIR = BASE_DIR / 'data' / 'cache'
+BOOKS_DIR = BASE_DIR / 'data' / 'books'
+LOGS_DIR = BASE_DIR / 'data' / 'logs'
+
 env = environ.Env(
     DEBUG=(bool, False),
     SECURE_SSL_REDIRECT=(bool, False),
@@ -63,6 +67,7 @@ INSTALLED_APPS = [
     'apps.favorites',
     'apps.crawler',
     'apps.recommender',
+    'apps.search',
     'ninja',
 ]
 
@@ -110,17 +115,22 @@ WSGI_APPLICATION = 'novel_reader.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'data' / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': env('PG_DB', default='novel_reader'),
+        'USER': env('PG_USER', default='novel_user'),
+        'PASSWORD': env('PG_PASSWORD', default='novel_pass'),
+        'HOST': env('PG_HOST', default='localhost'),
+        'PORT': env('PG_PORT', default='5432'),
+        'CONN_MAX_AGE': env('CONN_MAX_AGE'),
+        'OPTIONS': {
+            'options': '-c statement_timeout=10000',
+        },
     }
 }
 _db_url_str = env('DATABASE_URL', default='')
 if _db_url_str:
-    _db_url = env.db_url(default=_db_url_str, engine='django.db.backends.sqlite3')
-    DATABASES['default'] = _db_url
-    if DATABASES['default'].get('ENGINE', '').startswith('sqlite'):
-        DATABASES['default']['ENGINE'] = 'django.db.backends.sqlite3'
-DATABASES['default']['CONN_MAX_AGE'] = env('CONN_MAX_AGE')
+    _db_url = env.db_url(default=_db_url_str)
+    DATABASES['default'].update(_db_url)
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -143,27 +153,76 @@ WHITENOISE_INDEX_FILE = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-_REDIS_URL = env('REDIS_URL', default='')
-if _REDIS_URL:
+# ─── Layered Cache System ───
+# Tier 1: Redis for hot data (fast, low-latency)
+# Tier 2: DiskCache for large objects (embedding vectors, full search results)
+_REDIS_AVAILABLE = False
+_REDIS_URL = env('REDIS_URL', default='redis://127.0.0.1:6379/1')
+
+# Check if Redis is actually running
+try:
+    import redis as _redis_client
+    _r = _redis_client.Redis.from_url(_REDIS_URL, socket_timeout=2, socket_connect_timeout=2)
+    _r.ping()
+    _REDIS_AVAILABLE = True
+    _r.close()
+except Exception:
+    pass
+
+if _REDIS_AVAILABLE:
     CACHES = {
+        # Tier 1: Redis — hot data, short TTL
         'default': {
-            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'BACKEND': 'django_redis.cache.RedisCache',
             'LOCATION': _REDIS_URL,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'CONNECTION_POOL_CLASS': 'redis.BlockingConnectionPool',
+                'CONNECTION_POOL_CLASS_KWARGS': {'max_connections': 50, 'timeout': 5},
+                'SOCKET_TIMEOUT': 5,
+                'SOCKET_CONNECT_TIMEOUT': 2,
+                'RETRY_ON_TIMEOUT': True,
+                'HEALTH_CHECK_INTERVAL': 30,
+            },
             'KEY_PREFIX': 'novelreader',
-            'TIMEOUT': 300,
-        }
+            'TIMEOUT': 300,  # 5 minutes
+        },
+        # Tier 2: DiskCache — large objects, long TTL
+        'disk': {
+            'BACKEND': 'diskcache.DjangoCache',
+            'LOCATION': str(CACHE_DIR / 'diskcache'),
+            'TIMEOUT': 86400,  # 24 hours
+            'OPTIONS': {
+                'SHARDS': 8,
+                'SIZE_LIMIT': 2**30,  # 1GB
+                'EVICTION_POLICY': 'least-frequently-used',
+                'STATISTICS': True,
+            },
+        },
     }
 else:
+    # Fallback: DiskCache only (Redis not available)
     CACHES = {
         'default': {
-            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-            'LOCATION': 'novelreader-cache',
+            'BACKEND': 'diskcache.DjangoCache',
+            'LOCATION': str(CACHE_DIR / 'diskcache'),
+            'TIMEOUT': 3600,  # 1 hour
             'OPTIONS': {
-                'MAX_ENTRIES': 5000,
-                'CULL_FREQUENCY': 3,
+                'SHARDS': 4,
+                'SIZE_LIMIT': 2**29,  # 512MB
+                'EVICTION_POLICY': 'least-frequently-used',
             },
-        }
+        },
+        'disk': {
+            'BACKEND': 'diskcache.DjangoCache',
+            'LOCATION': str(CACHE_DIR / 'diskcache'),
+            'TIMEOUT': 86400,
+        },
     }
+
+# Celery uses Redis as broker
+CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://127.0.0.1:6379/0')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://127.0.0.1:6379/0')
 
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_AGE = 1209600
@@ -285,10 +344,6 @@ LOGIN_URL = '/login'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login'
 
-BOOKS_DIR = BASE_DIR / 'data' / 'books'
-LOGS_DIR = BASE_DIR / 'data' / 'logs'
-CACHE_DIR = BASE_DIR / 'data' / 'cache'
-
 # 外挂书籍目录：通过 BOOKS_EXTRA_DIRS 环境变量配置，多个目录用冒号分隔
 # 例: BOOKS_EXTRA_DIRS=/mnt/novels:/sdcard/books
 _BOOKS_EXTRA = env('BOOKS_EXTRA_DIRS', default='')
@@ -313,8 +368,6 @@ if _BOOKS_DIRS_JSON.exists():
 for _d in [BOOKS_DIR, LOGS_DIR, CACHE_DIR] + BOOKS_EXTRA_DIRS:
     _d.mkdir(parents=True, exist_ok=True)
 
-CELERY_BROKER_URL = env('CELERY_BROKER_URL')
-CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
