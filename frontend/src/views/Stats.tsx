@@ -43,9 +43,9 @@ export default function Stats() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {summaryCards.map((card) => (
-          <div key={card.title} className="bg-card-bg border border-card-border rounded-xl p-5 card-hover">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 stagger-in">
+        {summaryCards.map((card, idx) => (
+          <div key={card.title} className="glass-card p-5" style={{ animationDelay: `${idx * 0.03}s` }}>
             <div className="flex items-center gap-4">
               <div className={`w-12 h-12 rounded-xl ${card.bg} flex items-center justify-center`}>
                 <card.icon className={`w-6 h-6 ${card.color}`} />
@@ -60,7 +60,7 @@ export default function Stats() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-card-bg border border-card-border rounded-xl p-5">
+        <div className="glass-card p-5">
           <h3 className="text-lg font-semibold text-text-primary mb-1">阅读时长趋势</h3>
           <p className="text-sm text-text-muted mb-4">最近{days}天阅读分钟数</p>
           <div className="h-[300px]">
@@ -84,7 +84,7 @@ export default function Stats() {
           </div>
         </div>
 
-        <div className="bg-card-bg border border-card-border rounded-xl p-5">
+        <div className="glass-card p-5">
           <h3 className="text-lg font-semibold text-text-primary mb-1">阅读章节统计</h3>
           <p className="text-sm text-text-muted mb-4">最近{days}天阅读章节数</p>
           <div className="h-[300px]">
@@ -103,7 +103,7 @@ export default function Stats() {
         </div>
       </div>
 
-      <div className="bg-card-bg border border-card-border rounded-xl p-5">
+      <div className="glass-card p-5">
         <h3 className="text-lg font-semibold text-text-primary mb-1">阅读字数趋势</h3>
         <p className="text-sm text-text-muted mb-4">最近{days}天阅读字数</p>
         <div className="h-[300px]">

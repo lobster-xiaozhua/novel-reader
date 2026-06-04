@@ -49,9 +49,9 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {cards.map((card) => (
-          <div key={card.title} className="bg-card-bg border border-card-border rounded-xl p-5 card-hover">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 stagger-in">
+        {cards.map((card, idx) => (
+          <div key={card.title} className="glass-card p-5" style={{ animationDelay: `${idx * 0.03}s` }}>
             <div className="flex items-center gap-4">
               <div className={`w-12 h-12 rounded-xl ${card.bg} flex items-center justify-center`}>
                 <card.icon className={`w-6 h-6 ${card.color}`} />
@@ -66,7 +66,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-card-bg border border-card-border rounded-xl p-5">
+        <div className="glass-card p-5">
           <h3 className="text-lg font-semibold text-text-primary mb-1">最近7天阅读趋势</h3>
           <p className="text-sm text-text-muted mb-4">本周累计阅读 {stats?.week_chapters || 0} 章节</p>
           <div className="h-[300px]">
@@ -93,7 +93,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-card-bg border border-card-border rounded-xl p-5">
+        <div className="glass-card p-5">
           <h3 className="text-lg font-semibold text-text-primary mb-4">书籍分类分布</h3>
           {categoryData.length > 0 ? (
             <>

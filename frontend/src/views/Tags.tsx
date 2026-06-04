@@ -69,21 +69,21 @@ export default function Tags() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
             <input type="text" placeholder="搜索标签..." value={search} onChange={(e) => setSearch(e.target.value)}
-              className="w-56 h-10 pl-9 pr-4 rounded-lg bg-card-bg border border-card-border text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50 transition-colors" />
+              className="w-56 h-10 pl-9 pr-4 rounded-lg glass-input text-sm text-text-primary placeholder:text-text-muted" />
           </div>
-          <button onClick={() => setIsCreating(true)} className="flex items-center gap-2 px-4 h-10 rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 transition-colors">
+          <button onClick={() => setIsCreating(true)} className="btn btn--primary btn--md">
             <Plus className="w-4 h-4" />新建标签
           </button>
         </div>
       </div>
 
       {isCreating && (
-        <div className="bg-card-bg border border-card-border rounded-xl p-5">
+        <div className="glass-card p-5">
           <div className="flex items-center gap-4">
             <div className="flex-1">
               <label className="block text-sm font-medium text-text-secondary mb-1.5">标签名称</label>
               <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
-                className="w-full h-10 px-4 rounded-lg bg-content-bg border border-card-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50 transition-colors"
+                className="w-full h-10 px-4 rounded-lg glass-input text-text-primary placeholder:text-text-muted"
                 placeholder="输入标签名称" autoFocus />
             </div>
             <div>
@@ -98,11 +98,11 @@ export default function Tags() {
             </div>
             <div className="flex items-end gap-2 pt-6">
               <button onClick={handleCreate} disabled={createMutation.isPending || !newName.trim()}
-                className="flex items-center gap-1 px-4 h-10 rounded-lg bg-success text-white text-sm font-medium hover:bg-success/90 transition-colors disabled:opacity-50">
+                className="btn btn--primary btn--md">
                 <Check className="w-4 h-4" />确认
               </button>
               <button onClick={() => setIsCreating(false)}
-                className="flex items-center gap-1 px-4 h-10 rounded-lg bg-white/5 text-text-secondary text-sm hover:bg-white/10 transition-colors">
+                className="btn btn--secondary btn--md">
                 <X className="w-4 h-4" />取消
               </button>
             </div>
@@ -115,9 +115,9 @@ export default function Tags() {
           <Tag className="w-12 h-12 mx-auto mb-3 opacity-30" /><p>暂无标签</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {filtered.map((tag: TagItem) => (
-            <div key={tag.id} className="bg-card-bg border border-card-border rounded-xl p-4 card-hover group">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 stagger-in">
+          {filtered.map((tag: TagItem, idx: number) => (
+            <div key={tag.id} className="glass-card p-4 group" style={{ animationDelay: `${idx * 0.03}s` }}>
               <div className="flex items-center justify-between mb-3">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium"
                   style={{ backgroundColor: `${tag.color}20`, color: tag.color }}>

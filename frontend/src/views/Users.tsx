@@ -24,10 +24,10 @@ export default function Users() {
           <UsersIcon className="w-12 h-12 mb-3 opacity-30" /><p>暂无用户数据</p>
         </div>
       ) : (
-        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
+        <div className="glass-card overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/[0.06]">
+              <tr className="border-b border-border/50">
                 <th className="px-6 py-4 text-left text-sm font-medium text-text-secondary">用户</th>
                 <th className="px-6 py-4 text-left text-sm font-medium text-text-secondary">邮箱</th>
                 <th className="px-6 py-4 text-left text-sm font-medium text-text-secondary">角色</th>
@@ -38,7 +38,7 @@ export default function Users() {
             </thead>
             <tbody>
               {users.map((user: UserItem) => (
-                <tr key={user.id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+                <tr key={user.id} className="border-b border-white/[0.04] hover:bg-accent/5 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-primary-500/10 flex items-center justify-center">

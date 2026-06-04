@@ -16,8 +16,13 @@ export default function Progress() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold text-text-primary">阅读进度</h2>
-      <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl glass-card--compact flex items-center justify-center">
+          <Bookmark className="w-4 h-4 text-accent" />
+        </div>
+        <h2 className="text-xl font-bold text-text-primary">阅读进度</h2>
+      </div>
+      <div className="glass-card overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="border-b border-white/[0.06]">
@@ -34,12 +39,12 @@ export default function Progress() {
             ) : items.length === 0 ? (
               <tr><td colSpan={5} className="text-center py-20 text-text-muted"><Bookmark className="w-12 h-12 mx-auto mb-3 opacity-30" /><p>暂无阅读进度</p></td></tr>
             ) : (
-              items.map((item: ProgressItem) => {
+              items.map((item: ProgressItem, idx: number) => {
                 const progress = item.total_chapters > 0 && item.position > 0
                   ? Math.round((item.position / item.total_chapters) * 100)
                   : 0
                 return (
-                  <tr key={item.id} className="border-b border-white/[0.06] hover:bg-white/[0.02] transition-colors">
+                  <tr key={item.id} className="border-b border-white/[0.04] hover:bg-accent/5 transition-colors" style={{ animationDelay: `${idx * 0.04}s` }}>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2"><BookOpen className="w-4 h-4 text-text-muted" /><span className="text-sm font-medium text-text-primary">{item.book_title}</span></div>
                     </td>
@@ -48,14 +53,14 @@ export default function Progress() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-24 h-2 rounded-full bg-white/5 overflow-hidden">
-                          <div className="h-full rounded-full bg-primary-500 transition-all" style={{ width: `${Math.min(progress, 100)}%` }} />
+                          <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${Math.min(progress, 100)}%` }} />
                         </div>
                         <span className="text-sm text-text-muted">{Math.min(progress, 100)}%</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button onClick={() => navigate('/chapters', { state: { bookId: item.book_id } })}
-                        className="flex items-center gap-1 ml-auto px-3 py-1.5 rounded-lg bg-primary-500/10 text-primary-500 text-sm hover:bg-primary-500/20 transition-colors">
+                        className="btn btn--secondary btn--sm ml-auto">
                         <ChevronRight className="w-4 h-4" />继续阅读
                       </button>
                     </td>

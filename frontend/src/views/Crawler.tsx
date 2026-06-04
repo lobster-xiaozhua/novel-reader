@@ -43,10 +43,10 @@ export default function Crawler() {
         <div className="flex items-center gap-3">
           <input type="text" placeholder="输入URL..." value={url} onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && url.trim() && createMutation.mutate(url.trim())}
-            className="w-80 h-10 px-4 rounded-lg bg-card-bg border border-card-border text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50 transition-colors" />
+            className="w-80 h-10 px-4 rounded-lg glass-input text-sm text-text-primary placeholder:text-text-muted" />
           <button onClick={() => { if (url.trim()) createMutation.mutate(url.trim()) }}
             disabled={createMutation.isPending || !url.trim()}
-            className="flex items-center gap-2 px-4 h-10 rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 transition-colors disabled:opacity-50">
+            className="btn btn--primary btn--md">
             {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             新建任务
           </button>
@@ -54,11 +54,11 @@ export default function Crawler() {
       </div>
 
       <div className="grid grid-cols-5 gap-4">
-        {Object.entries(statusConfig).map(([key, config]) => {
+        {Object.entries(statusConfig).map(([key, config], idx) => {
           const count = tasks.filter((t: CrawlerTask) => t.status === key).length
           const Icon = config.icon
           return (
-            <div key={key} className="bg-card-bg border border-card-border rounded-xl p-4 text-center">
+            <div key={key} className="glass-card p-4 text-center" style={{ animationDelay: `${idx * 0.04}s` }}>
               <div className={`w-10 h-10 rounded-lg ${config.bg} flex items-center justify-center mx-auto`}>
                 <Icon className={`w-5 h-5 ${config.color}`} />
               </div>
@@ -69,7 +69,7 @@ export default function Crawler() {
         })}
       </div>
 
-      <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
+      <div className="glass-card overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="border-b border-white/[0.06]">

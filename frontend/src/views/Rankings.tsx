@@ -86,7 +86,7 @@ export default function Rankings() {
         </div>
       )}
 
-      <div className="bg-bg-secondary/50 backdrop-blur-sm rounded-2xl border border-border overflow-hidden">
+      <div className="glass-card overflow-hidden">
         <div className="flex border-b border-border/50">
           {TABS.map((tab) => {
             const Icon = tab.icon
@@ -115,12 +115,13 @@ export default function Rankings() {
           <EmptyState />
         ) : (
           <div className="p-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 stagger-in">
               {books.map((book, idx) => (
                 <button
                   key={book.id}
                   onClick={() => navigate(`/books/${book.id}`)}
-                  className="flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary/50 hover:bg-accent/5 border border-transparent hover:border-accent/20 transition-all text-left group"
+                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-accent/5 border border-transparent hover:border-accent/20 transition-all text-left group glass-card glass-card--compact"
+                  style={{ animationDelay: `${idx * 0.03}s` }}
                 >
                   <div className="relative flex-shrink-0">
                     {idx < 3 ? (
