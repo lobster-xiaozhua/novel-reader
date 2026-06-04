@@ -1,46 +1,53 @@
 @echo off
 setlocal enabledelayedexpansion
+chcp 65001 >nul 2>&1
 
 cd /d "%~dp0"
 
 :: ─── Colors (via PowerShell) ───
-set "GREEN="
-set "YELLOW="
-set "RED="
-set "BLUE="
-set "DIM="
-set "BOLD="
-set "NC="
-for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]27 + '[0;32m'"') do set "GREEN=%%i"
-for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]27 + '[1;33m'"') do set "YELLOW=%%i"
-for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]27 + '[0;31m'"') do set "RED=%%i"
-for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]27 + '[0;34m'"') do set "BLUE=%%i"
-for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]27 + '[2m'"') do set "DIM=%%i"
-for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]27 + '[1m'"') do set "BOLD=%%i"
-for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]27 + '[0m'"') do set "NC=%%i"
+set "ESC="
+for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]27"') do set "ESC=%%i"
+
+set "GREEN=!ESC![0;32m"
+set "YELLOW=!ESC![1;33m"
+set "RED=!ESC![0;31m"
+set "BLUE=!ESC![0;34m"
+set "CYAN=!ESC![0;36m"
+set "MAGENTA=!ESC![0;35m"
+set "DIM=!ESC![2m"
+set "BOLD=!ESC![1m"
+set "NC=!ESC![0m"
+
+:: ─── Symbols (ASCII-safe fallbacks) ───
+set "OK=[+]"
+set "INFO=[i]"
+set "WARN=[!]"
+set "FAIL=[x]"
+set "ARROW=->"
+set "LINE============================================"
 
 set "STEP_NUM=0"
 set "TOTAL_STEPS=8"
 
 :: ─── Logging ───
 :log_info
-echo   %BLUE%E2%84%B9%NC% %~1
+echo   %BLUE%%INFO%%NC% %~1
 goto :eof
 
 :log_success
-echo   %GREEN%E2%9C%93%NC% %~1
+echo   %GREEN%%OK%%NC% %~1
 goto :eof
 
 :log_warn
-echo   %YELLOW%E2%9A%A0%NC% %~1
+echo   %YELLOW%%WARN%%NC% %~1
 goto :eof
 
 :log_error
-echo   %RED%E2%9C%97%NC% %~1
+echo   %RED%%FAIL%%NC% %~1
 goto :eof
 
 :log_detail
-echo   %DIM%-> %~1%NC%
+echo   %DIM%%ARROW% %~1%NC%
 goto :eof
 
 :log_step
@@ -51,16 +58,16 @@ set "_timer_start=%TIME%"
 goto :eof
 
 :step_done
-echo   %GREEN%E2%9C%93%NC% %DIM%Done%NC%
+echo   %GREEN%%OK%%NC% %DIM%Done%NC%
 goto :eof
 
 :: ─── Banner ───
 :print_banner
 echo.
-echo %MAGENTA%E2%95%94%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%97%NC%
-echo %MAGENTA%E2%95%91%NC%  Novel Reader v2.0 - High-Performance Novel Reader    %MAGENTA%E2%95%91%NC%
-echo %MAGENTA%E2%95%91%NC%  %DIM%PG + Redis + DiskCache + Liquid Glass UI%NC%       %MAGENTA%E2%95%91%NC%
-echo %MAGENTA%E2%95%9A%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%9D%NC%
+echo %MAGENTA%%LINE%%NC%
+echo %MAGENTA%^|%NC%  Novel Reader v2.0 - High-Performance Novel Reader    %MAGENTA%^|%NC%
+echo %MAGENTA%^|%NC%  %DIM%PG + Redis + DiskCache + Liquid Glass UI%NC%       %MAGENTA%^|%NC%
+echo %MAGENTA%%LINE%%NC%
 echo.
 goto :eof
 
@@ -173,7 +180,6 @@ where psql >nul 2>&1
 if %errorlevel% neq 0 goto :eof
 
 call :log_info "Checking PostgreSQL user and database..."
-:: Try to run psql commands (assumes postgres superuser available)
 set "PG_USER=novel_user"
 set "PG_PASS=novel_pass"
 set "PG_DB=novel_reader"
@@ -424,13 +430,13 @@ call :log_info "Initializing engines..."
 python manage.py init_engines 2>nul
 
 echo.
-echo %GREEN%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%NC%
+echo %GREEN%%LINE%%NC%
 echo %GREEN%  Server Started!%NC%
-echo %GREEN%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%E2%95%90%NC%
+echo %GREEN%%LINE%%NC%
 echo.
-echo   %GREEN%>%NC% Access:  %BOLD%http://localhost:8000%NC%
-echo   %GREEN%>%NC% Admin:   http://localhost:8000/admin
-echo   %GREEN%>%NC% API:     http://localhost:8000/api/v1/docs/
+echo   %GREEN%^>%NC% Access:  %BOLD%http://localhost:8000%NC%
+echo   %GREEN%^>%NC% Admin:   http://localhost:8000/admin
+echo   %GREEN%^>%NC% API:     http://localhost:8000/api/v1/docs/
 echo.
 echo   %DIM%Press Ctrl+C to stop%NC%
 echo.
@@ -460,8 +466,8 @@ call :migrate_db
 
 call :log_info "Starting development servers..."
 echo.
-echo   %GREEN%>%NC% Frontend: %BOLD%http://localhost:5173%NC%
-echo   %GREEN%>%NC% Backend:  http://localhost:8000
+echo   %GREEN%^>%NC% Frontend: %BOLD%http://localhost:5173%NC%
+echo   %GREEN%^>%NC% Backend:  http://localhost:8000
 echo.
 
 call :venv_activate
