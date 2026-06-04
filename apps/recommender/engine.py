@@ -5,12 +5,11 @@ from collections import defaultdict
 from threading import Lock
 
 from django.core.cache import cache
-from django.db.models import Count, Q, F
+from django.db.models import Count, Q
 
 logger = logging.getLogger(__name__)
 
 _cache_lock = Lock()
-_ENGINE_CACHE_KEY = 'recommender:engine_data'
 _ENGINE_CACHE_TTL = 600
 _RESULT_CACHE_TTL = 300
 
@@ -58,6 +57,7 @@ class RecommendationEngine:
         logger.info('[Recommender] 构建推荐索引...')
         start = time.time()
 
+        # 一次性获取所有书籍和标签，避免 N+1 查询
         books = list(
             Book.objects.prefetch_related('tags')
             .annotate(_ch_count=Count('chapters'))
@@ -69,21 +69,26 @@ class RecommendationEngine:
         self._tags_index = defaultdict(list)
         self._category_index = defaultdict(list)
 
-        tag_map = cache.get('recommender:tag_map')
-        if tag_map is None:
-            tag_map = {}
-            for t in Book.objects.prefetch_related('tags').all():
-                tag_map[t.id] = [tag.name for tag in t.tags.all()]
-            cache.set('recommender:tag_map', tag_map, _ENGINE_CACHE_TTL)
+        # 直接从 prefetch_related 获取标签，不需要额外查询
+        for book in books:
+            bid = book['id']
+            # 注意：values() + prefetch_related 不直接返回标签，需要单独获取
+            # 这里用更高效的方式：一次性获取所有标签关系
+            cat = book.get('category', '')
+            if cat:
+                self._category_index[cat].append(bid)
+
+        # 一次性获取所有书籍的标签
+        from apps.books.models import BookTag
+        tag_map = defaultdict(list)
+        for bt in BookTag.objects.select_related('tag').all():
+            tag_map[bt.book_id].append(bt.tag.name)
 
         for book in books:
             bid = book['id']
             tags = tag_map.get(bid, [])
             for tag in tags:
                 self._tags_index[tag].append(bid)
-            cat = book.get('category', '')
-            if cat:
-                self._category_index[cat].append(bid)
 
         self._last_build = now
         elapsed = time.time() - start
@@ -156,10 +161,11 @@ class RecommendationEngine:
             self._set_cached(cache_key, results)
             return results
 
-        read_books = ReadingProgress.objects.filter(user=user).select_related('book')
+        # 使用 prefetch_related 避免 N+1
+        read_books = ReadingProgress.objects.filter(user=user).select_related('book').prefetch_related('book__tags')[:20]
         read_tags = set()
         read_categories = set()
-        for rp in read_books[:20]:
+        for rp in read_books:
             for tag in rp.book.tags.all():
                 read_tags.add(tag.name)
             if rp.book.category:
@@ -223,9 +229,22 @@ class RecommendationEngine:
             self._set_cached(cache_key, results)
             return results
 
+        # 限制候选集大小，避免全表扫描
+        candidate_ids = set()
+        for tag in target_tags:
+            candidate_ids.update(self._tags_index.get(tag, [])[:50])
+        if target_cat:
+            candidate_ids.update(self._category_index.get(target_cat, [])[:50])
+        candidate_ids.discard(book_id)
+
+        if not candidate_ids:
+            results = self.get_hot_recommendations(limit)
+            self._set_cached(cache_key, results)
+            return results
+
         qs = Book.objects.prefetch_related('tags').annotate(
             _ch_count=Count('chapters'),
-        ).exclude(id=book_id)
+        ).filter(id__in=list(candidate_ids)[:100])
 
         candidates = []
         for b in qs:
@@ -266,13 +285,26 @@ class RecommendationEngine:
         return results[:limit]
 
     def invalidate_cache(self, pattern=None):
-        if pattern:
-            keys = cache.keys(f'rec:{pattern}:*')
-            for k in keys:
-                cache.delete(k)
-        else:
-            cache.delete_pattern('rec:*')
-        logger.info(f'[Recommender] 缓存已清除: {pattern or "all"}')
+        """安全清除缓存，兼容所有缓存后端"""
+        try:
+            if pattern:
+                # 尝试使用 keys/delete_pattern（Redis 支持）
+                if hasattr(cache, 'keys'):
+                    keys = cache.keys(f'rec:{pattern}:*')
+                    for k in keys:
+                        cache.delete(k)
+                else:
+                    # 降级：直接删除特定 key
+                    cache.delete(f'rec:{pattern}')
+            else:
+                if hasattr(cache, 'delete_pattern'):
+                    cache.delete_pattern('rec:*')
+                else:
+                    # 降级：清空整个缓存
+                    cache.clear()
+            logger.info(f'[Recommender] 缓存已清除: {pattern or "all"}')
+        except Exception as e:
+            logger.warning(f'[Recommender] 缓存清除失败: {e}')
 
     def get_stats(self):
         total = self._stats['cache_hits'] + self._stats['cache_misses']

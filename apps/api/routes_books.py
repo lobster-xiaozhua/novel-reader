@@ -252,21 +252,6 @@ def get_categories(request) -> list:
     return list(qs)
 
 
-@router.get('/books/', response=list[BookListSchema], auth=optional_jwt_auth)
-@paginate
-def list_books(request, tag: str = None, category: str = None, search: str = None):
-    qs = Book.objects.prefetch_related('tags').annotate(
-        _chapter_count=Count('chapters', output_field=models.IntegerField())
-    )
-    if tag:
-        qs = qs.filter(tags__name=tag)
-    if category:
-        qs = qs.filter(category=category)
-    if search:
-        qs = qs.filter(Q(title__icontains=search) | Q(author__icontains=search))
-    return qs
-
-
 @router.get('/books/{book_id}/', response=BookDetailSchema, auth=optional_jwt_auth)
 def get_book(request, book_id: int) -> dict:
     book = get_object_or_404(Book.objects.prefetch_related('tags'), id=book_id)
@@ -291,13 +276,6 @@ def get_book(request, book_id: int) -> dict:
         'created_at': book.created_at.isoformat(),
         'updated_at': book.updated_at.isoformat(),
     }
-
-
-@router.get('/books/{book_id}/similar/', auth=optional_jwt_auth)
-def get_similar_books(request, book_id: int, limit: int = 6):
-    results = recommend_similar_books(book_id, limit)
-    logger.info(f'[Similar] book_id={book_id}, found={len(results)}')
-    return {'success': True, 'data': results}
 
 
 @router.get('/books/{book_id}/chapters/', response=list[ChapterSchema], auth=optional_jwt_auth)

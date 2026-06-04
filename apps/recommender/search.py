@@ -52,10 +52,34 @@ class HybridSearchEngine:
         logger.info('[SearchEngine] 构建搜索索引...')
         start = time.time()
 
+        # 使用 prefetch_related 避免 N+1，限制内存使用
         books = Book.objects.prefetch_related('tags').all()
         self._books_index = {}
         self._chapters_index = {}
         total_ch = 0
+
+        # 一次性获取所有章节内容，避免循环内查询
+        chapter_contents = {}
+        for ch in Chapter.objects.select_related('book').all():
+            content = self._read_chapter_file(ch.file_path)
+            if content:
+                content = content[:5000]  # 限制内容大小
+                chapter_contents[ch.id] = {
+                    'id': ch.id,
+                    'title': ch.title,
+                    'title_lower': ch.title.lower(),
+                    'content': content,
+                    'content_lower': content.lower(),
+                    'content_length': len(content),
+                    'chapter_number': ch.chapter_number,
+                    'book_id': ch.book_id,
+                }
+                total_ch += 1
+
+        # 按 book_id 分组章节
+        chapters_by_book = defaultdict(dict)
+        for ch_id, ch_data in chapter_contents.items():
+            chapters_by_book[ch_data['book_id']][ch_id] = ch_data
 
         for book in books:
             self._books_index[book.id] = {
@@ -69,25 +93,7 @@ class HybridSearchEngine:
                 'description_lower': (book.description or '').lower(),
                 'tags': [t.name for t in book.tags.all()],
             }
-
-            chapters = Chapter.objects.filter(book=book).order_by('chapter_number')
-            book_chapters = {}
-            for ch in chapters:
-                content = self._read_chapter_file(ch.file_path)
-                if content:
-                    content = content[:5000]
-                    book_chapters[ch.id] = {
-                        'id': ch.id,
-                        'title': ch.title,
-                        'title_lower': ch.title.lower(),
-                        'content': content,
-                        'content_lower': content.lower(),
-                        'content_length': len(content),
-                        'chapter_number': ch.chapter_number,
-                    }
-                    total_ch += 1
-
-            self._chapters_index[book.id] = book_chapters
+            self._chapters_index[book.id] = chapters_by_book.get(book.id, {})
 
         self.total_books = len(self._books_index)
         self.total_chapters = total_ch
@@ -264,13 +270,20 @@ class HybridSearchEngine:
             self.build_index()
 
     def invalidate_cache(self, query=None):
-        if query:
-            key = self._cache_key(query, 50)
-            cache.delete(key)
-            logger.info(f'[SearchEngine] 缓存已清除: {query}')
-        else:
-            cache.delete_pattern('srch:*')
-            logger.info('[SearchEngine] 搜索缓存已全部清除')
+        """安全清除缓存，兼容所有缓存后端"""
+        try:
+            if query:
+                key = self._cache_key(query, 50)
+                cache.delete(key)
+                logger.info(f'[SearchEngine] 缓存已清除: {query}')
+            else:
+                if hasattr(cache, 'delete_pattern'):
+                    cache.delete_pattern('srch:*')
+                else:
+                    cache.clear()
+                logger.info('[SearchEngine] 搜索缓存已全部清除')
+        except Exception as e:
+            logger.warning(f'[SearchEngine] 缓存清除失败: {e}')
 
     def get_stats(self):
         stats = cache.get(self._get_stats_key())

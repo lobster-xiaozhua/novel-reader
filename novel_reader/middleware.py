@@ -86,6 +86,7 @@ class JWTAuthMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # 只在用户未认证时尝试 JWT 认证，避免覆盖已认证用户
         if not getattr(request, 'user', None) or not request.user.is_authenticated:
             self._authenticate(request)
         return self.get_response(request)
@@ -98,13 +99,13 @@ class JWTAuthMiddleware:
 
         payload = decode_token(token)
         if not payload or payload.get('type') != 'access':
-            auth_logger.warning(f'认证失败: {request.path} | IP: {request.META.get("REMOTE_ADDR")} | token_type={payload.get("type") if payload else "invalid"}')
+            auth_logger.warning(f'认证失败: {request.path} | IP: {self._get_client_ip(request)} | token_type={payload.get("type") if payload else "invalid"}')
             return
 
         try:
             user_id = int(payload['sub'])
-        except (ValueError, TypeError):
-            auth_logger.warning(f'无效token: user_id解析失败 | IP: {request.META.get("REMOTE_ADDR")}')
+        except (ValueError, TypeError, KeyError):
+            auth_logger.warning(f'无效token: user_id解析失败 | IP: {self._get_client_ip(request)}')
             return
 
         cache_key = f'jwt_user:{user_id}'
@@ -120,7 +121,15 @@ class JWTAuthMiddleware:
             cache.set(cache_key, user, _JWT_USER_CACHE_TTL)
 
         request.user = user
-        auth_logger.debug(f'认证成功: user_id={user_id} ({user.username}) | path={request.path} | cache_hit={cache_hit} | IP={request.META.get("REMOTE_ADDR")}')
+        auth_logger.debug(f'认证成功: user_id={user_id} ({user.username}) | path={request.path} | cache_hit={cache_hit} | IP={self._get_client_ip(request)}')
+
+    def _get_client_ip(self, request):
+        """获取客户端真实 IP，支持 X-Forwarded-For"""
+        xff = request.META.get('HTTP_X_FORWARDED_FOR')
+        if xff:
+            # X-Forwarded-For 可能包含多个 IP，取第一个
+            return xff.split(',')[0].strip()
+        return request.META.get('REMOTE_ADDR', '?')
 
 
 class RequestTimingMiddleware:
@@ -131,7 +140,7 @@ class RequestTimingMiddleware:
 
     def __call__(self, request):
         start = time.monotonic()
-        ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '?'))
+        ip = self._get_client_ip(request)
         method = request.method
         path = request.path
         qs = request.META.get('QUERY_STRING', '')
@@ -170,6 +179,13 @@ class RequestTimingMiddleware:
         )
 
         return response
+
+    def _get_client_ip(self, request):
+        """获取客户端真实 IP，支持 X-Forwarded-For"""
+        xff = request.META.get('HTTP_X_FORWARDED_FOR')
+        if xff:
+            return xff.split(',')[0].strip()
+        return request.META.get('REMOTE_ADDR', '?')
 
 
 class SuppressBadAuthLog(logging.Filter):
