@@ -189,21 +189,9 @@ pause
 exit /b 1
 
 :check_pg_after_install
-:: Refresh PATH from registry and check again
+:: Scan common install paths and APPEND to existing PATH (never replace)
 call :log_info "Verifying PostgreSQL installation..."
-:: Refresh PATH from system (captures newly installed programs)
-for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%B"
-for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%B"
-set "PATH=!SYS_PATH!;!USR_PATH!"
 
-where psql >nul 2>&1
-if %errorlevel%==0 (
-    call :log_success "PostgreSQL is now available"
-    call :setup_pg_user_db
-    goto :eof
-)
-
-:: Fallback: scan common install paths
 set "PG_FOUND=0"
 for /d %%D in ("C:\Program Files\PostgreSQL\*\bin") do (
     if exist "%%D\psql.exe" (
@@ -214,11 +202,13 @@ for /d %%D in ("C:\Program Files\PostgreSQL\*\bin") do (
 if "!PG_FOUND!"=="1" (
     call :log_info "Found PostgreSQL at: !PG_BIN!"
     set "PATH=!PG_BIN!;!PATH!"
-    where psql >nul 2>&1 && (
-        call :log_success "PostgreSQL now available after PATH fix"
-        call :setup_pg_user_db
-        goto :eof
-    )
+)
+
+where psql >nul 2>&1
+if %errorlevel%==0 (
+    call :log_success "PostgreSQL is now available"
+    call :setup_pg_user_db
+    goto :eof
 )
 
 call :log_error "PostgreSQL installed but not accessible"
@@ -342,16 +332,41 @@ goto :eof
 call :log_step "Environment Check"
 set "env_errors=0"
 
-where python >nul 2>&1 || where python3 >nul 2>&1
-if %errorlevel% neq 0 (
+:: Python: try python, python3, and Windows Store alias
+set "PYTHON_FOUND=0"
+where python >nul 2>&1 && set "PYTHON_FOUND=1"
+if "!PYTHON_FOUND!"=="0" where python3 >nul 2>&1 && set "PYTHON_FOUND=1"
+if "!PYTHON_FOUND!"=="0" (
+    :: Check Windows Store Python alias
+    if exist "%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe" set "PYTHON_FOUND=1"
+    if exist "%LOCALAPPDATA%\Microsoft\WindowsApps\python3.exe" set "PYTHON_FOUND=1"
+)
+if "!PYTHON_FOUND!"=="0" (
+    :: Check common install paths
+    for /d %%D in ("C:\Python3*\Scripts" "C:\Python3*" "%LOCALAPPDATA%\Programs\Python\Python3*\Scripts") do (
+        if exist "%%~D\python.exe" (
+            set "PYTHON_FOUND=1"
+            set "PATH=%%~D;!PATH!"
+        )
+    )
+)
+if "!PYTHON_FOUND!"=="0" (
     call :log_error "Python is not installed"
     set /a env_errors+=1
 ) else (
     for /f "tokens=2" %%v in ('python --version 2^>^&1') do call :log_success "Python %%v"
 )
 
-where node >nul 2>&1
-if %errorlevel% neq 0 (
+:: Node.js: try node, and common install paths
+set "NODE_FOUND=0"
+where node >nul 2>&1 && set "NODE_FOUND=1"
+if "!NODE_FOUND!"=="0" (
+    if exist "C:\Program Files\nodejs\node.exe" (
+        set "NODE_FOUND=1"
+        set "PATH=C:\Program Files\nodejs;!PATH!"
+    )
+)
+if "!NODE_FOUND!"=="0" (
     call :log_error "Node.js is not installed"
     set /a env_errors+=1
 ) else (
