@@ -17,12 +17,19 @@ env = environ.Env(
     CELERY_BROKER_URL=(str, 'redis://localhost:6379/0'),
     CELERY_RESULT_BACKEND=(str, 'redis://localhost:6379/0'),
 )
-environ.Env.read_env(BASE_DIR / '.env')
+# 读取 .env（处理 BOM：先读取内容去除 BOM 再写入临时文件）
+_env_file = BASE_DIR / '.env'
+if _env_file.exists():
+    _env_content = _env_file.read_text(encoding='utf-8-sig')
+    if _env_content != _env_file.read_text(encoding='utf-8'):
+        _env_file.write_text(_env_content, encoding='utf-8')
+environ.Env.read_env(_env_file)
 
 # SECRET_KEY: 优先从 .env 读取，缺失时自动生成并持久化
 _SECRET_KEY = env('SECRET_KEY', default='')
 if not _SECRET_KEY:
-    if not DEBUG:
+    _is_debug = env('DEBUG')
+    if not _is_debug:
         from django.core.exceptions import ImproperlyConfigured
         raise ImproperlyConfigured(
             '生产环境必须通过环境变量 SECRET_KEY 设置密钥。'
@@ -33,15 +40,16 @@ if not _SECRET_KEY:
     _env_path = BASE_DIR / '.env'
     _env_lines = []
     if _env_path.exists():
-        _env_lines = _env_path.read_text().splitlines()
-    if not any(l.startswith('SECRET_KEY=') for l in _env_lines):
+        _env_text = _env_path.read_text(encoding='utf-8-sig')  # utf-8-sig 自动去除 BOM
+        _env_lines = _env_text.splitlines()
+    if not any(l.lstrip('\ufeff').startswith('SECRET_KEY=') for l in _env_lines):
         # 检查 .gitignore 是否包含 .env
         _gitignore = BASE_DIR / '.gitignore'
         if _gitignore.exists() and '.env' not in _gitignore.read_text():
             import logging as _logging
             _logging.getLogger(__name__).warning('[安全] .gitignore 未包含 .env，自动生成的 SECRET_KEY 可能被提交到版本控制')
         _env_lines.append(f'SECRET_KEY={_SECRET_KEY}')
-        _env_path.write_text('\n'.join(_env_lines) + '\n')
+        _env_path.write_text('\n'.join(_env_lines) + '\n', encoding='utf-8')
 SECRET_KEY = _SECRET_KEY
 DEBUG = env('DEBUG')
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '0.0.0.0'])
