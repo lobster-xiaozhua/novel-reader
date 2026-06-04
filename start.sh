@@ -75,6 +75,82 @@ show_help() {
 EOF
 }
 
+# ─── .env BOM 检测与修复 ───
+
+fix_env_bom() {
+    local env_file=".env"
+    if [ ! -f "$env_file" ]; then
+        return 0
+    fi
+
+    # 检测 UTF-8 BOM (EF BB BF)
+    local bom
+    bom=$(head -c 3 "$env_file" | xxd -p 2>/dev/null || true)
+    if [ "$bom" = "efbbbf" ]; then
+        log_warn ".env 文件包含 UTF-8 BOM，正在修复..."
+        # 去除 BOM：跳过前3字节
+        local tmp_file
+        tmp_file=$(mktemp)
+        tail -c +4 "$env_file" > "$tmp_file"
+        mv "$tmp_file" "$env_file"
+        log_success "BOM 已移除"
+    fi
+}
+
+# ─── 数据库后端检测 ───
+
+detect_db_backend() {
+    # 检查 .env 中是否配置了 DATABASE_URL
+    local db_url=""
+    if [ -f ".env" ]; then
+        db_url=$(grep -E '^DATABASE_URL=' .env 2>/dev/null | head -1 | cut -d'=' -f2- || true)
+    fi
+
+    if [ -n "$db_url" ]; then
+        if echo "$db_url" | grep -qiE '^sqlite'; then
+            echo "sqlite3"
+        elif echo "$db_url" | grep -qiE '^postgres'; then
+            echo "postgresql"
+        else
+            echo "unknown"
+        fi
+    else
+        # 无 DATABASE_URL，默认使用 PostgreSQL
+        echo "postgresql"
+    fi
+}
+
+# ─── SQLite3 降级配置 ───
+
+setup_sqlite_fallback() {
+    log_warn "正在切换为 SQLite3 模式..."
+
+    local env_file=".env"
+    local db_path="data/novel_reader.db"
+
+    # 确保数据目录存在
+    mkdir -p data
+
+    if [ -f "$env_file" ]; then
+        # 检查是否已有 DATABASE_URL
+        if grep -qE '^DATABASE_URL=' "$env_file" 2>/dev/null; then
+            # 替换为 SQLite3
+            sed -i 's|^DATABASE_URL=.*|DATABASE_URL=sqlite:///'"$db_path"'|' "$env_file"
+        else
+            # 追加
+            echo "DATABASE_URL=sqlite:///$db_path" >> "$env_file"
+        fi
+    else
+        # 创建 .env
+        echo "DATABASE_URL=sqlite:///$db_path" > "$env_file"
+        echo "DEBUG=true" >> "$env_file"
+    fi
+
+    log_success "已切换为 SQLite3 模式"
+    log_detail "数据库文件: $db_path"
+    log_warn "SQLite3 模式不支持并发写入，仅适用于开发/测试环境"
+}
+
 # ─── Infrastructure ───
 
 _ensure_postgres() {
@@ -228,25 +304,53 @@ _setup_postgres_user_and_db() {
 start_infra() {
     log_step "启动基础设施"
 
+    # 检测当前数据库后端
+    local db_backend
+    db_backend=$(detect_db_backend)
+
     # PostgreSQL
-    if pg_isready -q 2>/dev/null; then
+    if [ "$db_backend" = "sqlite3" ]; then
+        log_info "数据库后端: SQLite3（跳过 PostgreSQL 检查）"
+        log_detail "如需使用 PostgreSQL，请移除 .env 中的 DATABASE_URL 或改为 postgres://"
+    elif pg_isready -q 2>/dev/null; then
         log_success "PostgreSQL 已运行"
     else
         _ensure_postgres || {
-            log_error "PostgreSQL 无法启动，系统无法运行"
-            log_info "这是一个硬性依赖，请手动安装后重试"
-            exit 1
+            log_error "PostgreSQL 无法启动"
+            log_warn "可切换为 SQLite3 模式继续运行（仅适用于开发/测试）"
+            echo ""
+            echo -e "  ${YELLOW}是否切换为 SQLite3 模式？${NC}"
+            echo -e "  ${DIM}SQLite3 不支持并发写入，适合单用户开发${NC}"
+            echo -ne "  ${BOLD}[y/N]${NC}: "
+            local answer
+            read -r answer 2>/dev/null || answer="n"
+            if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
+                setup_sqlite_fallback
+            else
+                log_error "PostgreSQL 是硬性依赖，请手动安装后重试"
+                log_info "安装指引:"
+                log_detail "Ubuntu/Debian: sudo apt-get install postgresql"
+                log_detail "CentOS/RHEL:  sudo dnf install postgresql-server"
+                log_detail "macOS:        brew install postgresql"
+                log_detail "Termux:       pkg install postgresql"
+                exit 1
+            fi
         }
     fi
 
     # Redis
     if redis-cli ping 2>/dev/null | grep -q PONG; then
         log_success "Redis 已运行"
+        REDIS_AVAILABLE=true
     else
         log_info "启动 Redis..."
-        redis-server --daemonize yes --maxmemory 256mb --maxmemory-policy allkeys-lru 2>/dev/null && \
-            log_success "Redis 已启动" || \
+        redis-server --daemonize yes --maxmemory 256mb --maxmemory-policy allkeys-lru 2>/dev/null && {
+            log_success "Redis 已启动"
+            REDIS_AVAILABLE=true
+        } || {
             log_warn "Redis 启动失败，将使用 DiskCache 模式"
+            REDIS_AVAILABLE=false
+        }
     fi
 
     # Elasticsearch (optional)
@@ -267,7 +371,7 @@ start_infra() {
                 log_warn "Elasticsearch 未就绪，搜索将降级为数据库模式"
             fi
         else
-            log_detail "Elasticsearch 未安装，搜索使用 PostgreSQL LIKE 模式"
+            log_detail "Elasticsearch 未安装，搜索使用数据库 LIKE 模式"
         fi
     fi
 
@@ -328,17 +432,31 @@ check_env() {
 install_python_deps() {
     source venv/bin/activate
 
-    if python -c "import django, ninja, granian" 2>/dev/null; then
+    # 基础依赖检查
+    local base_ok=true
+    if ! python -c "import django, ninja, granian" 2>/dev/null; then
+        base_ok=false
+    fi
+
+    # Redis 可用时检查 django-redis
+    local redis_dep_ok=true
+    if [ "${REDIS_AVAILABLE:-false}" = true ]; then
+        if ! python -c "import django_redis" 2>/dev/null; then
+            redis_dep_ok=false
+        fi
+    fi
+
+    if $base_ok && $redis_dep_ok; then
         log_success "Python 依赖已就绪，跳过安装"
         return 0
     fi
 
-    log_info "从阿里云 PyPI 镜像安装..."
     if [ ! -f requirements.txt ]; then
         log_error "requirements.txt 不存在"
         exit 1
     fi
 
+    log_info "从阿里云 PyPI 镜像安装..."
     local pkg_count
     pkg_count=$(grep -cE '^[^#]' requirements.txt 2>/dev/null || echo "?")
     log_detail "共 ${pkg_count} 个依赖项"
@@ -360,6 +478,19 @@ install_python_deps() {
         local pkgs
         pkgs=$(echo "$install_output" | grep "Successfully installed" | sed 's/Successfully installed //')
         log_success "已安装: ${pkgs:0:80}..."
+    fi
+
+    # Redis 可用时单独验证 django-redis
+    if [ "${REDIS_AVAILABLE:-false}" = true ]; then
+        if ! python -c "import django_redis" 2>/dev/null; then
+            log_warn "django-redis 未安装，尝试单独安装..."
+            pip install django-redis>=5.4.0 \
+                -i https://mirrors.aliyun.com/pypi/simple/ \
+                --trusted-host mirrors.aliyun.com 2>&1 || {
+                log_warn "django-redis 安装失败，Redis 缓存将不可用"
+                log_detail "系统将自动降级为 DiskCache 模式"
+            }
+        fi
     fi
 
     if python -c "import django" 2>/dev/null; then
@@ -432,13 +563,35 @@ migrate_db() {
     source venv/bin/activate
 
     local output
-    output=$(python manage.py migrate 2>&1) || {
+    output=$(python manage.py migrate 2>&1)
+    local exit_code=$?
+
+    if [ $exit_code -ne 0 ]; then
         log_error "数据库迁移失败"
-        echo "$output" | tail -5 | while read -r line; do
-            log_error "  $line"
-        done
+
+        # 诊断常见错误
+        if echo "$output" | grep -qiE "sqlite.*OPTIONS\|sqlite.*statement_timeout\|no such.*statement_timeout"; then
+            log_error "诊断：SQLite3 不支持 PostgreSQL 的 OPTIONS 参数"
+            log_detail "settings.py 已自动处理此兼容性问题，请确认代码为最新版本"
+        elif echo "$output" | grep -qiE "connection.*refused\|could not connect\|pg_ctl"; then
+            log_error "诊断：PostgreSQL 连接失败"
+            log_detail "请确认 PostgreSQL 正在运行: pg_isready"
+            log_detail "或切换为 SQLite3: 在 .env 中设置 DATABASE_URL=sqlite:///data/novel_reader.db"
+        elif echo "$output" | grep -qiE "django_redis\|No module named.*django_redis"; then
+            log_error "诊断：django-redis 模块缺失"
+            log_detail "请安装: pip install django-redis>=5.4.0"
+            log_detail "或停止 Redis 服务，系统将自动降级为 DiskCache"
+        elif echo "$output" | grep -qiE "relation.*already exists\|duplicate.*key"; then
+            log_warn "诊断：迁移冲突（表已存在）"
+            log_detail "尝试: python manage.py migrate --fake <app> <migration>"
+        else
+            echo "$output" | tail -10 | while IFS= read -r line; do
+                log_error "  $line"
+            done
+        fi
+
         exit 1
-    }
+    fi
 
     local applied
     applied=$(echo "$output" | grep -c "Applying\|OK" || true)
@@ -449,6 +602,16 @@ migrate_db() {
     else
         log_detail "无待执行的迁移"
     fi
+
+    # 显示当前数据库后端
+    local db_engine
+    db_engine=$(python -c "
+from django.conf import settings
+engine = settings.DATABASES['default']['ENGINE']
+print('SQLite3' if 'sqlite' in engine else 'PostgreSQL' if 'postgres' in engine else engine)
+" 2>/dev/null || echo "未知")
+    log_detail "数据库后端: $db_engine"
+
     step_done
 }
 
@@ -648,6 +811,21 @@ start_server() {
         log_warn "引擎初始化异常，服务仍可运行"
     }
 
+    # 显示当前运行模式
+    local db_engine
+    db_engine=$(python -c "
+from django.conf import settings
+e = settings.DATABASES['default']['ENGINE']
+print('SQLite3' if 'sqlite' in e else 'PostgreSQL' if 'postgres' in e else e)
+" 2>/dev/null || echo "未知")
+
+    local cache_mode
+    cache_mode=$(python -c "
+from django.conf import settings
+b = settings.CACHES['default']['BACKEND']
+print('Redis' if 'redis' in b else 'DiskCache')
+" 2>/dev/null || echo "未知")
+
     echo ""
     echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}  🚀 服务已启动!${NC}"
@@ -658,6 +836,7 @@ start_server() {
     echo -e "  ${GREEN}📋${NC} API 文档:   http://localhost:${port}/api/v1/docs/"
     echo -e "  ${GREEN}📊${NC} 性能监控:   http://localhost:${port}/api/v1/health/perf/"
     echo ""
+    echo -e "  ${DIM}数据库: ${db_engine} | 缓存: ${cache_mode}${NC}"
     echo -e "  ${DIM}按 Ctrl+C 停止服务${NC}"
     echo ""
 
@@ -674,6 +853,10 @@ start_server() {
 cmd_start() {
     print_banner
     TOTAL_STEPS=8
+
+    # 修复 .env BOM
+    fix_env_bom
+
     start_infra
     check_env
     install_deps
@@ -686,6 +869,10 @@ cmd_start() {
 cmd_dev() {
     print_banner
     TOTAL_STEPS=5
+
+    # 修复 .env BOM
+    fix_env_bom
+
     start_infra
     check_env
     install_deps
@@ -746,7 +933,7 @@ cmd_status() {
     if curl -sf http://localhost:9200 > /dev/null 2>&1; then
         log_success "Elasticsearch: 运行中"
     else
-        log_warn "Elasticsearch: 未运行 (搜索将使用 PostgreSQL 模式)"
+        log_warn "Elasticsearch: 未运行 (搜索将使用数据库模式)"
     fi
 
     # App
@@ -759,11 +946,17 @@ cmd_status() {
     else
         log_warn "应用服务: 未运行"
     fi
+
+    # 数据库后端
+    local db_backend
+    db_backend=$(detect_db_backend)
+    log_detail "数据库配置: $db_backend"
 }
 
 cmd_migrate() {
     TOTAL_STEPS=4
     print_banner
+    fix_env_bom
     start_infra
     check_env
     install_deps
