@@ -206,9 +206,9 @@ export default function SearchPage() {
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => navigate('/')}
-            className="glass-card--compact w-8 h-8 rounded-lg flex items-center justify-center hover:bg-accent/10 transition-colors"
+            className="btn btn--tertiary btn--sm"
           >
-            <ArrowLeft className="w-4 h-4 text-text-secondary" />
+            <ArrowLeft className="w-4 h-4" />
           </button>
           <form onSubmit={handleSearch} className="flex-1 relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted group-focus-within:text-accent transition-colors" />
@@ -287,7 +287,7 @@ export default function SearchPage() {
           <p>{total === 0 ? '未找到相关书籍' : '当前筛选条件下无结果'}</p>
           <button
             onClick={() => navigate('/')}
-            className="mt-4 px-4 py-2 rounded-lg bg-accent/10 text-accent text-sm hover:bg-accent/20 transition-colors"
+            className="btn btn--secondary btn--md mt-4"
           >
             返回首页
           </button>

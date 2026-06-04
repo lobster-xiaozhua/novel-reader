@@ -565,3 +565,171 @@ body {
   background: linear-gradient(135deg, #cd7f32, #b87333, #9c661f);
   box-shadow: 0 2px 8px rgba(185, 115, 51, 0.3);
 }
+
+/* ============================================================
+   Unified Button System
+   Based on button layout principles: primary/secondary/tertiary
+   with clear state feedback (idle/loading/disabled/hover/active)
+   ============================================================ */
+
+/* ── Base button reset ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    transform 0.15s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Primary button: solid fill, high contrast ──
+   Use for: 开始阅读, 登录, 提交, 搜索 */
+.btn--primary {
+  background: linear-gradient(135deg, var(--accent), #d97706);
+  color: #fff;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+}
+
+.btn--primary:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn--primary:active:not(:disabled) {
+  transform: scale(0.97) translateY(0);
+}
+
+/* ── Secondary button: glass outline, medium emphasis ──
+   Use for: 收藏, 加入书架, 编辑 */
+.btn--secondary {
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 0.75rem;
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  background: var(--glass-bg-hover);
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* ── Tertiary button: text/ghost, low emphasis ──
+   Use for: 展开, 更多, 取消, 返回 */
+.btn--tertiary {
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 0.5rem;
+  padding: 0.375rem 0.75rem;
+}
+
+.btn--tertiary:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ── Icon button: 44x44pt minimum touch target ──
+   Use for: 搜索图标, 分享, 菜单, 关闭 */
+.btn--icon {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 0.5rem;
+}
+
+.btn--icon:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ── Button sizes ── */
+.btn--sm {
+  height: 32px;
+  padding: 0 0.75rem;
+  font-size: 0.75rem;
+}
+
+.btn--md {
+  height: 40px;
+  padding: 0 1rem;
+  font-size: 0.875rem;
+}
+
+.btn--lg {
+  height: 48px;
+  padding: 0 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* ── Loading state ── */
+.btn--loading {
+  pointer-events: none;
+  position: relative;
+  color: transparent !important;
+}
+
+.btn--loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 0.6s linear infinite;
+  color: var(--text-primary);
+}
+
+.btn--primary.btn--loading::after {
+  color: #fff;
+}
+
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Danger variant ── */
+.btn--danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 0.75rem;
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.25);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+}
+
+/* ── Success state ── */
+.btn--success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 0.75rem;
+}

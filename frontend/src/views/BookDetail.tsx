@@ -97,7 +97,7 @@ export default function BookDetail() {
         <p className="text-sm mt-1">该书籍可能不存在或已被删除</p>
         <button
           onClick={() => navigate(-1)}
-          className="mt-6 inline-flex items-center gap-2 px-4 h-10 rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 transition-colors"
+          className="btn btn--secondary btn--lg mt-6"
         >
           <ArrowLeft className="w-4 h-4" />
           返回
@@ -163,25 +163,28 @@ export default function BookDetail() {
               {book.description || '暂无简介'}
             </p>
 
-            {/* Action Buttons — Primary + Secondary */}
+            {/* Action Buttons — Three-tier priority layout
+                Primary (🔴): Start Reading — solid fill, most prominent
+                Secondary (🟡): Favorite — glass outline, state changes
+                Tertiary (🟢): Add to Shelf — subtle outline */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
-              {/* Primary: Start Reading — solid fill */}
+              {/* 🔴 Primary: Start Reading — solid fill */}
               <button
                 onClick={handleStartReading}
                 disabled={!chapters?.length}
-                className="inline-flex items-center gap-2 px-7 h-11 rounded-xl bg-white text-text-primary font-bold text-sm hover:bg-white/90 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-black/20"
+                className="btn btn--lg disabled:opacity-50 bg-white text-text-primary font-bold shadow-lg shadow-black/20 hover:bg-white/90"
               >
                 <BookOpen className="w-4 h-4" />
                 {book.reading_progress ? '继续阅读' : '开始阅读'}
               </button>
-              {/* Secondary: Favorite — glass outline */}
+              {/* 🟡 Secondary: Favorite — with optimistic update state */}
               <button
                 onClick={handleToggleFav}
                 disabled={favMutation.isPending}
-                className={`inline-flex items-center gap-2 px-5 h-11 rounded-xl font-semibold text-sm transition-all active:scale-95 shadow-lg backdrop-blur-sm ${
+                className={`btn btn--secondary btn--lg disabled:opacity-50 ${
                   book.is_favorited
-                    ? 'bg-danger/20 text-danger hover:bg-danger/30 border border-danger/30'
-                    : 'bg-white/10 text-white hover:bg-white/20 border border-white/20'
+                    ? 'btn--danger'
+                    : ''
                 }`}
               >
                 {favMutation.isPending ? (
@@ -191,11 +194,11 @@ export default function BookDetail() {
                 )}
                 {book.is_favorited ? '已收藏' : '收藏'}
               </button>
-              {/* Tertiary: Add to Shelf — glass outline */}
+              {/* 🟢 Tertiary: Add to Shelf */}
               <button
                 onClick={handleStartReading}
                 disabled={!chapters?.length}
-                className="inline-flex items-center gap-2 px-5 h-11 rounded-xl bg-white/10 text-white font-semibold text-sm hover:bg-white/20 border border-white/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg backdrop-blur-sm"
+                className="btn btn--secondary btn--lg disabled:opacity-50 text-white border-white/20 hover:border-accent"
               >
                 <BookmarkPlus className="w-4 h-4" />
                 加入书架

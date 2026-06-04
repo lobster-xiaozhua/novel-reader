@@ -179,7 +179,7 @@ function RecommendCard({ book, onClick, index }: { book: RecommendBook; onClick:
 
           {/* CTA Button — primary action */}
           <div className="flex items-center gap-2 mt-auto">
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-accent to-amber-500 text-white text-xs font-semibold hover:shadow-lg hover:shadow-accent/25 active:scale-95 transition-all">
+            <span className="btn btn--primary btn--sm">
               <BookOpen className="w-3.5 h-3.5" /> 查看详情
             </span>
           </div>
@@ -383,7 +383,7 @@ export default function HomePortal() {
               />
               <button
                 type="submit"
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-10 px-6 rounded-xl bg-gradient-to-r from-accent to-amber-500 text-white font-semibold text-sm hover:shadow-lg hover:shadow-accent/25 active:scale-95 transition-all"
+                className="btn btn--primary btn--lg absolute right-2 top-1/2 -translate-y-1/2"
               >
                 搜索
               </button>

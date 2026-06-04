@@ -69,14 +69,14 @@ export default function Books() {
               placeholder="搜索书籍..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-64 h-10 pl-9 pr-4 rounded-lg bg-card-bg border border-card-border text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50 transition-colors"
+              className="w-64 h-10 pl-9 pr-4 rounded-lg glass-input text-sm text-text-primary placeholder:text-text-muted"
             />
           </div>
           <input ref={fileRef} type="file" accept=".txt" multiple className="hidden" onChange={handleImport} />
           <button
             onClick={() => fileRef.current?.click()}
             disabled={importing}
-            className="flex items-center gap-2 px-4 h-10 rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 transition-colors disabled:opacity-50"
+            className="btn btn--primary btn--md"
           >
             {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
             导入书籍
@@ -87,65 +87,91 @@ export default function Books() {
       {isLoading ? (
         <Spinner />
       ) : books.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-text-muted">
+        <div className="glass-card p-16 flex flex-col items-center justify-center text-text-muted">
           <BookOpen className="w-12 h-12 mb-3 opacity-30" />
-          <p>{search ? '未找到匹配的书籍' : '暂无书籍，点击导入按钮添加'}</p>
+          <p>{search ? '未找到匹配书籍' : '暂无书籍'}</p>
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={importing}
+            className="btn btn--secondary btn--md mt-4"
+          >
+            {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            导入书籍
+          </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {books.map((book: Book) => (
-            <div key={book.id} className="bg-card-bg border border-card-border rounded-xl p-5 card-hover">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 stagger-in">
+          {books.map((book: Book, idx) => (
+            <div
+              key={book.id}
+              className="glass-card glass-card--shimmer"
+              style={{ animationDelay: `${idx * 0.04}s` }}
+            >
+              {/* Shimmer layer */}
+              <div className="shimmer-layer" />
+
+              {/* Gradient top bar */}
               <div
-                className="w-full h-3 rounded-t-xl -mt-5 -mx-5 mb-4"
+                className="h-1"
                 style={{
                   background: `linear-gradient(135deg, ${book.gradient?.[0] || '#667eea'}, ${book.gradient?.[1] || '#764ba2'})`,
-                  width: 'calc(100% + 40px)',
                 }}
               />
-              <div className="flex items-start gap-4 -mt-1">
-                <div className="w-14 h-14 rounded-xl bg-primary-500/10 flex items-center justify-center flex-shrink-0">
-                  <BookOpen className="w-7 h-7 text-primary-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-text-primary truncate">{book.title}</h3>
-                  <p className="text-sm text-text-secondary mt-1">{book.author || '未知作者'}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    {book.category && (
-                      <span className="px-2 py-0.5 rounded-md bg-primary-500/10 text-primary-500 text-xs">
-                        {book.category}
-                      </span>
-                    )}
-                    <span className="text-xs text-text-muted">{book.chapter_count} 章</span>
+
+              <button
+                onClick={() => navigate(`/chapters`, { state: { bookId: book.id } })}
+                className="w-full p-5 text-left group"
+              >
+                <div className="flex items-start gap-4">
+                  <div
+                    className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform"
+                    style={{ background: `linear-gradient(135deg, ${book.gradient?.[0] || '#667eea'}, ${book.gradient?.[1] || '#764ba2'})` }}
+                  >
+                    <BookOpen className="w-7 h-7 text-white/80" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-text-primary truncate group-hover:text-accent transition-colors">{book.title}</h3>
+                    <p className="text-sm text-text-secondary mt-1">{book.author || '未知作者'}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      {book.category && (
+                        <span className="px-2 py-0.5 rounded-md bg-accent/10 text-accent text-xs">
+                          {book.category}
+                        </span>
+                      )}
+                      <span className="text-xs text-text-muted">{book.chapter_count} 章</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {book.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {book.tags.map((tag) => (
-                    <span key={tag.id} className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/5 text-text-secondary text-xs">
-                      <Tag className="w-3 h-3" />
-                      {tag.name}
-                    </span>
-                  ))}
-                </div>
-              )}
+                {book.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-4">
+                    {book.tags.map((tag) => (
+                      <span key={tag.id} className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-bg-tertiary/50 text-text-secondary text-xs border border-border/50">
+                        <Tag className="w-3 h-3" />
+                        {tag.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </button>
 
-              <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.06]">
+              <div className="flex items-center justify-between px-5 pb-4 pt-3 border-t border-border/50">
                 <span className="text-xs text-text-muted">
                   {new Date(book.created_at).toLocaleDateString('zh-CN')}
                 </span>
                 <div className="flex items-center gap-2">
+                  {/* Tertiary: Favorite icon button */}
                   <button
                     onClick={(e) => handleToggleFav(e, book.id)}
-                    className="p-1.5 rounded-lg hover:bg-primary-500/10 text-text-muted hover:text-primary-500 transition-colors"
+                    className="btn btn--tertiary btn--sm"
                     title="收藏"
                   >
                     <Heart className="w-4 h-4" />
                   </button>
+                  {/* Secondary: View chapters button */}
                   <button
                     onClick={() => navigate(`/chapters`, { state: { bookId: book.id } })}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary-500/10 text-primary-500 text-sm hover:bg-primary-500/20 transition-colors"
+                    className="btn btn--secondary btn--sm"
                   >
                     <Eye className="w-4 h-4" />
                     查看
