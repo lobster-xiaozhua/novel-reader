@@ -1,4 +1,5 @@
 import environ
+import secrets
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -14,7 +15,19 @@ env = environ.Env(
 )
 environ.Env.read_env(BASE_DIR / '.env')
 
-SECRET_KEY = env('SECRET_KEY', default='django-insecure-dev-key-change-in-production-!@#$%^&*()')
+# SECRET_KEY: 优先从 .env 读取，缺失时自动生成并持久化
+_SECRET_KEY = env('SECRET_KEY', default='')
+if not _SECRET_KEY:
+    _SECRET_KEY = secrets.token_urlsafe(50)
+    # 自动写入 .env 以便持久化
+    _env_path = BASE_DIR / '.env'
+    _env_lines = []
+    if _env_path.exists():
+        _env_lines = _env_path.read_text().splitlines()
+    if not any(l.startswith('SECRET_KEY=') for l in _env_lines):
+        _env_lines.append(f'SECRET_KEY={_SECRET_KEY}')
+        _env_path.write_text('\n'.join(_env_lines) + '\n')
+SECRET_KEY = _SECRET_KEY
 DEBUG = env('DEBUG')
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '0.0.0.0'])
 

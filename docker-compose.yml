@@ -6,7 +6,9 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - DEBUG=True
+      - DEBUG=${DEBUG:-False}
+      - SECRET_KEY=${SECRET_KEY:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
@@ -14,20 +16,32 @@ services:
       - redis
     command: >
       sh -c "python manage.py migrate &&
-             python manage.py shell -c \"from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='admin').exists() or User.objects.create_superuser('admin', 'admin@example.com', 'admin123')\" &&
-             granian novel_reader.asgi:application --host 0.0.0.0 --port 8000 --interface asgi --workers 1"
+             python manage.py shell -c \"
+from django.contrib.auth import get_user_model
+import os
+User = get_user_model()
+pwd = os.environ.get('ADMIN_PASSWORD', '')
+if not User.objects.filter(username='admin').exists():
+    if not pwd: pwd = 'admin123'
+    User.objects.create_superuser('admin', 'admin@example.com', pwd)
+    print(f'[Init] 管理员已创建: admin / {pwd[:3]}***')
+else:
+    print('[Init] 管理员已存在')
+\" &&
+             granian novel_reader.asgi:application --host 0.0.0.0 --port 8000 --interface asginl --workers 2"
 
   celery:
     build: .
     volumes:
       - ./data:/app/data
     environment:
+      - SECRET_KEY=${SECRET_KEY:-}
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
       - redis
-    command: celery -A novel_reader worker --loglevel=info
+    command: celery -A novel_reader worker --loglevel=info --concurrency=2
 
   redis:
     image: redis:7-alpine
