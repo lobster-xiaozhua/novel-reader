@@ -40,6 +40,9 @@ for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]0x2192" 2^>nul')
 set "STEP_NUM=0"
 set "TOTAL_STEPS=8"
 
+:: ─── Jump to main logic (skip subroutines) ───
+goto :main_entry
+
 :: ─── Logging ───
 :log_info
 echo   %BLUE%%INFO%%NC% %~1
@@ -564,6 +567,7 @@ echo   help       Show this help
 goto :eof
 
 :: ─── Main ───
+:main_entry
 set "CMD=%~1"
 if "%CMD%"=="" set "CMD=start"
 
