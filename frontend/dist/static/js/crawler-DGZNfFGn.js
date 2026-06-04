@@ -1,0 +1,1 @@
+import{g as e,m as t}from"./main.js";function n(e){return t(`/crawler/`,{params:e})}function r(t){return e(`/crawler/`,{url:t})}export{n,r as t};

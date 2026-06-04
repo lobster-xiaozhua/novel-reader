@@ -1,0 +1,1 @@
+import{g as e,m as t}from"./main.js";function n(){return t(`/favorites/`)}function r(t){return e(`/favorites/toggle/`,{book_id:t})}export{r as n,n as t};
