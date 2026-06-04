@@ -169,6 +169,11 @@ if _db_url_str:
             _db_url['ENGINE'] = 'django.db.backends.postgresql'
     DATABASES['default'].update(_db_url)
 
+# SQLite3 不支持 PostgreSQL 的 OPTIONS（如 statement_timeout），需要移除
+if DATABASES['default']['ENGINE'] == 'django.db.backends.sqlite3':
+    DATABASES['default'].pop('OPTIONS', None)
+    DATABASES['default'].pop('CONN_MAX_AGE', None)
+
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -196,13 +201,15 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 _REDIS_AVAILABLE = False
 _REDIS_URL = env('REDIS_URL', default='redis://127.0.0.1:6379/1')
 
-# Check if Redis is actually running
+# Check if Redis is actually running AND django-redis is installed
 try:
     import redis as _redis_client
     _r = _redis_client.Redis.from_url(_REDIS_URL, socket_timeout=2, socket_connect_timeout=2)
     _r.ping()
-    _REDIS_AVAILABLE = True
     _r.close()
+    # Also verify django-redis is importable
+    import django_redis  # noqa: F401
+    _REDIS_AVAILABLE = True
 except Exception:
     pass
 
