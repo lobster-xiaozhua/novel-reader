@@ -422,6 +422,12 @@ start_server() {
     static_count=$(echo "$static_output" | grep -oE '[0-9]+ static files' || true)
     log_detail "静态文件: ${static_count}"
 
+    # 初始化引擎（推荐/搜索/缓存预热）
+    log_info "初始化系统引擎..."
+    python manage.py init_engines 2>&1 || {
+        log_warn "引擎初始化异常，服务仍可运行"
+    }
+
     echo ""
     echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}  🚀 服务已启动!${NC}"
@@ -430,6 +436,7 @@ start_server() {
     echo -e "  ${GREEN}📖${NC} 访问地址:  ${BOLD}http://localhost:${port}${NC}"
     echo -e "  ${GREEN}🔧${NC} Admin 后台: http://localhost:${port}/admin"
     echo -e "  ${GREEN}📋${NC} API 文档:   http://localhost:${port}/api/v1/docs/"
+    echo -e "  ${GREEN}📊${NC} 性能监控:   http://localhost:${port}/api/v1/health/perf/"
     echo ""
     echo -e "  ${DIM}按 Ctrl+C 停止服务${NC}"
     echo ""
