@@ -23,6 +23,7 @@ interface NovelReaderProps {
   totalChapters: number
   onPrev?: () => void
   onNext?: () => void
+  onJumpToChapter?: (chapterId: number) => void
   hasPrev?: boolean
   hasNext?: boolean
   bookTitle?: string
@@ -434,6 +435,7 @@ export default function NovelReader({
   totalChapters,
   onPrev,
   onNext,
+  onJumpToChapter,
   hasPrev,
   hasNext,
   bookTitle: _bookTitle,
@@ -453,7 +455,10 @@ export default function NovelReader({
   const contentRef = useRef<HTMLDivElement>(null)
   const readStartRef = useRef(0)
   const savedRef = useRef(false)
+  const mountedRef = useRef(true)
   const toastTimerRef = useRef<number | null>(null)
+  const bookmarkedRef = useRef(bookmarked)
+  bookmarkedRef.current = bookmarked
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const touchStartTimeRef = useRef(0)
 
@@ -489,12 +494,10 @@ export default function NovelReader({
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (savedRef.current) return
       const elapsed = Math.floor((Date.now() - readStartRef.current) / 1000)
-      if (elapsed >= 30) {
-        savedRef.current = true
+      if (elapsed >= 30 && elapsed % 30 < 10) {  // 每30秒保存一次
         saveProgress({ book_id: bookId, chapter_id: chapterId, position: chapterNumber }).catch(() => {})
-        trackStats({ seconds: elapsed, chapter_id: chapterId }).catch(() => {})
+        trackStats({ seconds: 30, chapter_id: chapterId }).catch(() => {})
       }
     }, 10000)
     return () => clearInterval(interval)
@@ -502,9 +505,12 @@ export default function NovelReader({
 
   // Toast helper
   const showToast = useCallback((msg: string) => {
+    if (!mountedRef.current) return
     setToast(msg)
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 2000)
+    toastTimerRef.current = window.setTimeout(() => {
+      if (mountedRef.current) setToast(null)
+    }, 2000)
   }, [])
 
   // Navigation
@@ -535,7 +541,7 @@ export default function NovelReader({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [goToPrev, goToNext, settingsOpen, tocOpen])
+  }, [goToPrev, goToNext, settingsOpen, tocOpen, handleBookmark])
 
   // Touch/Swipe
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -593,19 +599,12 @@ export default function NovelReader({
 
   // Jump to chapter from TOC
   const handleJumpToChapter = useCallback((chapter: ChapterInfo) => {
-    if (chapter.chapter_number < chapterNumber) {
-      // Navigate to previous chapters
-      for (let i = 0; i < chapterNumber - chapter.chapter_number; i++) {
-        onPrev?.()
-      }
-    } else {
-      for (let i = 0; i < chapter.chapter_number - chapterNumber; i++) {
-        onNext?.()
-      }
+    if (onJumpToChapter) {
+      onJumpToChapter(chapter.id)
     }
     setTocOpen(false)
     showToast(`跳转到: ${chapter.title}`)
-  }, [chapterNumber, onPrev, onNext, showToast])
+  }, [onJumpToChapter, showToast])
 
   // Settings change
   const handleSettingsChange = useCallback((partial: Partial<ReaderSettings>) => {
@@ -615,6 +614,7 @@ export default function NovelReader({
   // Cleanup toast timer
   useEffect(() => {
     return () => {
+      mountedRef.current = false
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     }
   }, [])
@@ -664,6 +664,7 @@ export default function NovelReader({
                 onMouseEnter={(e) => e.currentTarget.style.background = colors.hoverBg}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 title="减小字号 [-]"
+                aria-label="减小字号"
               >
                 <Minus size={16} />
               </button>
@@ -681,6 +682,7 @@ export default function NovelReader({
                 onMouseEnter={(e) => e.currentTarget.style.background = colors.hoverBg}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 title="增大字号 [+]"
+                aria-label="增大字号"
               >
                 <Plus size={16} />
               </button>
@@ -708,6 +710,7 @@ export default function NovelReader({
                 onMouseEnter={(e) => e.currentTarget.style.background = colors.hoverBg}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 title="书签 [B]"
+                aria-label={bookmarked ? '取消书签' : '添加书签'}
               >
                 {bookmarked ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
               </button>
@@ -720,6 +723,7 @@ export default function NovelReader({
                 onMouseEnter={(e) => e.currentTarget.style.background = colors.hoverBg}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 title="目录 [T]"
+                aria-label="打开目录"
               >
                 <List size={16} />
               </button>
@@ -732,6 +736,7 @@ export default function NovelReader({
                 onMouseEnter={(e) => e.currentTarget.style.background = colors.hoverBg}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 title="设置 [S]"
+                aria-label="阅读设置"
               >
                 <Settings size={16} />
               </button>
@@ -792,6 +797,7 @@ export default function NovelReader({
             <button
               onClick={goToPrev}
               disabled={!hasPrev}
+              aria-label="上一章"
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
               style={{
                 color: hasPrev ? colors.text : colors.textMuted,
@@ -824,6 +830,7 @@ export default function NovelReader({
             <button
               onClick={goToNext}
               disabled={!hasNext}
+              aria-label="下一章"
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
               style={{
                 color: hasNext ? colors.text : colors.textMuted,

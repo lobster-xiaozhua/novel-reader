@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { BookOpen, Eye, EyeOff } from 'lucide-react'
 import { post } from '@/utils/http'
 import { useUserStore } from '@/stores/userStore'
@@ -14,6 +14,7 @@ interface AuthResponse {
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login: loginUser } = useUserStore()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [username, setUsername] = useState('')
@@ -37,7 +38,8 @@ export default function Login() {
 
       if (res.success && res.user) {
         loginUser(res.user, res.access_token, res.refresh_token)
-        navigate('/dashboard')
+        const from = (location.state as { from?: string })?.from || '/dashboard'
+        navigate(from, { replace: true })
       } else {
         setError(res.error || '操作失败')
       }
@@ -66,12 +68,14 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">用户名</label>
+            <label htmlFor="login-username" className="block text-sm font-medium text-text-secondary mb-1.5">用户名</label>
             <input
+              id="login-username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
+              autoComplete="username"
               className="w-full h-11 px-4 rounded-lg bg-content-bg border border-card-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50 transition-colors"
               placeholder="输入用户名"
             />
@@ -79,11 +83,13 @@ export default function Login() {
 
           {mode === 'register' && (
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1.5">邮箱</label>
+              <label htmlFor="login-email" className="block text-sm font-medium text-text-secondary mb-1.5">邮箱</label>
               <input
+                id="login-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
                 className="w-full h-11 px-4 rounded-lg bg-content-bg border border-card-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50 transition-colors"
                 placeholder="输入邮箱（可选）"
               />
@@ -91,13 +97,15 @@ export default function Login() {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">密码</label>
+            <label htmlFor="login-password" className="block text-sm font-medium text-text-secondary mb-1.5">密码</label>
             <div className="relative">
               <input
+                id="login-password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 className="w-full h-11 px-4 pr-11 rounded-lg bg-content-bg border border-card-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary-500/50 transition-colors"
                 placeholder="输入密码"
               />

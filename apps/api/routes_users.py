@@ -19,7 +19,7 @@ def list_users(request):
     return [{
         'id': u.id,
         'username': u.username,
-        'email': u.email or '',
+        'email': u.email or '' if request.user.is_staff else (u.email[:2] + '***@' + u.email.split('@')[-1] if u.email and '@' in u.email else ''),
         'is_staff': u.is_staff,
         'date_joined': u.date_joined.isoformat(),
         'last_login': u.last_login.isoformat() if u.last_login else None,

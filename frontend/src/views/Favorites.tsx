@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import { Heart, BookOpen, Clock, Trash2, ChevronRight } from 'lucide-react'
 import { fetchFavorites, toggleFavorite } from '@/api/favorites'
 import { FavoriteItem } from '@/types'
@@ -7,6 +8,7 @@ import { Spinner } from '@/components/Loading'
 import { useNavigate } from 'react-router-dom'
 
 export default function Favorites() {
+  usePageTitle('我的收藏')
   const queryClient = useQueryClient()
   const toast = useToast()
   const navigate = useNavigate()

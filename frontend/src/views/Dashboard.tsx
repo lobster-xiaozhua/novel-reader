@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import {
   BookOpen,
   Clock,
@@ -16,6 +17,7 @@ import { CHART_COLORS, COLORS } from '@/config/colors'
 import { Spinner } from '@/components/Loading'
 
 export default function Dashboard() {
+  usePageTitle('仪表盘')
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['stats'],
     queryFn: () => fetchStats(7),

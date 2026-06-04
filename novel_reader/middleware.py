@@ -1,8 +1,6 @@
 import logging
 import time
 import json
-from collections import defaultdict
-from threading import Lock
 
 from django.core.cache import cache
 
@@ -11,17 +9,12 @@ auth_logger = logging.getLogger('novel_reader.auth')
 
 _JWT_USER_CACHE_TTL = 300
 
-_perf_lock = Lock()
-_api_perf_data = {
-    'total_requests': 0,
-    'total_errors': 0,
-    'path_stats': defaultdict(lambda: {'count': 0, 'total_ms': 0, 'errors': 0}),
-    'window_start': time.time(),
-    'window_requests': 0,
-}
-
 
 class APIMonitorMiddleware:
+    _PERF_KEY = 'api_perf_data'
+    _PERF_TTL = 300
+    _PERF_WINDOW = 60
+
     def __init__(self, get_response):
         self.get_response = get_response
 
@@ -34,51 +27,70 @@ class APIMonitorMiddleware:
         return response
 
     def _record(self, path, method, status, elapsed_ms):
-        with _perf_lock:
-            _api_perf_data['total_requests'] += 1
-            _api_perf_data['window_requests'] += 1
+        try:
+            perf = cache.get(self._PERF_KEY, {
+                'total_requests': 0, 'total_errors': 0,
+                'path_stats': {}, 'window_start': time.time(), 'window_requests': 0,
+            })
+            perf['total_requests'] = perf.get('total_requests', 0) + 1
+            perf['window_requests'] = perf.get('window_requests', 0) + 1
             if status >= 500:
-                _api_perf_data['total_errors'] += 1
+                perf['total_errors'] = perf.get('total_errors', 0) + 1
 
             key = f'{method} {path}'
-            stats = _api_perf_data['path_stats'][key]
-            stats['count'] += 1
-            stats['total_ms'] += elapsed_ms
+            path_stats = perf.get('path_stats', {})
+            stats = path_stats.get(key, {'count': 0, 'total_ms': 0, 'errors': 0})
+            stats['count'] = stats.get('count', 0) + 1
+            stats['total_ms'] = stats.get('total_ms', 0) + elapsed_ms
             if status >= 500:
-                stats['errors'] += 1
+                stats['errors'] = stats.get('errors', 0) + 1
+            path_stats[key] = stats
+            perf['path_stats'] = path_stats
+
+            cache.set(self._PERF_KEY, perf, self._PERF_TTL)
+        except Exception:
+            pass
 
     @staticmethod
     def get_summary():
+        try:
+            perf = cache.get(APIMonitorMiddleware._PERF_KEY, {})
+        except Exception:
+            perf = {}
+
         now = time.time()
-        with _perf_lock:
-            window_duration = now - _api_perf_data['window_start']
-            window_reqs = _api_perf_data['window_requests']
-            qps = round(window_reqs / window_duration, 1) if window_duration > 0 else 0
+        window_duration = now - perf.get('window_start', now)
+        window_reqs = perf.get('window_requests', 0)
+        qps = round(window_reqs / window_duration, 1) if window_duration > 0 else 0
 
-            path_summary = {}
-            for path, stats in sorted(
-                _api_perf_data['path_stats'].items(),
-                key=lambda x: x[1]['total_ms'],
-                reverse=True
-            )[:20]:
-                count = stats['count']
-                path_summary[path] = {
-                    'count': count,
-                    'avg_ms': round(stats['total_ms'] / count, 1) if count else 0,
-                    'errors': stats['errors'],
-                }
-
-            if window_duration > 60:
-                _api_perf_data['window_start'] = now
-                _api_perf_data['window_requests'] = 0
-
-            return {
-                'total_requests': _api_perf_data['total_requests'],
-                'total_errors': _api_perf_data['total_errors'],
-                'qps': qps,
-                'uptime_seconds': round(window_duration, 0),
-                'top_paths': path_summary,
+        path_summary = {}
+        for path, stats in sorted(
+            perf.get('path_stats', {}).items(),
+            key=lambda x: x[1].get('total_ms', 0),
+            reverse=True
+        )[:20]:
+            count = stats.get('count', 0)
+            path_summary[path] = {
+                'count': count,
+                'avg_ms': round(stats.get('total_ms', 0) / count, 1) if count else 0,
+                'errors': stats.get('errors', 0),
             }
+
+        if window_duration > APIMonitorMiddleware._PERF_WINDOW:
+            perf['window_start'] = now
+            perf['window_requests'] = 0
+            try:
+                cache.set(APIMonitorMiddleware._PERF_KEY, perf, APIMonitorMiddleware._PERF_TTL)
+            except Exception:
+                pass
+
+        return {
+            'total_requests': perf.get('total_requests', 0),
+            'total_errors': perf.get('total_errors', 0),
+            'qps': qps,
+            'uptime_seconds': round(window_duration, 0),
+            'top_paths': path_summary,
+        }
 
 
 class JWTAuthMiddleware:
@@ -205,3 +217,26 @@ class SuppressBadAuthLog(logging.Filter):
     def filter(self, record):
         msg = record.getMessage()
         return not any(p in msg for p in self._PATTERNS)
+
+
+class LoginRateLimitMiddleware:
+    """登录接口速率限制：每IP每分钟5次"""
+    PATH_PREFIX = '/api/v1/auth/login/'
+    MAX_ATTEMPTS = 5
+    WINDOW_SECONDS = 60
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.path == self.PATH_PREFIX and request.method == 'POST':
+            ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '?')).split(',')[0].strip()
+            cache_key = f'login_rate:{ip}'
+            attempts = cache.get(cache_key, 0)
+            if isinstance(attempts, str):
+                attempts = int(attempts)
+            if attempts >= self.MAX_ATTEMPTS:
+                from django.http import JsonResponse
+                return JsonResponse({'error': '登录尝试过于频繁，请稍后重试'}, status=429)
+            cache.set(cache_key, attempts + 1, self.WINDOW_SECONDS)
+        return self.get_response(request)

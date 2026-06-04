@@ -22,13 +22,24 @@ environ.Env.read_env(BASE_DIR / '.env')
 # SECRET_KEY: 优先从 .env 读取，缺失时自动生成并持久化
 _SECRET_KEY = env('SECRET_KEY', default='')
 if not _SECRET_KEY:
+    if not DEBUG:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            '生产环境必须通过环境变量 SECRET_KEY 设置密钥。'
+            '请在 .env 文件或环境变量中配置 SECRET_KEY。'
+        )
     _SECRET_KEY = secrets.token_urlsafe(50)
-    # 自动写入 .env 以便持久化
+    # 自动写入 .env 以便持久化（仅开发环境）
     _env_path = BASE_DIR / '.env'
     _env_lines = []
     if _env_path.exists():
         _env_lines = _env_path.read_text().splitlines()
     if not any(l.startswith('SECRET_KEY=') for l in _env_lines):
+        # 检查 .gitignore 是否包含 .env
+        _gitignore = BASE_DIR / '.gitignore'
+        if _gitignore.exists() and '.env' not in _gitignore.read_text():
+            import logging as _logging
+            _logging.getLogger(__name__).warning('[安全] .gitignore 未包含 .env，自动生成的 SECRET_KEY 可能被提交到版本控制')
         _env_lines.append(f'SECRET_KEY={_SECRET_KEY}')
         _env_path.write_text('\n'.join(_env_lines) + '\n')
 SECRET_KEY = _SECRET_KEY
@@ -42,6 +53,11 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = env('SECURE_HSTS_SECONDS')
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = 'DENY'
+else:
+    # 开发环境也启用基本安全头
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = 'DENY'
@@ -83,6 +99,7 @@ MIDDLEWARE = [
     'novel_reader.middleware.APIMonitorMiddleware',
     'novel_reader.middleware.RequestTimingMiddleware',
     'novel_reader.middleware.JWTAuthMiddleware',
+    'novel_reader.middleware.LoginRateLimitMiddleware',
 ]
 
 ROOT_URLCONF = 'novel_reader.urls'
@@ -228,9 +245,16 @@ SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_AGE = 1209600
 SESSION_SAVE_EVERY_REQUEST = True
 
-CORS_ALLOW_ALL_ORIGINS = DEBUG
+# 始终使用白名单，不再根据 DEBUG 开放所有来源
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[]) if not DEBUG else []
+CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
+# 开发环境自动添加 localhost 来源
+if DEBUG:
+    CORS_ALLOWED_ORIGINS += [
+        'http://localhost:5173',
+        'http://localhost:3000',
+        'http://127.0.0.1:5173',
+    ]
 
 LOGGING = {
     'version': 1,

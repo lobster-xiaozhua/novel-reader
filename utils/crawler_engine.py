@@ -233,7 +233,7 @@ class CrawlerEngine:
         client_kwargs = {
             'timeout': 30,
             'follow_redirects': True,
-            'verify': False,
+            'verify': not getattr(self.config, 'skip_ssl_verify', False),  # 默认启用SSL验证
         }
         if proxy:
             client_kwargs['proxy'] = proxy

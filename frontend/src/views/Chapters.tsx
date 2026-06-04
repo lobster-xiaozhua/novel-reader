@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation, useSearchParams } from 'react-router-dom'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import { FileText, BookOpen, ArrowLeft } from 'lucide-react'
 import { fetchBooks } from '@/api/books'
 import { fetchChapters, fetchChapterContent } from '@/api/books'
@@ -9,6 +10,7 @@ import NovelReader from '@/components/NovelReader'
 import { Spinner } from '@/components/Loading'
 
 export default function Chapters() {
+  usePageTitle('章节阅读')
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const state = location.state as { bookId?: number; chapterIdx?: number } | null

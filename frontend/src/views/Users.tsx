@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import { Users as UsersIcon, Shield, User, Clock } from 'lucide-react'
 import { fetchUsers } from '@/api/users'
 import { UserItem } from '@/types'
 import { Spinner } from '@/components/Loading'
 
 export default function Users() {
+  usePageTitle('用户管理')
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
     queryFn: fetchUsers,

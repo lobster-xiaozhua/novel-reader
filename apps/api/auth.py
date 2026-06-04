@@ -3,26 +3,26 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
-from django.conf import settings
+from django.conf import settings as django_settings
 from django.contrib.auth.models import User
 from django.http import JsonResponse
 
 logger = logging.getLogger(__name__)
 
 JWT_ALGORITHM: str = 'HS256'
-JWT_ACCESS_LIFETIME: timedelta = timedelta(hours=2)
-JWT_REFRESH_LIFETIME: timedelta = timedelta(days=30)
+JWT_ACCESS_LIFETIME: timedelta = timedelta(minutes=django_settings.JWT_ACCESS_LIFETIME_MINUTES)
+JWT_REFRESH_LIFETIME: timedelta = timedelta(days=django_settings.JWT_REFRESH_LIFETIME_DAYS)
 JWT_COOKIE_SAMESITE: str = 'Lax'
 
 
 def _get_secret() -> str:
-    return getattr(settings, 'JWT_SECRET', settings.SECRET_KEY)
+    return getattr(django_settings, 'JWT_SECRET', django_settings.SECRET_KEY)
 
 
 def _is_secure() -> bool:
     # 仅在 HTTPS 环境下启用 Secure 标志
     # http://localhost 不应设置 Secure，否则浏览器不会发送 cookie
-    return getattr(settings, 'SECURE_SSL_REDIRECT', False)
+    return getattr(django_settings, 'SECURE_SSL_REDIRECT', False)
 
 
 def create_access_token(user_id: int) -> str:

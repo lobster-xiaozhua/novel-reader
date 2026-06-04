@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import {
   Search, BookOpen, Clock, TrendingUp, Flame, Sparkles,
   ChevronRight, Eye, Calendar, Star, AlertCircle, Zap, Cpu
@@ -265,6 +266,7 @@ function SkeletonCard({ className = '' }: { className?: string }) {
    Main HomePortal Component
    ═══════════════════════════════════════════════════════ */
 export default function HomePortal() {
+  usePageTitle('首页')
   const [search, setSearch] = useState('')
   const [activeStrategy, setActiveStrategy] = useState<string>('hybrid')
   const [activeRankTab, setActiveRankTab] = useState<string>('hot-today')

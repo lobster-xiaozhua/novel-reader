@@ -24,9 +24,11 @@ import os
 User = get_user_model()
 pwd = os.environ.get('ADMIN_PASSWORD', '')
 if not User.objects.filter(username='admin').exists():
-    if not pwd: pwd = 'admin123'
+    if not pwd:
+        import secrets
+        pwd = secrets.token_urlsafe(12)
     User.objects.create_superuser('admin', 'admin@example.com', pwd)
-    print(f'[Init] 管理员已创建: admin / {pwd[:3]}***')
+    print(f'[Init] 管理员已创建: admin (密码已设置)')
 else:
     print('[Init] 管理员已存在')
 \" &&

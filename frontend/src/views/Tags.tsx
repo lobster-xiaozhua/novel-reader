@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import { Tag, Plus, Search, Trash2, X, Check } from 'lucide-react'
 import { fetchTags, createTag, deleteTag } from '@/api/tags'
 import { TagItem } from '@/types'
@@ -9,6 +10,7 @@ import { TAG_COLORS } from '@/config/colors'
 import { Spinner } from '@/components/Loading'
 
 export default function Tags() {
+  usePageTitle('标签管理')
   const queryClient = useQueryClient()
   const dialog = useDialog()
   const toast = useToast()

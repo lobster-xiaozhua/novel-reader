@@ -1,5 +1,6 @@
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import {
   ArrowLeft, BookOpen, Heart, BookmarkPlus,
   FileText, Clock, PenTool, Star,
@@ -13,6 +14,7 @@ import { useToast } from '@/components/Toast'
 import { Spinner } from '@/components/Loading'
 
 export default function BookDetail() {
+  usePageTitle('书籍详情')
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const toast = useToast()

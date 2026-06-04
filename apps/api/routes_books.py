@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db import models
 from django.db.models import Count, Q
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ninja import Router
@@ -54,75 +55,80 @@ def list_books(request, tag: str = None, category: str = None, search: str = Non
 
 @router.post('/books/import/', response=BatchImportResult, auth=jwt_auth)
 def batch_import(request) -> dict:
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
     files = request.FILES.getlist('files')
     if not files:
         return {'success': False, 'errors': ['未选择文件'], 'total': 0}
     imported: int = 0
     errors: list[str] = []
     for f in files:
+        if f.size > MAX_FILE_SIZE:
+            errors.append(f'{f.name}: 文件过大（超过50MB限制）')
+            continue
         if not f.name.endswith('.txt'):
             errors.append(f'{f.name}: 仅支持txt格式')
             continue
         try:
-            raw = f.read()
-            text = None
-            for enc in ('utf-8', 'gbk', 'gb2312'):
-                try:
-                    text = raw.decode(enc)
-                    break
-                except (UnicodeDecodeError, LookupError):
+            with transaction.atomic():
+                raw = f.read()
+                text = None
+                for enc in ('utf-8', 'gbk', 'gb2312'):
+                    try:
+                        text = raw.decode(enc)
+                        break
+                    except (UnicodeDecodeError, LookupError):
+                        continue
+                if text is None:
+                    errors.append(f'{f.name}: 编码无法识别')
                     continue
-            if text is None:
-                errors.append(f'{f.name}: 编码无法识别')
-                continue
-            title = os.path.splitext(f.name)[0].strip()
-            if not title:
-                errors.append(f'{f.name}: 无法提取书名')
-                continue
-            safe_name = re.sub(r'[\\/:*?"<>|]', '_', title)[:100]
-            book_dir = os.path.join(str(settings.BOOKS_DIR), safe_name)
-            book, created = Book.objects.get_or_create(
-                title=title,
-                defaults={'author': '', 'folder_path': book_dir},
-            )
-            if not created and book.chapters.exists():
-                errors.append(f'{title}: 已存在')
-                continue
-            os.makedirs(book_dir, exist_ok=True)
-            if not book.folder_path:
-                book.folder_path = book_dir
-                book.save()
-            chapter_pattern = re.compile(
-                r'^(第[零一二三四五六七八九十百千万\d]+章|chapter\s*\d+|第\d+章|卷[零一二三四五六七八九十百千万\d]+)',
-                re.IGNORECASE | re.MULTILINE,
-            )
-            parts = chapter_pattern.split(text)
-            chapters_data: list[tuple[str, str]] = []
-            if len(parts) > 1:
-                i = 1
-                while i < len(parts):
-                    ch_title = parts[i].strip()
-                    ch_content = parts[i + 1].strip() if i + 1 < len(parts) else ''
-                    if ch_title:
-                        chapters_data.append((ch_title, ch_content))
-                    i += 2
-            else:
-                paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
-                chunk_size = max(1, len(paragraphs) // max(1, len(paragraphs) // 50))
-                for idx in range(0, len(paragraphs), chunk_size):
-                    chunk = paragraphs[idx:idx + chunk_size]
-                    ch_num = idx // chunk_size + 1
-                    chapters_data.append((f'第{ch_num}章', '\n'.join(chunk)))
-            for idx, (ch_title, ch_content) in enumerate(chapters_data, 1):
-                ch_path = os.path.join(book_dir, f'第{idx}章.txt')
-                with open(ch_path, 'w', encoding='utf-8') as wf:
-                    wf.write(f'{ch_title}\n\n{ch_content}')
-                Chapter.objects.update_or_create(
-                    book=book, chapter_number=idx,
-                    defaults={'title': ch_title, 'file_path': ch_path, 'word_count': len(ch_content)},
+                title = os.path.splitext(f.name)[0].strip()
+                if not title:
+                    errors.append(f'{f.name}: 无法提取书名')
+                    continue
+                safe_name = re.sub(r'[\\/:*?"<>|]', '_', title)[:100]
+                book_dir = os.path.join(str(settings.BOOKS_DIR), safe_name)
+                book, created = Book.objects.get_or_create(
+                    title=title,
+                    defaults={'author': '', 'folder_path': book_dir},
                 )
-            book.total_chapters = len(chapters_data)
-            book.save()
+                if not created and book.chapters.exists():
+                    errors.append(f'{title}: 已存在')
+                    continue
+                os.makedirs(book_dir, exist_ok=True)
+                if not book.folder_path:
+                    book.folder_path = book_dir
+                    book.save()
+                chapter_pattern = re.compile(
+                    r'^(第[零一二三四五六七八九十百千万\d]+章|chapter\s*\d+|第\d+章|卷[零一二三四五六七八九十百千万\d]+)',
+                    re.IGNORECASE | re.MULTILINE,
+                )
+                parts = chapter_pattern.split(text)
+                chapters_data: list[tuple[str, str]] = []
+                if len(parts) > 1:
+                    i = 1
+                    while i < len(parts):
+                        ch_title = parts[i].strip()
+                        ch_content = parts[i + 1].strip() if i + 1 < len(parts) else ''
+                        if ch_title:
+                            chapters_data.append((ch_title, ch_content))
+                        i += 2
+                else:
+                    paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
+                    chunk_size = max(1, len(paragraphs) // max(1, len(paragraphs) // 50))
+                    for idx in range(0, len(paragraphs), chunk_size):
+                        chunk = paragraphs[idx:idx + chunk_size]
+                        ch_num = idx // chunk_size + 1
+                        chapters_data.append((f'第{ch_num}章', '\n'.join(chunk)))
+                for idx, (ch_title, ch_content) in enumerate(chapters_data, 1):
+                    ch_path = os.path.join(book_dir, f'第{idx}章.txt')
+                    with open(ch_path, 'w', encoding='utf-8') as wf:
+                        wf.write(f'{ch_title}\n\n{ch_content}')
+                    Chapter.objects.update_or_create(
+                        book=book, chapter_number=idx,
+                        defaults={'title': ch_title, 'file_path': ch_path, 'word_count': len(ch_content)},
+                    )
+                book.total_chapters = len(chapters_data)
+                book.save()
             imported += 1
             logger.info(f'[Import] 导入成功: {title} ({len(chapters_data)}章)')
         except Exception as exc:
@@ -299,6 +305,11 @@ def list_book_dirs(request) -> dict:
 def add_book_dir(request, path: str) -> dict:
     """添加外挂书籍目录"""
     path = os.path.normpath(path)
+    # 安全检查：禁止访问系统关键目录
+    real_path = os.path.realpath(path)
+    forbidden_prefixes = ['/etc', '/proc', '/sys', '/dev', '/root', '/home', '/var', '/tmp', '/boot', '/usr', '/bin', '/sbin', '/lib', '/opt']
+    if any(real_path.startswith(p + '/') or real_path == p for p in forbidden_prefixes):
+        return {'success': False, 'error': '不允许在系统目录下操作'}
     if not os.path.isabs(path):
         return {'success': False, 'error': '必须使用绝对路径'}
     config = _load_dirs_config()
@@ -376,7 +387,8 @@ def scan_book_dir(request, path: str = '') -> dict:
                     content = ''
                     for enc in ('utf-8', 'gbk', 'gb2312'):
                         try:
-                            content = open(f.path, 'r', encoding=enc).read()
+                            with open(f.path, 'r', encoding=enc) as fh:
+                                content = fh.read()
                             break
                         except (UnicodeDecodeError, Exception):
                             continue
@@ -477,7 +489,7 @@ def get_chapter_content(request, book_id: int, chapter_id: int) -> dict:
                         with open(file_path, 'r', encoding=enc) as f:
                             content = f.read()
                         if content.strip():
-                            cache.set(cache_key, content, 300)
+                            cache.set(cache_key, content, 3600)
                             logger.info(f'[Chapter] 读取成功: {file_path} (编码: {enc}, 字数: {len(content)})')
                             break
                         else:

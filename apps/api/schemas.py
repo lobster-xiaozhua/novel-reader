@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from ninja import Schema
+from ninja import Field, Schema
 from django.utils import timezone
 
 
@@ -182,9 +182,9 @@ class LoginIn(Schema):
 
 
 class RegisterIn(Schema):
-    username: str
-    password: str
-    email: str = ''
+    username: str = Field(min_length=2, max_length=30, pattern=r'^[a-zA-Z0-9_\u4e00-\u9fa5]+$')
+    password: str = Field(min_length=6, max_length=128)
+    email: str = Field(default='', max_length=254)
 
 
 class UserOut(Schema):

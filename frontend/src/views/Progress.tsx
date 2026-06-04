@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import { Bookmark, BookOpen, ChevronRight } from 'lucide-react'
 import { fetchProgress } from '@/api/progress'
 import { ProgressItem } from '@/types'
 import { Spinner } from '@/components/Loading'
 
 export default function Progress() {
+  usePageTitle('阅读进度')
   const navigate = useNavigate()
   const { data, isLoading } = useQuery({
     queryKey: ['progress'],

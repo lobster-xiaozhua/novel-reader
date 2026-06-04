@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import { BookOpen, Search, Eye, Tag, Upload, Loader2, Heart } from 'lucide-react'
 import { fetchBooks, importBooks } from '@/api/books'
 import { toggleFavorite } from '@/api/favorites'
@@ -9,6 +10,7 @@ import { useToast } from '@/components/Toast'
 import { Spinner } from '@/components/Loading'
 
 export default function Books() {
+  usePageTitle('书籍列表')
   const [searchParams] = useSearchParams()
   const initialSearch = searchParams.get('search') || ''
   const [search, setSearch] = useState(initialSearch)

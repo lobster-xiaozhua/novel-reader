@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import { TrendingUp, BookOpen, Clock, Type } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 import { fetchStats } from '@/api/stats'
@@ -13,6 +14,7 @@ const DAY_OPTIONS = [
 ]
 
 export default function Stats() {
+  usePageTitle('阅读统计')
   const [days, setDays] = useState(7)
 
   const { data: stats, isLoading } = useQuery({

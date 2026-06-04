@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import { Bug, Clock, CheckCircle, AlertTriangle, Loader2, XCircle, Plus } from 'lucide-react'
 import { fetchCrawlerTasks, createCrawlerTask } from '@/api/crawler'
 import { CrawlerTask } from '@/types'
@@ -15,6 +16,7 @@ const statusConfig = {
 }
 
 export default function Crawler() {
+  usePageTitle('爬虫任务')
   const [url, setUrl] = useState('')
   const queryClient = useQueryClient()
   const toast = useToast()

@@ -1,18 +1,18 @@
 const AUTH_EXPIRED_EVENT = 'auth:expired'
-const ACCESS_TOKEN_KEY = 'access_token'
 const BASE_URL = '/api/v1'
 const TIMEOUT = 30000
 
+// Token 通过 HttpOnly Cookie 传输，前端无需手动管理
 export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_TOKEN_KEY)
+  return null
 }
 
-export function setTokens(accessToken: string, _refreshToken?: string): void {
-  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
+export function setTokens(_accessToken: string, _refreshToken?: string): void {
+  // Token 通过 HttpOnly Cookie 设置，前端无需存储
 }
 
 export function clearTokens(): void {
-  localStorage.removeItem(ACCESS_TOKEN_KEY)
+  // Cookie 由后端清除，前端无需操作
 }
 
 export function onAuthExpired(callback: () => void): () => void {
@@ -176,8 +176,7 @@ async function request<T>(
     ...options?.headers,
   }
 
-  const token = getAccessToken()
-  if (token) headers.Authorization = `Bearer ${token}`
+  // Token 通过 HttpOnly Cookie 自动携带，无需手动添加 Authorization header
 
   const fullURL = buildURL(url, options?.params)
 

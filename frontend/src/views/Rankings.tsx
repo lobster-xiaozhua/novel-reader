@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import { BookOpen, TrendingUp, Flame, Sparkles, AlertCircle } from 'lucide-react'
 import { fetchRankings } from '@/api/books'
 import { Book } from '@/types'
@@ -51,6 +52,7 @@ function EmptyState() {
 }
 
 export default function Rankings() {
+  usePageTitle('排行榜')
   const [activeTab, setActiveTab] = useState<string>('hot_today')
   const navigate = useNavigate()
 

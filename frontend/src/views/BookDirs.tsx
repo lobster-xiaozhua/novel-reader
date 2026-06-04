@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import { FolderOpen, Plus, Trash2, RefreshCw, Folder, FileText, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
 import { fetchBookDirs, addBookDir, removeBookDir, scanBookDirs, type BookDirInfo } from '@/api/books'
 import { Spinner } from '@/components/Loading'
 
 export default function BookDirs() {
+  usePageTitle('目录管理')
   const qc = useQueryClient()
   const [newPath, setNewPath] = useState('')
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)

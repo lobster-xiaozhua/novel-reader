@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Bell, User, LogOut, Menu } from 'lucide-react'
+import { Search, User, LogOut, Menu } from 'lucide-react'
 import { useUserStore } from '@/stores/userStore'
 import { useAppStore } from '@/stores/appStore'
 import { fetchSearch } from '@/api/books'
@@ -149,12 +149,6 @@ export default function Navbar() {
       </div>
 
       <div className="flex items-center gap-3">
-        <button className="relative p-2 rounded-lg hover:bg-white/5 text-text-secondary hover:text-text-primary transition-colors">
-          <Bell className="w-5 h-5" />
-        </button>
-
-        <div className="w-px h-6 bg-white/[0.06]" />
-
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center">
             <User className="w-4 h-4 text-primary-500" />

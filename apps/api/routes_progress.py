@@ -79,14 +79,16 @@ def track_stats(request, payload: StatsTrackIn) -> dict:
         except Chapter.DoesNotExist:
             pass
 
-    created = not ReadingStats.objects.filter(user=user, date=today).exists()
-    if created:
-        ReadingStats.objects.create(
-            user=user, date=today,
-            read_seconds=payload.seconds, chapters_read=1, words_read=words,
-        )
-    else:
-        ReadingStats.objects.filter(user=user, date=today).update(
+    stats, created = ReadingStats.objects.get_or_create(
+        user=user, date=today,
+        defaults={
+            'read_seconds': payload.seconds,
+            'chapters_read': 1,
+            'words_read': words,
+        },
+    )
+    if not created:
+        ReadingStats.objects.filter(pk=stats.pk).update(
             read_seconds=F('read_seconds') + payload.seconds,
             chapters_read=F('chapters_read') + 1,
             words_read=F('words_read') + words,

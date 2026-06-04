@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import {
   Search, BookOpen, User, AlertCircle,
   FileText, ChevronRight, Cpu, Zap, ArrowLeft
@@ -28,7 +29,7 @@ function highlightText(text: string, query: string): React.ReactNode {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="bg-accent/30 text-accent rounded px-0.5">{text.slice(idx, idx + query.length)}</mark>
+      <mark className="bg-accent/30 text-accent rounded px-0.5" aria-label="搜索匹配">{text.slice(idx, idx + query.length)}</mark>
       {text.slice(idx + query.length)}
     </>
   )
@@ -144,6 +145,7 @@ function AdvancedResultCard({ result, query }: { result: AdvancedSearchResult; q
 }
 
 export default function SearchPage() {
+  usePageTitle('搜索')
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const q = searchParams.get('q') || ''
