@@ -414,7 +414,7 @@ export default function HomePortal() {
                     <div className="mt-2 w-36">
                       <p className="text-sm font-medium text-text-primary truncate group-hover:text-accent transition-colors">{book.title}</p>
                       <p className="text-xs text-text-secondary mt-0.5 truncate">{book.author || '未知作者'}</p>
-                      {book.tags.length > 0 && (
+                      {book.tags?.length > 0 && (
                         <p className="text-xs text-text-muted mt-0.5 truncate">{book.tags[0].name}</p>
                       )}
                     </div>

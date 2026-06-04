@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { FileText, BookOpen, ArrowLeft } from 'lucide-react'
 import { fetchBooks } from '@/api/books'
 import { fetchChapters, fetchChapterContent } from '@/api/books'
@@ -10,11 +10,24 @@ import { Spinner } from '@/components/Loading'
 
 export default function Chapters() {
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const state = location.state as { bookId?: number; chapterIdx?: number } | null
-  const initialBookId = state?.bookId ?? null
-  const initialChapterIdx = state?.chapterIdx ?? null
+
+  // 支持 URL 参数和 state 两种方式
+  const urlBookId = searchParams.get('book') ? Number(searchParams.get('book')) : null
+  const urlChapterIdx = searchParams.get('chapter') ? Number(searchParams.get('chapter')) - 1 : null
+
+  const initialBookId = urlBookId ?? state?.bookId ?? null
+  const initialChapterIdx = urlChapterIdx ?? state?.chapterIdx ?? null
+
   const [selectedBookId, setSelectedBookId] = useState<number | null>(initialBookId)
   const [readingChapterIdx, setReadingChapterIdx] = useState<number | null>(initialChapterIdx)
+
+  // 当 URL 参数变化时更新状态
+  useEffect(() => {
+    if (urlBookId) setSelectedBookId(urlBookId)
+    if (urlChapterIdx !== null) setReadingChapterIdx(urlChapterIdx)
+  }, [urlBookId, urlChapterIdx])
 
   const { data: booksData } = useQuery({
     queryKey: ['books'],

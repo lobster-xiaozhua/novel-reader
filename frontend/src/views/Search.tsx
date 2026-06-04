@@ -107,7 +107,7 @@ function AdvancedResultCard({ result, query }: { result: AdvancedSearchResult; q
           {result.matched_chapters.slice(0, 2).map((ch) => (
             <button
               key={ch.id}
-              onClick={() => navigate(`/books/${result.book_id}/read?chapter=${ch.chapter_number}`)}
+              onClick={() => navigate(`/chapters?book=${result.book_id}&chapter=${ch.chapter_number}`)}
               className="w-full flex items-start gap-2 text-left group/ch hover:bg-accent/5 rounded-lg p-2 -mx-1 transition-colors"
             >
               <FileText className="w-3.5 h-3.5 text-text-muted mt-0.5 flex-shrink-0" />
@@ -171,11 +171,11 @@ export default function SearchPage() {
 
   const filteredResults = useMemo(() => {
     if (searchMode === 'advanced') {
-      if (filter === 'chapters') return advResults.filter((r) => r.matched_chapters.length > 0)
-      if (filter === 'authors') return advResults.filter((r) => r.author?.toLowerCase().includes(q.toLowerCase()))
+      if (filter === 'chapters') return advResults.filter((r: AdvancedSearchResult) => r.matched_chapters.length > 0)
+      if (filter === 'authors') return advResults.filter((r: AdvancedSearchResult) => r.author?.toLowerCase().includes(q.toLowerCase()))
       return advResults
     }
-    if (filter === 'authors') return basicResults.filter((b) => b.author?.toLowerCase().includes(q.toLowerCase()))
+    if (filter === 'authors') return basicResults.filter((b: { author?: string }) => b.author?.toLowerCase().includes(q.toLowerCase()))
     return basicResults
   }, [searchMode, filter, advResults, basicResults, q])
 

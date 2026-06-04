@@ -158,7 +158,9 @@ async function request<T>(
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT)
 
   const signal = options?.signal
-    ? AbortSignal.any([options.signal, controller.signal])
+    ? (typeof AbortSignal !== 'undefined' && 'any' in AbortSignal
+        ? (AbortSignal as any).any([options.signal, controller.signal])
+        : options.signal)
     : controller.signal
 
   const headers: Record<string, string> = {
