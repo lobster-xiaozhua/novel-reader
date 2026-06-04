@@ -18,13 +18,24 @@ set "DIM=!ESC![2m"
 set "BOLD=!ESC![1m"
 set "NC=!ESC![0m"
 
-:: ─── Symbols (ASCII-safe fallbacks) ───
+:: ─── Symbols (Unicode via PowerShell, ASCII fallback) ───
 set "OK=[+]"
 set "INFO=[i]"
 set "WARN=[!]"
 set "FAIL=[x]"
 set "ARROW=->"
+:: ─── Banner line (Unicode box drawing, ASCII fallback) ───
 set "LINE============================================"
+set "LCORNER=|"
+set "RCORNER=|"
+for /f "delims=" %%i in ('powershell -NoProfile -Command "([char]0x2550)*44" 2^>nul') do set "LINE=%%i"
+for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]0x2554" 2^>nul') do set "LCORNER=%%i"
+for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]0x2557" 2^>nul') do set "RCORNER=%%i"
+for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]0x2713" 2^>nul') do set "OK=%%i"
+for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]0x2139" 2^>nul') do set "INFO=%%i"
+for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]0x26A0" 2^>nul') do set "WARN=%%i"
+for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]0x2717" 2^>nul') do set "FAIL=%%i"
+for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]0x2192" 2^>nul') do set "ARROW=%%i"
 
 set "STEP_NUM=0"
 set "TOTAL_STEPS=8"
@@ -64,10 +75,10 @@ goto :eof
 :: ─── Banner ───
 :print_banner
 echo.
-echo %MAGENTA%%LINE%%NC%
+echo %MAGENTA%!LCORNER!!LINE!!RCORNER!%NC%
 echo %MAGENTA%^|%NC%  Novel Reader v2.0 - High-Performance Novel Reader    %MAGENTA%^|%NC%
 echo %MAGENTA%^|%NC%  %DIM%PG + Redis + DiskCache + Liquid Glass UI%NC%       %MAGENTA%^|%NC%
-echo %MAGENTA%%LINE%%NC%
+echo %MAGENTA%!LCORNER!!LINE!!RCORNER!%NC%
 echo.
 goto :eof
 
