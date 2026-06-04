@@ -77,6 +77,154 @@ EOF
 
 # ─── Infrastructure ───
 
+_ensure_postgres() {
+    log_info "PostgreSQL 未运行，正在检查..."
+
+    # 尝试直接启动已有实例
+    if command -v pg_ctlcluster &>/dev/null; then
+        local cluster
+        cluster=$(pg_lsclusters -h 2>/dev/null | head -1 | awk '{print $1, $2}')
+        if [ -n "$cluster" ]; then
+            log_info "尝试启动 PostgreSQL 集群 ($cluster)..."
+            if pg_ctlcluster $cluster start 2>/dev/null; then
+                sleep 2
+                if pg_isready -q 2>/dev/null; then
+                    log_success "PostgreSQL 已启动"
+                    _setup_postgres_user_and_db
+                    return 0
+                fi
+            fi
+        fi
+    fi
+
+    # 尝试 pg_ctl 直接启动
+    if command -v pg_ctl &>/dev/null; then
+        log_info "尝试 pg_ctl 启动..."
+        local pgdata=""
+        for d in /var/lib/postgresql/*/main /var/lib/pgsql/*/data /usr/local/var/postgres; do
+            [ -f "$d/PG_VERSION" ] && pgdata="$d" && break
+        done
+        if [ -n "$pgdata" ]; then
+            su - postgres -c "pg_ctl -D $pgdata -l $pgdata/logfile start" 2>/dev/null && {
+                sleep 2
+                pg_isready -q 2>/dev/null && log_success "PostgreSQL 已启动" && return 0
+            }
+        fi
+    fi
+
+    # 自动安装 PostgreSQL
+    log_info "PostgreSQL 未安装，开始自动安装..."
+    if command -v apt-get &>/dev/null; then
+        log_info "使用 apt 安装 PostgreSQL..."
+        apt-get update -qq >/dev/null 2>&1 && \
+        apt-get install -y -qq postgresql postgresql-contrib >/dev/null 2>&1 || {
+            log_error "PostgreSQL 安装失败"
+            log_info "请手动执行: sudo apt-get install postgresql postgresql-contrib"
+            return 1
+        }
+    elif command -v pkg &>/dev/null; then
+        log_info "Termux 环境，使用 pkg 安装 PostgreSQL..."
+        pkg install -y postgresql 2>/dev/null || {
+            log_error "PostgreSQL 安装失败"
+            log_info "请手动执行: pkg install postgresql"
+            return 1
+        }
+    elif command -v yum &>/dev/null; then
+        log_info "使用 yum 安装 PostgreSQL..."
+        yum install -y postgresql-server postgresql-contrib >/dev/null 2>&1 || {
+            log_error "PostgreSQL 安装失败"
+            return 1
+        }
+        # 首次安装需要初始化
+        if command -v postgresql-setup &>/dev/null; then
+            postgresql-setup --initdb --unit postgresql 2>/dev/null || true
+        fi
+    elif command -v dnf &>/dev/null; then
+        log_info "使用 dnf 安装 PostgreSQL..."
+        dnf install -y postgresql-server postgresql-contrib >/dev/null 2>&1 || {
+            log_error "PostgreSQL 安装失败"
+            return 1
+        }
+    else
+        log_error "不支持的包管理器，无法自动安装 PostgreSQL"
+        log_info "请手动安装 PostgreSQL 15+ 后重试"
+        return 1
+    fi
+
+    log_success "PostgreSQL 安装完成"
+
+    # 初始化并启动
+    _start_postgres_after_install
+}
+
+_start_postgres_after_install() {
+    # 查找 pg_ctlcluster 或 pg_ctl
+    if command -v pg_ctlcluster &>/dev/null; then
+        local cluster
+        cluster=$(pg_lsclusters -h 2>/dev/null | head -1 | awk '{print $1, $2}')
+        if [ -n "$cluster" ]; then
+            log_info "启动 PostgreSQL ($cluster)..."
+            pg_ctlcluster $cluster start 2>/dev/null || true
+        fi
+    elif command -v pg_ctl &>/dev/null; then
+        local pgdata=""
+        for d in /var/lib/postgresql/*/main /var/lib/pgsql/*/data /usr/local/var/postgres ~/.termux/postgresql/data; do
+            [ -f "$d/PG_VERSION" ] && pgdata="$d" && break
+        done
+        if [ -n "$pgdata" ]; then
+            su - postgres -c "pg_ctl -D $pgdata -l $pgdata/logfile start" 2>/dev/null || \
+                pg_ctl -D "$pgdata" -l "$pgdata/logfile" start 2>/dev/null || true
+        fi
+    elif command -v pg-ctl &>/dev/null; then
+        # Termux
+        pg_ctl -D ${PREFIX:-/data/data/com.termux/files/usr}/var/postgresql start 2>/dev/null || true
+    fi
+
+    sleep 3
+
+    if pg_isready -q 2>/dev/null; then
+        log_success "PostgreSQL 已启动"
+        _setup_postgres_user_and_db
+        return 0
+    else
+        log_error "PostgreSQL 启动失败"
+        log_info "请检查: pg_ctlcluster <version> <cluster> start"
+        return 1
+    fi
+}
+
+_setup_postgres_user_and_db() {
+    local pg_user="${PG_USER:-novel_user}"
+    local pg_pass="${PG_PASS:-novel_pass}"
+    local pg_db="${PG_DB:-novel_reader}"
+
+    # 检查用户是否已存在
+    local user_exists
+    user_exists=$(su - postgres -c "psql -tAc \"SELECT 1 FROM pg_roles WHERE rolname='$pg_user'\"" 2>/dev/null || echo "")
+
+    if [ "$user_exists" != "1" ]; then
+        log_info "创建 PostgreSQL 用户: $pg_user"
+        su - postgres -c "psql -c \"CREATE USER $pg_user WITH PASSWORD '$pg_pass' CREATEDB;\"" 2>/dev/null || {
+            log_warn "创建用户失败，可能权限不足，尝试使用 sudo"
+            sudo -u postgres psql -c "CREATE USER $pg_user WITH PASSWORD '$pg_pass' CREATEDB;" 2>/dev/null || \
+                log_warn "无法创建 PostgreSQL 用户，请手动创建"
+        }
+    fi
+
+    # 检查数据库是否存在
+    local db_exists
+    db_exists=$(su - postgres -c "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='$pg_db'\"" 2>/dev/null || echo "")
+
+    if [ "$db_exists" != "1" ]; then
+        log_info "创建数据库: $pg_db"
+        su - postgres -c "psql -c \"CREATE DATABASE $pg_db OWNER $pg_user;\"" 2>/dev/null || \
+            sudo -u postgres psql -c "CREATE DATABASE $pg_db OWNER $pg_user;" 2>/dev/null || \
+            log_warn "无法创建数据库，请手动创建"
+    fi
+
+    log_success "PostgreSQL 用户和数据库已就绪"
+}
+
 start_infra() {
     log_step "启动基础设施"
 
@@ -84,11 +232,11 @@ start_infra() {
     if pg_isready -q 2>/dev/null; then
         log_success "PostgreSQL 已运行"
     else
-        log_info "启动 PostgreSQL..."
-        pg_ctlcluster $(pg_lsclusters -h | head -1 | awk '{print $1, $2}') start 2>/dev/null || \
-            pg_ctlcluster 16 main start 2>/dev/null || \
-            log_warn "PostgreSQL 启动失败，将使用 SQLite 模式"
-        sleep 2
+        _ensure_postgres || {
+            log_error "PostgreSQL 无法启动，系统无法运行"
+            log_info "这是一个硬性依赖，请手动安装后重试"
+            exit 1
+        }
     fi
 
     # Redis
