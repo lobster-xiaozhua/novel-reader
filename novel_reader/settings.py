@@ -155,6 +155,18 @@ DATABASES = {
 _db_url_str = env('DATABASE_URL', default='')
 if _db_url_str:
     _db_url = env.db_url(default=_db_url_str)
+    # 修正非标准后端：sqlite+aiosqlite -> sqlite3
+    if 'ENGINE' in _db_url and _db_url['ENGINE'] not in (
+        'django.db.backends.postgresql',
+        'django.db.backends.mysql',
+        'django.db.backends.sqlite3',
+        'django.db.backends.oracle',
+    ):
+        _engine = _db_url['ENGINE']
+        if 'sqlite' in _engine:
+            _db_url['ENGINE'] = 'django.db.backends.sqlite3'
+        elif 'postgres' in _engine:
+            _db_url['ENGINE'] = 'django.db.backends.postgresql'
     DATABASES['default'].update(_db_url)
 
 AUTH_PASSWORD_VALIDATORS = [

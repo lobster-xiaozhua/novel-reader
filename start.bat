@@ -153,13 +153,13 @@ call :log_info "This is a hard dependency, cannot fallback to SQLite"
 where winget >nul 2>&1
 if %errorlevel%==0 (
     call :log_info "Installing PostgreSQL via winget (this may take a while)..."
-    winget install --id EnterpriseDB.PostgreSQL --silent --accept-source-agreements --accept-package-agreements 2>&1
+    winget install --id PostgreSQL.PostgreSQL.16 --silent --accept-source-agreements --accept-package-agreements 2>&1
     if !errorlevel!==0 (
         timeout /t 5 /nobreak >nul
         goto :check_pg_after_install
     ) else (
-        call :log_warn "winget install failed, trying alternative package ID..."
-        winget install --id PostgreSQL.PostgreSQL --silent --accept-source-agreements --accept-package-agreements 2>&1
+        call :log_warn "winget install failed, trying alternative versions..."
+        winget install --id PostgreSQL.PostgreSQL.17 --silent --accept-source-agreements --accept-package-agreements 2>&1
         if !errorlevel!==0 (
             timeout /t 5 /nobreak >nul
             goto :check_pg_after_install
@@ -181,7 +181,7 @@ if %errorlevel%==0 (
 
 call :log_error "Cannot auto-install PostgreSQL"
 call :log_info "Please install manually:"
-call :log_info "  1. winget install EnterpriseDB.PostgreSQL"
+call :log_info "  1. winget install PostgreSQL.PostgreSQL.16"
 call :log_info "  2. Or download from: https://www.postgresql.org/download/windows/"
 call :log_info "  3. Then re-run start.bat"
 echo.
