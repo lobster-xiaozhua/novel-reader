@@ -39,7 +39,7 @@ function BasicResultCard({ book, query }: { book: { id: number; title: string; a
   return (
     <button
       onClick={() => navigate(`/books/${book.id}`)}
-      className="flex items-center gap-4 p-4 rounded-xl bg-bg-secondary/50 backdrop-blur-sm border border-border hover:border-accent/30 hover:bg-accent/5 transition-all text-left group"
+      className="glass-card glass-card--compact flex items-center gap-4 text-left group"
     >
       <div
         className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -68,7 +68,7 @@ function BasicResultCard({ book, query }: { book: { id: number; title: string; a
 function AdvancedResultCard({ result, query }: { result: AdvancedSearchResult; query: string }) {
   const navigate = useNavigate()
   return (
-    <div className="rounded-xl bg-bg-secondary/50 backdrop-blur-sm border border-border overflow-hidden hover:border-accent/30 transition-all">
+    <div className="glass-card overflow-hidden">
       <button
         onClick={() => navigate(`/books/${result.book_id}`)}
         className="w-full flex items-center gap-4 p-4 text-left group"
@@ -84,7 +84,7 @@ function AdvancedResultCard({ result, query }: { result: AdvancedSearchResult; q
             <h3 className="text-sm font-semibold text-text-primary truncate group-hover:text-accent transition-colors">
               {highlightText(result.title, query)}
             </h3>
-            <span className="px-1.5 py-0.5 rounded-full bg-accent/10 text-accent text-[10px] font-bold">
+            <span className="px-2 py-0.5 rounded-full bg-accent/10 text-accent text-[10px] font-bold border border-accent/20">
               {result.total_score}分
             </span>
           </div>
@@ -93,7 +93,7 @@ function AdvancedResultCard({ result, query }: { result: AdvancedSearchResult; q
           </p>
           <div className="flex gap-1.5 mt-1.5 flex-wrap">
             {result.match_reasons.map((reason, i) => (
-              <span key={i} className="px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-muted text-[10px] border border-border/50">
+              <span key={i} className="px-2 py-0.5 rounded-full bg-bg-tertiary/60 text-text-muted text-[10px] border border-border/50">
                 {reason}
               </span>
             ))}
@@ -206,7 +206,7 @@ export default function SearchPage() {
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => navigate('/')}
-            className="w-8 h-8 rounded-lg bg-bg-secondary border border-border flex items-center justify-center hover:bg-accent/10 transition-colors"
+            className="glass-card--compact w-8 h-8 rounded-lg flex items-center justify-center hover:bg-accent/10 transition-colors"
           >
             <ArrowLeft className="w-4 h-4 text-text-secondary" />
           </button>
@@ -217,7 +217,7 @@ export default function SearchPage() {
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               placeholder="搜索书名、作者、标签、章节内容..."
-              className="w-full h-10 pl-9 pr-20 rounded-xl bg-bg-secondary border border-border text-text-primary placeholder:text-text-muted text-sm focus:outline-none focus:border-accent/50 focus:ring-2 focus:ring-accent/20 transition-all"
+              className="w-full h-10 pl-9 pr-24 rounded-xl glass-input text-text-primary placeholder:text-text-muted text-sm"
             />
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
               {SEARCH_MODES.map((mode) => {
@@ -226,7 +226,7 @@ export default function SearchPage() {
                   <button
                     key={mode.key}
                     type="button"
-                    onClick={() => setSearchMode(mode.key as 'basic' | 'advanced')}
+                    onClick={() => setSearchMode(mode.key as 'fast' | 'advanced')}
                     className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold transition-all ${
                       searchMode === mode.key
                         ? 'bg-accent text-white'
@@ -267,8 +267,8 @@ export default function SearchPage() {
                 onClick={() => setFilter(tab.key)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   filter === tab.key
-                    ? 'bg-accent/10 text-accent border border-accent/20'
-                    : 'text-text-muted hover:text-text-secondary border border-transparent'
+                    ? 'glass-card--compact text-accent border-accent/20'
+                    : 'text-text-muted hover:text-text-secondary'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -293,13 +293,13 @@ export default function SearchPage() {
           </button>
         </div>
       ) : searchMode === 'advanced' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger-in">
           {(filteredResults as AdvancedSearchResult[]).map((result) => (
             <AdvancedResultCard key={result.id} result={result} query={q} />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 stagger-in">
           {(filteredResults as Array<{ id: number; title: string; author: string; category: string }>).map((book) => (
             <BasicResultCard key={book.id} book={book} query={q} />
           ))}

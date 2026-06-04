@@ -103,7 +103,7 @@ export default function Navbar() {
   }, [suggestionsOpen, suggestions, selectedIndex, handleSearch])
 
   return (
-    <header className="h-16 bg-card-bg/80 backdrop-blur-xl border-b border-white/[0.06] flex items-center justify-between px-6 sticky top-0 z-30">
+    <header className="glass-header h-16 flex items-center justify-between px-6 sticky top-0 z-30">
       <div className="flex items-center gap-4">
         <button
           onClick={toggleSidebar}

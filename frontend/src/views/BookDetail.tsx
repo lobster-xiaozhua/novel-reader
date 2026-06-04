@@ -117,103 +117,105 @@ export default function BookDetail() {
         <span className="text-text-primary truncate max-w-xs">{book.title}</span>
       </nav>
 
-      {/* Book Header */}
-      <div className="relative rounded-2xl overflow-hidden">
+      {/* Book Header — Glass Showcase Box */}
+      <div className="glass-card p-8 md:p-12 relative overflow-hidden">
+        {/* Background gradient */}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 opacity-30"
           style={{ background: `linear-gradient(135deg, ${book.gradient?.[0] || '#667eea'}, ${book.gradient?.[1] || '#764ba2'})` }}
         />
-        <div className="absolute inset-0 bg-black/40" />
-        <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.2), transparent 60%)' }} />
+        <div className="absolute inset-0 bg-black/20" />
 
-        <div className="relative z-10 p-8 md:p-12">
-          <div className="flex flex-col md:flex-row gap-8">
-            {/* Cover */}
-            <div
-              className="w-44 h-64 rounded-2xl flex-shrink-0 flex items-center justify-center shadow-2xl mx-auto md:mx-0 overflow-hidden"
-              style={{ background: `linear-gradient(135deg, ${book.gradient?.[0] || '#667eea'}, ${book.gradient?.[1] || '#764ba2'})` }}
-            >
-              <div className="absolute inset-0 bg-black/10" />
-              <BookOpen className="w-16 h-16 text-white/60 relative z-10" />
+        <div className="relative z-10 flex flex-col md:flex-row gap-8">
+          {/* Cover — glass box effect */}
+          <div
+            className="w-44 h-64 rounded-2xl flex-shrink-0 flex items-center justify-center shadow-2xl overflow-hidden mx-auto md:mx-0"
+            style={{ background: `linear-gradient(135deg, ${book.gradient?.[0] || '#667eea'}, ${book.gradient?.[1] || '#764ba2'})` }}
+          >
+            <div className="absolute inset-0 bg-black/10" />
+            <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.2), transparent 60%)' }} />
+            <BookOpen className="w-16 h-16 text-white/60 relative z-10" />
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 text-center md:text-left">
+            <h1 className="text-3xl md:text-4xl font-extrabold text-white mb-2 tracking-tight">{book.title}</h1>
+            <p className="text-white/70 text-lg mb-4">{book.author || '未知作者'}</p>
+
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-4">
+              {book.category && (
+                <span className="px-3 py-1 rounded-full bg-white/15 text-white text-sm font-medium backdrop-blur-sm">
+                  {book.category}
+                </span>
+              )}
+              {book.tags.map((tag) => (
+                <span
+                  key={tag.id}
+                  className="px-3 py-1 rounded-full text-white text-sm backdrop-blur-sm"
+                  style={{ backgroundColor: tag.color + '40', border: `1px solid ${tag.color}60` }}
+                >
+                  {tag.name}
+                </span>
+              ))}
             </div>
 
-            {/* Info */}
-            <div className="flex-1 text-center md:text-left">
-              <h1 className="text-3xl md:text-4xl font-extrabold text-white mb-2 tracking-tight">{book.title}</h1>
-              <p className="text-white/70 text-lg mb-4">{book.author || '未知作者'}</p>
+            <p className="text-white/60 text-sm leading-relaxed max-w-xl mb-6 line-clamp-3">
+              {book.description || '暂无简介'}
+            </p>
 
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-4">
-                {book.category && (
-                  <span className="px-3 py-1 rounded-full bg-white/15 text-white text-sm font-medium">
-                    {book.category}
-                  </span>
+            {/* Action Buttons — Primary + Secondary */}
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
+              {/* Primary: Start Reading — solid fill */}
+              <button
+                onClick={handleStartReading}
+                disabled={!chapters?.length}
+                className="inline-flex items-center gap-2 px-7 h-11 rounded-xl bg-white text-text-primary font-bold text-sm hover:bg-white/90 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-black/20"
+              >
+                <BookOpen className="w-4 h-4" />
+                {book.reading_progress ? '继续阅读' : '开始阅读'}
+              </button>
+              {/* Secondary: Favorite — glass outline */}
+              <button
+                onClick={handleToggleFav}
+                disabled={favMutation.isPending}
+                className={`inline-flex items-center gap-2 px-5 h-11 rounded-xl font-semibold text-sm transition-all active:scale-95 shadow-lg backdrop-blur-sm ${
+                  book.is_favorited
+                    ? 'bg-danger/20 text-danger hover:bg-danger/30 border border-danger/30'
+                    : 'bg-white/10 text-white hover:bg-white/20 border border-white/20'
+                }`}
+              >
+                {favMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Heart className={`w-4 h-4 ${book.is_favorited ? 'fill-current' : ''}`} />
                 )}
-                {book.tags.map((tag) => (
-                  <span
-                    key={tag.id}
-                    className="px-3 py-1 rounded-full text-white text-sm"
-                    style={{ backgroundColor: tag.color + '40', border: `1px solid ${tag.color}60` }}
-                  >
-                    {tag.name}
-                  </span>
-                ))}
-              </div>
-
-              <p className="text-white/60 text-sm leading-relaxed max-w-xl mb-6 line-clamp-3">
-                {book.description || '暂无简介'}
-              </p>
-
-              {/* Actions */}
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
-                <button
-                  onClick={handleStartReading}
-                  disabled={!chapters?.length}
-                  className="inline-flex items-center gap-2 px-6 h-11 rounded-xl bg-white text-text-primary font-semibold text-sm hover:bg-white/90 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-                >
-                  <BookOpen className="w-4 h-4" />
-                  {book.reading_progress ? '继续阅读' : '开始阅读'}
-                </button>
-                <button
-                  onClick={handleToggleFav}
-                  disabled={favMutation.isPending}
-                  className={`inline-flex items-center gap-2 px-5 h-11 rounded-xl font-semibold text-sm transition-all active:scale-95 shadow-lg ${
-                    book.is_favorited
-                      ? 'bg-danger/20 text-danger hover:bg-danger/30 border border-danger/30'
-                      : 'bg-white/15 text-white hover:bg-white/25 border border-white/20'
-                  }`}
-                >
-                  {favMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Heart className={`w-4 h-4 ${book.is_favorited ? 'fill-current' : ''}`} />
-                  )}
-                  {book.is_favorited ? '已收藏' : '收藏'}
-                </button>
-                <button
-                  onClick={handleStartReading}
-                  disabled={!chapters?.length}
-                  className="inline-flex items-center gap-2 px-5 h-11 rounded-xl bg-white/15 text-white font-semibold text-sm hover:bg-white/25 border border-white/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-                >
-                  <BookmarkPlus className="w-4 h-4" />
-                  加入书架
-                </button>
-              </div>
+                {book.is_favorited ? '已收藏' : '收藏'}
+              </button>
+              {/* Tertiary: Add to Shelf — glass outline */}
+              <button
+                onClick={handleStartReading}
+                disabled={!chapters?.length}
+                className="inline-flex items-center gap-2 px-5 h-11 rounded-xl bg-white/10 text-white font-semibold text-sm hover:bg-white/20 border border-white/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg backdrop-blur-sm"
+              >
+                <BookmarkPlus className="w-4 h-4" />
+                加入书架
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Stats Row — glass cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 stagger-in">
         {[
           { icon: FileText, label: '总章节', value: `${book.total_chapters} 章` },
           { icon: PenTool, label: '总字数', value: totalWords > 0 ? `${(totalWords / 1000).toFixed(1)}K 字` : '—' },
           { icon: Clock, label: '最后更新', value: formatTime(book.updated_at) },
           { icon: Star, label: '收藏状态', value: book.is_favorited ? '已收藏' : '未收藏' },
         ].map((stat) => (
-          <div key={stat.label} className="bg-card-bg border border-card-border rounded-xl p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-primary-500/10 flex items-center justify-center flex-shrink-0">
-              <stat.icon className="w-5 h-5 text-primary-500" />
+          <div key={stat.label} className="glass-card p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center flex-shrink-0">
+              <stat.icon className="w-5 h-5 text-accent" />
             </div>
             <div>
               <div className="text-sm text-text-muted">{stat.label}</div>
@@ -223,11 +225,11 @@ export default function BookDetail() {
         ))}
       </div>
 
-      {/* Chapter List */}
-      <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-card-border flex items-center justify-between">
+      {/* Chapter List — glass container */}
+      <div className="glass-card">
+        <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary-500" />
+            <FileText className="w-5 h-5 text-accent" />
             <h2 className="text-lg font-bold text-text-primary">章节目录</h2>
             <span className="text-sm text-text-muted">({chapters?.length ?? 0} 章)</span>
           </div>
@@ -277,7 +279,7 @@ export default function BookDetail() {
         )}
       </div>
 
-      {/* Similar Books */}
+      {/* Similar Books — glass cards */}
       <div>
         <div className="flex items-center gap-2 mb-5">
           <Sparkles className="w-5 h-5 text-accent" />
@@ -287,16 +289,16 @@ export default function BookDetail() {
         {similarLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="rounded-xl bg-bg-tertiary animate-pulse h-44" />
+              <div key={i} className="rounded-xl bg-bg-tertiary/50 animate-pulse h-44" />
             ))}
           </div>
         ) : similarBooks.length === 0 ? (
-          <div className="bg-bg-secondary/50 border border-border rounded-xl p-8 text-center text-text-muted text-sm">
+          <div className="glass-card p-8 text-center text-text-muted text-sm">
             暂无相似推荐
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {similarBooks.map((sb: RecommendBook) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 stagger-in">
+            {similarBooks.map((sb: RecommendBook, idx) => (
               <button
                 key={sb.id}
                 onClick={() => {
@@ -304,7 +306,8 @@ export default function BookDetail() {
                   navigate(`/books/${sb.id}`)
                   window.scrollTo(0, 0)
                 }}
-                className="group text-left bg-bg-secondary/50 border border-border rounded-xl p-4 card-hover"
+                className="glass-card p-4 text-left group"
+                style={{ animationDelay: `${idx * 0.04}s` }}
               >
                 <div
                   className="w-full h-28 rounded-xl mb-3 flex items-center justify-center relative overflow-hidden"
@@ -327,10 +330,10 @@ export default function BookDetail() {
         )}
       </div>
 
-      {/* Comments Placeholder */}
-      <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-card-border flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-primary-500" />
+      {/* Comments Placeholder — glass */}
+      <div className="glass-card">
+        <div className="px-6 py-4 border-b border-border/50 flex items-center gap-2">
+          <MessageSquare className="w-5 h-5 text-accent" />
           <h2 className="text-lg font-bold text-text-primary">读者评论</h2>
           <span className="text-sm text-text-muted">(功能开发中)</span>
         </div>
