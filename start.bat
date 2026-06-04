@@ -87,104 +87,142 @@ goto :eof
 
 :: ─── Infrastructure ───
 :ensure_pg
-:: Check if PostgreSQL is running
+:: 1. Check if PostgreSQL service is already running
 net start > "%temp%\_pg_check.txt" 2>nul
 findstr /i "postgresql" "%temp%\_pg_check.txt" >nul 2>&1
 if %errorlevel%==0 (
     call :log_success "PostgreSQL is running"
+    del "%temp%\_pg_check.txt" 2>nul
     goto :eof
 )
+del "%temp%\_pg_check.txt" 2>nul
 
-:: Try to start PostgreSQL service
-call :log_info "PostgreSQL not running, attempting to start..."
+:: 2. Try to find and start existing PostgreSQL service
+call :log_info "PostgreSQL not running, searching for installation..."
+set "pg_svc="
 for /f "tokens=2 delims=:" %%a in ('sc query state^= all ^| findstr /i "postgresql" ^| findstr "SERVICE_NAME"') do (
     set "pg_svc=%%a"
 )
 if defined pg_svc (
     call :log_info "Starting PostgreSQL service..."
-    net start "%pg_svc%" >nul 2>&1
+    net start "!pg_svc!" >nul 2>&1
     timeout /t 3 /nobreak >nul
     net start > "%temp%\_pg_check2.txt" 2>nul
     findstr /i "postgresql" "%temp%\_pg_check2.txt" >nul 2>&1
-    if %errorlevel%==0 (
+    del "%temp%\_pg_check2.txt" 2>nul
+    if !errorlevel!==0 (
         call :log_success "PostgreSQL started"
         call :setup_pg_user_db
-        del "%temp%\_pg_check*.txt" 2>nul
         goto :eof
     )
 )
 
-:: PostgreSQL not installed - auto install
-call :log_error "PostgreSQL not found, starting auto installation..."
-echo.
+:: 3. Try to find PostgreSQL in common install paths and add to PATH
+call :log_info "Searching PostgreSQL in common install paths..."
+set "PG_FOUND=0"
+for /d %%D in ("C:\Program Files\PostgreSQL\*\bin") do (
+    if exist "%%D\psql.exe" (
+        set "PG_BIN=%%D"
+        set "PG_FOUND=1"
+    )
+)
+if "!PG_FOUND!"=="1" (
+    call :log_info "Found PostgreSQL at: !PG_BIN!"
+    set "PATH=!PG_BIN!;!PATH!"
+    call :log_info "Attempting to register and start service..."
+    :: Try to register service if not already registered
+    if exist "!PG_BIN!\pg_ctl.exe" (
+        for /f "delims=" %%P in ("!PG_BIN:\bin=!") do set "PG_DATA_DIR=%%P\data"
+        if exist "!PG_DATA_DIR!\postgresql.conf" (
+            "!PG_BIN!\pg_ctl.exe" register -N postgresql -D "!PG_DATA_DIR!" >nul 2>&1
+            net start postgresql >nul 2>&1
+            timeout /t 3 /nobreak >nul
+        )
+    )
+    where psql >nul 2>&1 && (
+        call :log_success "PostgreSQL now available"
+        call :setup_pg_user_db
+        goto :eof
+    )
+)
+
+:: 4. Auto install via winget
+call :log_warn "PostgreSQL not found, attempting auto installation..."
 call :log_info "This is a hard dependency, cannot fallback to SQLite"
-call :log_info "Attempting to install via winget..."
 
 where winget >nul 2>&1
 if %errorlevel%==0 (
-    call :log_info "Downloading and installing PostgreSQL via winget (this may take a while)..."
-    winget install --id PostgreSQL.PostgreSQL --silent --accept-source-agreements --accept-package-agreements 2>&1
-    if %errorlevel%==0 (
-        call :log_success "PostgreSQL installed"
-        call :log_info "Please restart your terminal or re-run start.bat"
-        call :log_info "PostgreSQL service should auto-start after installation"
+    call :log_info "Installing PostgreSQL via winget (this may take a while)..."
+    winget install --id EnterpriseDB.PostgreSQL --silent --accept-source-agreements --accept-package-agreements 2>&1
+    if !errorlevel!==0 (
         timeout /t 5 /nobreak >nul
         goto :check_pg_after_install
     ) else (
-        call :log_error "winget installation failed"
-    )
-) else (
-    call :log_info "winget not available, trying Chocolatey..."
-    where choco >nul 2>&1
-    if %errorlevel%==0 (
-        call :log_info "Downloading and installing PostgreSQL via Chocolatey..."
-        choco install postgresql -y --force 2>&1
-        if %errorlevel%==0 (
-            call :log_success "PostgreSQL installed"
+        call :log_warn "winget install failed, trying alternative package ID..."
+        winget install --id PostgreSQL.PostgreSQL --silent --accept-source-agreements --accept-package-agreements 2>&1
+        if !errorlevel!==0 (
             timeout /t 5 /nobreak >nul
             goto :check_pg_after_install
         )
+        call :log_error "winget installation failed"
+    )
+)
+
+:: 5. Try Chocolatey
+where choco >nul 2>&1
+if %errorlevel%==0 (
+    call :log_info "Installing PostgreSQL via Chocolatey..."
+    choco install postgresql -y --force 2>&1
+    if !errorlevel!==0 (
+        timeout /t 5 /nobreak >nul
+        goto :check_pg_after_install
     )
 )
 
 call :log_error "Cannot auto-install PostgreSQL"
 call :log_info "Please install manually:"
-call :log_info "  1. winget install PostgreSQL.PostgreSQL"
+call :log_info "  1. winget install EnterpriseDB.PostgreSQL"
 call :log_info "  2. Or download from: https://www.postgresql.org/download/windows/"
+call :log_info "  3. Then re-run start.bat"
 echo.
-del "%temp%\_pg_check*.txt" 2>nul
 pause
 exit /b 1
 
 :check_pg_after_install
-:: Refresh PATH and check again
-call :venv_activate 2>nul
+:: Refresh PATH from registry and check again
+call :log_info "Verifying PostgreSQL installation..."
+:: Refresh PATH from system (captures newly installed programs)
+for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%B"
+for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%B"
+set "PATH=!SYS_PATH!;!USR_PATH!"
+
 where psql >nul 2>&1
 if %errorlevel%==0 (
     call :log_success "PostgreSQL is now available"
     call :setup_pg_user_db
-    del "%temp%\_pg_check*.txt" 2>nul
     goto :eof
 )
 
-call :log_warn "PostgreSQL installed but not in PATH yet"
-call :log_info "Try adding PostgreSQL bin to PATH and re-run"
+:: Fallback: scan common install paths
+set "PG_FOUND=0"
 for /d %%D in ("C:\Program Files\PostgreSQL\*\bin") do (
-    set "PG_BIN=%%D"
+    if exist "%%D\psql.exe" (
+        set "PG_BIN=%%D"
+        set "PG_FOUND=1"
+    )
 )
-if defined PG_BIN (
-    call :log_info "Found PostgreSQL at: %PG_BIN%"
-    set "PATH=%PG_BIN%;%PATH%"
+if "!PG_FOUND!"=="1" (
+    call :log_info "Found PostgreSQL at: !PG_BIN!"
+    set "PATH=!PG_BIN!;!PATH!"
     where psql >nul 2>&1 && (
         call :log_success "PostgreSQL now available after PATH fix"
         call :setup_pg_user_db
-        del "%temp%\_pg_check*.txt" 2>nul
         goto :eof
     )
 )
 
-del "%temp%\_pg_check*.txt" 2>nul
-call :log_error "PostgreSQL still not accessible"
+call :log_error "PostgreSQL installed but not accessible"
+call :log_info "Please restart your terminal and re-run start.bat"
 pause
 exit /b 1
 
