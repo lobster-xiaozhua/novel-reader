@@ -761,20 +761,29 @@ export default function NovelReader({
             WebkitFontSmoothing: 'antialiased'
           }}
         >
-          {paragraphs.map((p, i) => (
-            <p
-              key={i}
-              className="mb-4 first-line:indent-8"
-              style={{
-                marginBottom: `${paragraphSpacingRem}rem`,
-                textAlign: 'justify',
-                textIndent: '2em',
-                lineHeight: 'inherit'
-              }}
-            >
-              {p.trim()}
-            </p>
-          ))}
+          {paragraphs.length === 0 ? (
+            <div className="text-center py-20" style={{ color: colors.textMuted }}>
+              <BookOpen size={48} className="mx-auto mb-4 opacity-30" />
+              <p className="text-lg mb-2">章节内容为空</p>
+              <p className="text-sm opacity-60">该章节暂无内容或文件读取失败</p>
+              <p className="text-xs mt-4 opacity-40">调试信息: content长度={content.length}, wordCount={wordCount}</p>
+            </div>
+          ) : (
+            paragraphs.map((p, i) => (
+              <p
+                key={i}
+                className="mb-4 first-line:indent-8"
+                style={{
+                  marginBottom: `${paragraphSpacingRem}rem`,
+                  textAlign: 'justify',
+                  textIndent: '2em',
+                  lineHeight: 'inherit'
+                }}
+              >
+                {p.trim()}
+              </p>
+            ))
+          )}
         </article>
 
         {/* Bottom Navigation */}

@@ -290,24 +290,38 @@ def get_chapter_content(request, book_id: int, chapter_id: int) -> dict:
     content: str = ''
     cache_key = f'chapter_content:{chapter.id}'
     content = cache.get(cache_key)
-    if content is None and chapter.file_path:
-        file_path = os.path.normpath(chapter.file_path)
-        books_root = os.path.normpath(str(settings.BOOKS_DIR))
-        if not file_path.startswith(books_root):
-            logger.error(f'[Chapter] 文件路径越界: {chapter.file_path}')
-            content = ''
-        elif os.path.exists(file_path):
-            for enc in ('utf-8', 'gbk', 'gb2312', 'utf-16'):
-                try:
-                    with open(file_path, 'r', encoding=enc) as f:
-                        content = f.read()
-                    cache.set(cache_key, content, 300)
-                    break
-                except UnicodeDecodeError:
-                    continue
-                except Exception as exc:
-                    logger.error(f'[Chapter] 读取失败 {file_path}: {exc}')
-                    break
+
+    if content is None:
+        if not chapter.file_path:
+            logger.warning(f'[Chapter] 章节无文件路径: book_id={book_id}, chapter_id={chapter_id}')
+        else:
+            file_path = os.path.normpath(chapter.file_path)
+            books_root = os.path.normpath(str(settings.BOOKS_DIR))
+            if not file_path.startswith(books_root):
+                logger.error(f'[Chapter] 文件路径越界: {chapter.file_path}')
+            elif not os.path.exists(file_path):
+                logger.error(f'[Chapter] 文件不存在: {file_path}')
+            else:
+                # 尝试多种编码读取
+                for enc in ('utf-8', 'gbk', 'gb2312', 'utf-16'):
+                    try:
+                        with open(file_path, 'r', encoding=enc) as f:
+                            content = f.read()
+                        if content.strip():
+                            cache.set(cache_key, content, 300)
+                            logger.info(f'[Chapter] 读取成功: {file_path} (编码: {enc}, 字数: {len(content)})')
+                            break
+                        else:
+                            logger.warning(f'[Chapter] 文件内容为空: {file_path}')
+                            break
+                    except UnicodeDecodeError:
+                        continue
+                    except Exception as exc:
+                        logger.error(f'[Chapter] 读取失败 {file_path}: {exc}')
+                        break
+                else:
+                    logger.error(f'[Chapter] 所有编码都无法读取: {file_path}')
+
     return {
         'id': chapter.id,
         'chapter_number': chapter.chapter_number,
