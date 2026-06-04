@@ -93,20 +93,78 @@ if defined pg_svc (
     )
 )
 
-:: PostgreSQL not installed - guide user
-call :log_error "PostgreSQL is not installed or not running"
-call :log_warn "This is a hard dependency, cannot fallback to SQLite"
+:: PostgreSQL not installed - auto install
+call :log_error "PostgreSQL not found, starting auto installation..."
 echo.
-echo   %BOLD%Please install PostgreSQL for Windows:%NC%
-echo   %DIM%1. Download: https://www.postgresql.org/download/windows/%NC%
-echo   %DIM%2. Install with default settings (port 5432)%NC%
-echo   %DIM%3. Create user: novel_user, password: novel_pass%NC%
-echo   %DIM%4. Run start.bat again%NC%
-echo.
-call :log_info "Or install via winget:"
-echo   %DIM%winget install --id PostgreSQL.PostgreSQL --accept-source-agreements --accept-package-agreements%NC%
+call :log_info "This is a hard dependency, cannot fallback to SQLite"
+call :log_info "Attempting to install via winget..."
+
+where winget >nul 2>&1
+if %errorlevel%==0 (
+    call :log_info "Downloading and installing PostgreSQL via winget (this may take a while)..."
+    winget install --id PostgreSQL.PostgreSQL --silent --accept-source-agreements --accept-package-agreements 2>&1
+    if %errorlevel%==0 (
+        call :log_success "PostgreSQL installed"
+        call :log_info "Please restart your terminal or re-run start.bat"
+        call :log_info "PostgreSQL service should auto-start after installation"
+        timeout /t 5 /nobreak >nul
+        goto :check_pg_after_install
+    ) else (
+        call :log_error "winget installation failed"
+    )
+) else (
+    call :log_info "winget not available, trying Chocolatey..."
+    where choco >nul 2>&1
+    if %errorlevel%==0 (
+        call :log_info "Downloading and installing PostgreSQL via Chocolatey..."
+        choco install postgresql -y --force 2>&1
+        if %errorlevel%==0 (
+            call :log_success "PostgreSQL installed"
+            timeout /t 5 /nobreak >nul
+            goto :check_pg_after_install
+        )
+    )
+)
+
+call :log_error "Cannot auto-install PostgreSQL"
+call :log_info "Please install manually:"
+call :log_info "  1. winget install PostgreSQL.PostgreSQL"
+call :log_info "  2. Or download from: https://www.postgresql.org/download/windows/"
 echo.
 del "%temp%\_pg_check*.txt" 2>nul
+pause
+exit /b 1
+
+:check_pg_after_install
+:: Refresh PATH and check again
+call :venv_activate 2>nul
+where psql >nul 2>&1
+if %errorlevel%==0 (
+    call :log_success "PostgreSQL is now available"
+    call :setup_pg_user_db
+    del "%temp%\_pg_check*.txt" 2>nul
+    goto :eof
+)
+
+call :log_warn "PostgreSQL installed but not in PATH yet"
+call :log_info "Try adding PostgreSQL bin to PATH and re-run"
+for /d %%D in ("C:\Program Files\PostgreSQL\*\bin") do (
+    set "PG_BIN=%%D"
+)
+if defined PG_BIN (
+    call :log_info "Found PostgreSQL at: %PG_BIN%"
+    set "PATH=%PG_BIN%;%PATH%"
+    where psql >nul 2>&1 && (
+        call :log_success "PostgreSQL now available after PATH fix"
+        call :setup_pg_user_db
+        del "%temp%\_pg_check*.txt" 2>nul
+        goto :eof
+    )
+)
+
+del "%temp%\_pg_check*.txt" 2>nul
+call :log_error "PostgreSQL still not accessible"
+pause
 exit /b 1
 
 :setup_pg_user_db
@@ -174,7 +232,39 @@ if %errorlevel%==0 (
     )
 )
 
-call :log_warn "Redis not available, falling back to DiskCache"
+call :log_warn "Redis not available, attempting auto install..."
+
+where winget >nul 2>&1
+if %errorlevel%==0 (
+    call :log_info "Attempting to install Redis via winget..."
+    winget install --id Memurai.MemuraiDeveloper --silent --accept-source-agreements --accept-package-agreements 2>nul || ^
+    winget install --id Microsoft.Rdis --silent --accept-source-agreements --accept-package-agreements 2>nul
+    if %errorlevel%==0 (
+        timeout /t 3 /nobreak >nul
+        redis-cli ping >nul 2>&1 && (
+            call :log_success "Redis installed and started"
+            del "%temp%\_redis_check.txt" 2>nul
+            goto :eof
+        )
+    )
+)
+
+where choco >nul 2>&1
+if %errorlevel%==0 (
+    call :log_info "Attempting to install Redis via Chocolatey..."
+    choco install redis-64 -y --force 2>nul
+    if %errorlevel%==0 (
+        timeout /t 3 /nobreak >nul
+        redis-cli ping >nul 2>&1 && (
+            call :log_success "Redis installed and started"
+            del "%temp%\_redis_check.txt" 2>nul
+            goto :eof
+        )
+    )
+)
+
+call :log_warn "Cannot auto-install Redis, falling back to DiskCache"
+call :log_info "Optional: winget install Memurai.MemuraiDeveloper"
 del "%temp%\_redis_check.txt" 2>nul
 goto :eof
 
