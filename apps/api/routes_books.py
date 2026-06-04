@@ -297,17 +297,21 @@ def get_chapter_content(request, book_id: int, chapter_id: int) -> dict:
         else:
             # 构建绝对路径：file_path 可能是相对路径或已包含 BASE_DIR
             raw_path = chapter.file_path
+            books_root = os.path.normpath(str(settings.BOOKS_DIR))
+
             if os.path.isabs(raw_path):
                 file_path = os.path.normpath(raw_path)
             else:
-                # 相对路径，拼接 BASE_DIR
-                file_path = os.path.normpath(os.path.join(str(settings.BASE_DIR), raw_path))
+                # 相对路径：先尝试拼接 BOOKS_DIR，如果文件不存在再拼接 BASE_DIR
+                file_path = os.path.normpath(os.path.join(books_root, raw_path))
+                if not os.path.exists(file_path):
+                    file_path = os.path.normpath(os.path.join(str(settings.BASE_DIR), raw_path))
 
-            books_root = os.path.normpath(str(settings.BOOKS_DIR))
-
-            # 安全检查：确保文件在 books_root 下
-            if not file_path.startswith(books_root):
-                logger.error(f'[Chapter] 文件路径越界: file_path={file_path}, books_root={books_root}, raw={raw_path}')
+            # 安全检查：确保文件在 books_root 下（使用 realpath 防止软链接/..绕过）
+            real_file_path = os.path.realpath(file_path)
+            real_books_root = os.path.realpath(books_root)
+            if not real_file_path.startswith(real_books_root):
+                logger.error(f'[Chapter] 文件路径越界: real_path={real_file_path}, books_root={real_books_root}, raw={raw_path}')
             elif not os.path.exists(file_path):
                 logger.error(f'[Chapter] 文件不存在: {file_path}')
             else:
