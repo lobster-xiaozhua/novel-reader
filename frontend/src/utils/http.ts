@@ -217,8 +217,8 @@ export async function put<T>(url: string, data?: unknown, options?: RequestOptio
   return request<T>('PUT', url, data, options)
 }
 
-export async function del<T>(url: string, options?: RequestOptions): Promise<T> {
-  return request<T>('DELETE', url, undefined, options)
+export async function del<T>(url: string, data?: unknown, options?: RequestOptions): Promise<T> {
+  return request<T>('DELETE', url, data, options)
 }
 
 export async function upload<T>(url: string, formData: FormData, options?: RequestOptions): Promise<T> {

@@ -1,1 +1,0 @@
-import{m as e}from"./main.js";function t(t){return e(`/stats/`,{params:{days:t}})}function n(){return e(`/dashboard/`)}export{t as n,n as t};

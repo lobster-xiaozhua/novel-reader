@@ -1,4 +1,4 @@
-import { get, upload } from '@/utils/http'
+import { get, post, del } from '@/utils/http'
 import { Book, Chapter, RecommendBook, AdvancedSearchResult } from '@/types'
 
 export function fetchBooks(params?: { tag?: string; category?: string; search?: string; page?: number }) {
@@ -66,4 +66,31 @@ export function fetchAdvancedSearch(q: string, limit: number = 20, page: number 
     pagination: { page: number; per_page: number; total: number; has_next: boolean }
     search_time_ms: number
   }>('/search/advanced/', { params: { q, limit, page } })
+}
+
+// ── 书籍目录管理 ──
+
+export interface BookDirInfo {
+  path: string
+  type: string
+  exists: boolean
+  accessible?: boolean
+  books: { name: string; chapters: number }[]
+  file_count: number
+}
+
+export function fetchBookDirs() {
+  return get<{ success: boolean; dirs: BookDirInfo[] }>('/books/dirs/')
+}
+
+export function addBookDir(path: string) {
+  return post<{ success: boolean; message?: string; error?: string; scan?: BookDirInfo }>('/books/dirs/', { path })
+}
+
+export function removeBookDir(path: string) {
+  return del<{ success: boolean; message?: string; error?: string }>('/books/dirs/', { path })
+}
+
+export function scanBookDirs(path?: string) {
+  return post<{ success: boolean; imported: number; errors: string[] }>('/books/dirs/scan/', { path })
 }

@@ -297,6 +297,19 @@ BOOKS_EXTRA_DIRS = [Path(d) for d in _BOOKS_EXTRA.split(':') if d.strip()]
 # 所有允许的书籍根目录（用于路径安全检查）
 BOOKS_ROOTS = [BOOKS_DIR] + BOOKS_EXTRA_DIRS
 
+# 启动时加载 book_dirs.json 中保存的外挂目录
+_BOOKS_DIRS_JSON = BASE_DIR / 'data' / 'book_dirs.json'
+if _BOOKS_DIRS_JSON.exists():
+    try:
+        import json as _json
+        _saved = _json.loads(_BOOKS_DIRS_JSON.read_text(encoding='utf-8'))
+        for _p in _saved.get('extra_dirs', []):
+            _dp = Path(_p)
+            if _dp not in BOOKS_ROOTS:
+                BOOKS_ROOTS.append(_dp)
+    except Exception:
+        pass
+
 for _d in [BOOKS_DIR, LOGS_DIR, CACHE_DIR] + BOOKS_EXTRA_DIRS:
     _d.mkdir(parents=True, exist_ok=True)
 

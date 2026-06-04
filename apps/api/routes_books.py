@@ -252,6 +252,165 @@ def get_categories(request) -> list:
     return list(qs)
 
 
+# ── 书籍目录管理（必须在 /books/{book_id}/ 之前注册）──
+
+import json as _json
+
+_DIRS_CONFIG_PATH = os.path.join(str(settings.BASE_DIR), 'data', 'book_dirs.json')
+
+
+def _load_dirs_config() -> dict:
+    if os.path.exists(_DIRS_CONFIG_PATH):
+        try:
+            with open(_DIRS_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                return _json.load(f)
+        except Exception:
+            pass
+    return {'extra_dirs': []}
+
+
+def _save_dirs_config(config: dict):
+    os.makedirs(os.path.dirname(_DIRS_CONFIG_PATH), exist_ok=True)
+    with open(_DIRS_CONFIG_PATH, 'w', encoding='utf-8') as f:
+        _json.dump(config, f, ensure_ascii=False, indent=2)
+
+
+def _scan_dir(path: str) -> dict:
+    """扫描目录，返回书籍子文件夹列表"""
+    if not os.path.isdir(path):
+        return {'exists': False, 'books': [], 'file_count': 0}
+    books = []
+    file_count = 0
+    try:
+        for entry in sorted(os.scandir(path), key=lambda e: e.name):
+            if entry.is_dir():
+                ch_count = sum(1 for _ in os.scandir(entry.path) if _.is_file() and _.name.endswith('.txt'))
+                if ch_count > 0:
+                    books.append({'name': entry.name, 'chapters': ch_count})
+            elif entry.is_file() and entry.name.endswith('.txt'):
+                file_count += 1
+        file_count += sum(b['chapters'] for b in books)
+    except PermissionError:
+        return {'exists': True, 'accessible': False, 'books': [], 'file_count': 0}
+    return {'exists': True, 'accessible': True, 'books': books, 'file_count': file_count}
+
+
+@router.get('/books/dirs/', auth=jwt_auth)
+def list_book_dirs(request) -> dict:
+    """列出所有书籍目录及其状态"""
+    config = _load_dirs_config()
+    main_dir = str(settings.BOOKS_DIR)
+    dirs = [{'path': main_dir, 'type': '主目录', **_scan_dir(main_dir)}]
+    for p in config.get('extra_dirs', []):
+        dirs.append({'path': p, 'type': '外挂目录', **_scan_dir(p)})
+    return {'success': True, 'dirs': dirs}
+
+
+@router.post('/books/dirs/', auth=jwt_auth)
+def add_book_dir(request, path: str) -> dict:
+    """添加外挂书籍目录"""
+    path = os.path.normpath(path)
+    if not os.path.isabs(path):
+        return {'success': False, 'error': '必须使用绝对路径'}
+    config = _load_dirs_config()
+    if path in config.get('extra_dirs', []):
+        return {'success': False, 'error': '该目录已存在'}
+    if path == str(settings.BOOKS_DIR):
+        return {'success': False, 'error': '不能添加主目录'}
+    config.setdefault('extra_dirs', []).append(path)
+    _save_dirs_config(config)
+    if not hasattr(settings, 'BOOKS_ROOTS'):
+        settings.BOOKS_ROOTS = [settings.BOOKS_DIR]
+    if path not in [str(r) for r in settings.BOOKS_ROOTS]:
+        settings.BOOKS_ROOTS.append(type(settings.BOOKS_DIR)(path))
+    os.makedirs(path, exist_ok=True)
+    logger.info(f'[BookDirs] 添加外挂目录: {path}')
+    return {'success': True, 'message': f'已添加: {path}', 'scan': _scan_dir(path)}
+
+
+@router.delete('/books/dirs/', auth=jwt_auth)
+def remove_book_dir(request, path: str) -> dict:
+    """移除外挂书籍目录"""
+    path = os.path.normpath(path)
+    config = _load_dirs_config()
+    if path not in config.get('extra_dirs', []):
+        return {'success': False, 'error': '该目录不在外挂列表中'}
+    config['extra_dirs'].remove(path)
+    _save_dirs_config(config)
+    if hasattr(settings, 'BOOKS_ROOTS'):
+        settings.BOOKS_ROOTS = [r for r in settings.BOOKS_ROOTS if str(r) != path]
+    logger.info(f'[BookDirs] 移除外挂目录: {path}')
+    return {'success': True, 'message': f'已移除: {path}'}
+
+
+@router.post('/books/dirs/scan/', auth=jwt_auth)
+def scan_book_dir(request, path: str = '') -> dict:
+    """扫描指定目录（或所有目录），发现新书籍并入库"""
+    from apps.books.models import Book as BookModel
+    from apps.chapters.models import Chapter as ChapterModel
+
+    scan_paths = []
+    if path:
+        scan_paths = [os.path.normpath(path)]
+    else:
+        config = _load_dirs_config()
+        scan_paths = [str(settings.BOOKS_DIR)] + config.get('extra_dirs', [])
+
+    imported = 0
+    errors = []
+    for base in scan_paths:
+        if not os.path.isdir(base):
+            continue
+        for entry in os.scandir(base):
+            if not entry.is_dir():
+                continue
+            book_name = entry.name
+            if BookModel.objects.filter(title=book_name).exists():
+                continue
+            ch_files = sorted(
+                [f for f in os.scandir(entry.path) if f.is_file() and f.name.endswith('.txt')],
+                key=lambda f: f.name,
+            )
+            if not ch_files:
+                continue
+            try:
+                book = BookModel.objects.create(
+                    title=book_name,
+                    folder_path=entry.path,
+                    total_chapters=len(ch_files),
+                )
+                for idx, f in enumerate(ch_files, 1):
+                    ch_title = os.path.splitext(f.name)[0]
+                    rel_path = os.path.relpath(f.path, str(settings.BOOKS_DIR))
+                    if rel_path.startswith('..'):
+                        rel_path = f.path
+                    content = ''
+                    for enc in ('utf-8', 'gbk', 'gb2312'):
+                        try:
+                            content = open(f.path, 'r', encoding=enc).read()
+                            break
+                        except (UnicodeDecodeError, Exception):
+                            continue
+                    ChapterModel.objects.create(
+                        book=book, chapter_number=idx,
+                        title=ch_title, file_path=rel_path,
+                        word_count=len(content),
+                    )
+                imported += 1
+                logger.info(f'[Scan] 发现新书: {book_name} ({len(ch_files)}章)')
+            except Exception as exc:
+                errors.append(f'{book_name}: {str(exc)[:100]}')
+
+    if imported > 0:
+        try:
+            get_rec_engine().build_index(force=True)
+            build_search_index(force=True)
+        except Exception:
+            pass
+
+    return {'success': True, 'imported': imported, 'errors': errors}
+
+
 @router.get('/books/{book_id}/', response=BookDetailSchema, auth=optional_jwt_auth)
 def get_book(request, book_id: int) -> dict:
     book = get_object_or_404(Book.objects.prefetch_related('tags'), id=book_id)

@@ -16,6 +16,7 @@ import {
   Sun,
   Moon,
   Trophy,
+  FolderOpen,
 } from 'lucide-react'
 import { useAppStore } from '@/stores/appStore'
 import { MenuItem } from '@/types'
@@ -32,6 +33,7 @@ const menuItems: MenuItem[] = [
   { title: '阅读统计', icon: 'BarChart3', path: '/stats' },
   { title: '收藏', icon: 'Heart', path: '/favorites' },
   { title: '爬虫任务', icon: 'Bug', path: '/crawler' },
+  { title: '书籍目录', icon: 'FolderOpen', path: '/book-dirs' },
 ]
 
 const iconMap: Record<string, React.ElementType> = {
@@ -46,6 +48,7 @@ const iconMap: Record<string, React.ElementType> = {
   Heart,
   Bug,
   Trophy,
+  FolderOpen,
 }
 
 export default function Sidebar() {

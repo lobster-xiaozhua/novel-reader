@@ -21,6 +21,7 @@ const Favorites = lazy(() => import('./views/Favorites'))
 const Crawler = lazy(() => import('./views/Crawler'))
 const Rankings = lazy(() => import('./views/Rankings'))
 const SearchPage = lazy(() => import('./views/Search'))
+const BookDirs = lazy(() => import('./views/BookDirs'))
 
 function LazyPage({ children }: { children: React.ReactNode }) {
   return (
@@ -52,6 +53,7 @@ function App() {
           <Route path="crawler" element={<ErrorBoundary><LazyPage><Crawler /></LazyPage></ErrorBoundary>} />
           <Route path="rankings" element={<ErrorBoundary><LazyPage><Rankings /></LazyPage></ErrorBoundary>} />
           <Route path="search" element={<ErrorBoundary><LazyPage><SearchPage /></LazyPage></ErrorBoundary>} />
+          <Route path="book-dirs" element={<ErrorBoundary><LazyPage><BookDirs /></LazyPage></ErrorBoundary>} />
           <Route path="*" element={<ErrorPage code={404} />} />
         </Route>
       </Routes>
