@@ -289,7 +289,15 @@ BOOKS_DIR = BASE_DIR / 'data' / 'books'
 LOGS_DIR = BASE_DIR / 'data' / 'logs'
 CACHE_DIR = BASE_DIR / 'data' / 'cache'
 
-for _d in [BOOKS_DIR, LOGS_DIR, CACHE_DIR]:
+# 外挂书籍目录：通过 BOOKS_EXTRA_DIRS 环境变量配置，多个目录用冒号分隔
+# 例: BOOKS_EXTRA_DIRS=/mnt/novels:/sdcard/books
+_BOOKS_EXTRA = env('BOOKS_EXTRA_DIRS', default='')
+BOOKS_EXTRA_DIRS = [Path(d) for d in _BOOKS_EXTRA.split(':') if d.strip()]
+
+# 所有允许的书籍根目录（用于路径安全检查）
+BOOKS_ROOTS = [BOOKS_DIR] + BOOKS_EXTRA_DIRS
+
+for _d in [BOOKS_DIR, LOGS_DIR, CACHE_DIR] + BOOKS_EXTRA_DIRS:
     _d.mkdir(parents=True, exist_ok=True)
 
 CELERY_BROKER_URL = env('CELERY_BROKER_URL')

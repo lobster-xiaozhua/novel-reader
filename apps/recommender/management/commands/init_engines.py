@@ -111,14 +111,15 @@ class Command(BaseCommand):
         # ── 文件监控 ──
         self._print('👀', '书籍目录检查...')
         try:
-            books_dir = settings.BOOKS_DIR
-            if books_dir.exists():
-                import os
-                file_count = sum(1 for _, _, files in os.walk(books_dir) for f in files)
-                self._print('✅', f'书籍目录: {books_dir} | {file_count} 个文件')
-            else:
-                self._print('ℹ️', f'书籍目录不存在: {books_dir}（将自动创建）')
-                books_dir.mkdir(parents=True, exist_ok=True)
+            import os
+            for i, root in enumerate(settings.BOOKS_ROOTS):
+                label = '主目录' if i == 0 else f'外挂目录{i}'
+                if root.exists():
+                    file_count = sum(1 for _, _, files in os.walk(root) for f in files)
+                    self._print('✅', f'{label}: {root} | {file_count} 个文件')
+                else:
+                    self._print('ℹ️', f'{label}不存在: {root}（将自动创建）')
+                    root.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             self._print('⚠️', f'目录检查失败: {e}')
 

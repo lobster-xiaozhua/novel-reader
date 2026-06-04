@@ -109,11 +109,22 @@ class HybridSearchEngine:
         from django.conf import settings
         if not file_path:
             return ''
-        norm = os.path.normpath(file_path)
-        root = os.path.normpath(str(settings.BOOKS_DIR))
-        if not norm.startswith(root):
-            return ''
-        if not os.path.exists(norm):
+        # 绝对路径直接使用，相对路径依次尝试 BOOKS_ROOTS
+        if os.path.isabs(file_path):
+            norm = os.path.normpath(file_path)
+        else:
+            norm = None
+            for root in settings.BOOKS_ROOTS:
+                candidate = os.path.normpath(os.path.join(str(root), file_path))
+                if os.path.exists(candidate):
+                    norm = candidate
+                    break
+            if not norm:
+                norm = os.path.normpath(os.path.join(str(settings.BASE_DIR), file_path))
+        # 安全检查：文件必须在任一 BOOKS_ROOTS 下
+        real_norm = os.path.realpath(norm)
+        allowed = any(real_norm.startswith(os.path.realpath(str(r))) for r in settings.BOOKS_ROOTS)
+        if not allowed or not os.path.exists(norm):
             return ''
         for enc in ('utf-8', 'gbk', 'gb2312'):
             try:

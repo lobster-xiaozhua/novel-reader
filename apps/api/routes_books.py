@@ -295,23 +295,31 @@ def get_chapter_content(request, book_id: int, chapter_id: int) -> dict:
         if not chapter.file_path:
             logger.warning(f'[Chapter] 章节无文件路径: book_id={book_id}, chapter_id={chapter_id}')
         else:
-            # 构建绝对路径：file_path 可能是相对路径或已包含 BASE_DIR
+            # 构建绝对路径：file_path 可能是相对路径或绝对路径
             raw_path = chapter.file_path
-            books_root = os.path.normpath(str(settings.BOOKS_DIR))
 
             if os.path.isabs(raw_path):
                 file_path = os.path.normpath(raw_path)
             else:
-                # 相对路径：先尝试拼接 BOOKS_DIR，如果文件不存在再拼接 BASE_DIR
-                file_path = os.path.normpath(os.path.join(books_root, raw_path))
-                if not os.path.exists(file_path):
+                # 相对路径：依次尝试 BOOKS_ROOTS 中的每个根目录
+                file_path = None
+                for root in settings.BOOKS_ROOTS:
+                    candidate = os.path.normpath(os.path.join(str(root), raw_path))
+                    if os.path.exists(candidate):
+                        file_path = candidate
+                        break
+                if not file_path:
+                    # 兜底：拼接 BASE_DIR
                     file_path = os.path.normpath(os.path.join(str(settings.BASE_DIR), raw_path))
 
-            # 安全检查：确保文件在 books_root 下（使用 realpath 防止软链接/..绕过）
+            # 安全检查：确保文件在任一 BOOKS_ROOTS 下
             real_file_path = os.path.realpath(file_path)
-            real_books_root = os.path.realpath(books_root)
-            if not real_file_path.startswith(real_books_root):
-                logger.error(f'[Chapter] 文件路径越界: real_path={real_file_path}, books_root={real_books_root}, raw={raw_path}')
+            allowed = any(
+                real_file_path.startswith(os.path.realpath(str(root)))
+                for root in settings.BOOKS_ROOTS
+            )
+            if not allowed:
+                logger.error(f'[Chapter] 文件路径越界: real_path={real_file_path}, raw={raw_path}')
             elif not os.path.exists(file_path):
                 logger.error(f'[Chapter] 文件不存在: {file_path}')
             else:

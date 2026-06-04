@@ -5,10 +5,12 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
+      - ${BOOKS_MOUNT:-./data/books}:/mnt/books:ro
     environment:
       - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - BOOKS_EXTRA_DIRS=/mnt/books
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
