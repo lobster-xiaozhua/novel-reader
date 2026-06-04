@@ -14,7 +14,7 @@ DIM='\033[2m'
 BOLD='\033[1m'
 
 STEP_NUM=0
-TOTAL_STEPS=6
+TOTAL_STEPS=8
 
 _timer_start=0
 timer_start() { _timer_start=${SECONDS}; }
@@ -47,6 +47,7 @@ print_banner() {
     echo ""
     echo -e "${MAGENTA}╔═══════════════════════════════════════════════════╗${NC}"
     echo -e "${MAGENTA}║${NC}  ${CYAN}Novel Reader v2.0 - 高性能小说阅读器${NC}        ${MAGENTA}║${NC}"
+    echo -e "${MAGENTA}║${NC}  ${DIM}PG + Redis + DiskCache + 液态玻璃 UI${NC}          ${MAGENTA}║${NC}"
     echo -e "${MAGENTA}╚═══════════════════════════════════════════════════╝${NC}"
 }
 
@@ -63,13 +64,66 @@ show_help() {
   migrate    执行数据库迁移
   build      构建前端
   dev        开发模式（前后端分离）
+  services   启动基础设施（PG/Redis/ES）
   help       显示此帮助
 
 示例:
   ./start.sh start          # 启动生产服务
+  ./start.sh services       # 仅启动 PG + Redis
   ./start.sh dev            # 开发模式
   ./start.sh build          # 构建前端
 EOF
+}
+
+# ─── Infrastructure ───
+
+start_infra() {
+    log_step "启动基础设施"
+
+    # PostgreSQL
+    if pg_isready -q 2>/dev/null; then
+        log_success "PostgreSQL 已运行"
+    else
+        log_info "启动 PostgreSQL..."
+        pg_ctlcluster $(pg_lsclusters -h | head -1 | awk '{print $1, $2}') start 2>/dev/null || \
+            pg_ctlcluster 16 main start 2>/dev/null || \
+            log_warn "PostgreSQL 启动失败，将使用 SQLite 模式"
+        sleep 2
+    fi
+
+    # Redis
+    if redis-cli ping 2>/dev/null | grep -q PONG; then
+        log_success "Redis 已运行"
+    else
+        log_info "启动 Redis..."
+        redis-server --daemonize yes --maxmemory 256mb --maxmemory-policy allkeys-lru 2>/dev/null && \
+            log_success "Redis 已启动" || \
+            log_warn "Redis 启动失败，将使用 DiskCache 模式"
+    fi
+
+    # Elasticsearch (optional)
+    if curl -sf http://localhost:9200 > /dev/null 2>&1; then
+        log_success "Elasticsearch 已运行"
+        ES_AVAILABLE=true
+    else
+        if command -v elasticsearch &> /dev/null || [ -d "/usr/share/elasticsearch" ]; then
+            log_info "启动 Elasticsearch..."
+            systemctl start elasticsearch 2>/dev/null || \
+                /usr/share/elasticsearch/bin/elasticsearch -d 2>/dev/null || \
+                log_warn "Elasticsearch 启动失败"
+            sleep 5
+            if curl -sf http://localhost:9200 > /dev/null 2>&1; then
+                log_success "Elasticsearch 已运行"
+                ES_AVAILABLE=true
+            else
+                log_warn "Elasticsearch 未就绪，搜索将降级为数据库模式"
+            fi
+        else
+            log_detail "Elasticsearch 未安装，搜索使用 PostgreSQL LIKE 模式"
+        fi
+    fi
+
+    step_done
 }
 
 check_env() {
@@ -105,7 +159,6 @@ check_env() {
                 log_info "建议执行: nvm uninstall $(nvm current) && pkg install nodejs-lts"
             fi
 
-            # 快速检测 Node 是否能正常运行
             if ! node -e "console.log('ok')" 2>/dev/null; then
                 log_error "Node.js 无法正常运行 (Illegal instruction?)"
                 log_info "修复方法:"
@@ -361,17 +414,6 @@ build_frontend() {
         echo -e "${DIM}===== 日志结束 =====${NC}"
         echo ""
 
-        # 单独提取错误和警告行（高亮显示）
-        local error_lines
-        error_lines=$(echo "$output" | grep -niE "error|failed|cannot|unable" || true)
-        if [ -n "$error_lines" ]; then
-            log_error "错误摘要:"
-            echo "$error_lines" | head -10 | while IFS= read -r line; do
-                log_error "  $line"
-            done
-            echo ""
-        fi
-
         # 常见错误诊断
         if echo "$output" | grep -qiE "ENOENT|Cannot find module|Module not found"; then
             log_error "诊断：缺少依赖模块"
@@ -483,6 +525,8 @@ start_server() {
 
 cmd_start() {
     print_banner
+    TOTAL_STEPS=8
+    start_infra
     check_env
     install_deps
     migrate_db
@@ -492,8 +536,9 @@ cmd_start() {
 }
 
 cmd_dev() {
-    TOTAL_STEPS=4
     print_banner
+    TOTAL_STEPS=5
+    start_infra
     check_env
     install_deps
     migrate_db
@@ -534,6 +579,29 @@ cmd_stop() {
 
 cmd_status() {
     log_step "服务状态"
+
+    # PostgreSQL
+    if pg_isready -q 2>/dev/null; then
+        log_success "PostgreSQL: 运行中"
+    else
+        log_warn "PostgreSQL: 未运行"
+    fi
+
+    # Redis
+    if redis-cli ping 2>/dev/null | grep -q PONG; then
+        log_success "Redis: 运行中"
+    else
+        log_warn "Redis: 未运行"
+    fi
+
+    # Elasticsearch
+    if curl -sf http://localhost:9200 > /dev/null 2>&1; then
+        log_success "Elasticsearch: 运行中"
+    else
+        log_warn "Elasticsearch: 未运行 (搜索将使用 PostgreSQL 模式)"
+    fi
+
+    # App
     if pgrep -f "granian" > /dev/null; then
         log_success "Granian 服务: 运行中 (PID: $(pgrep -f "granian" | head -1))"
         log_detail "http://localhost:8000"
@@ -541,19 +609,22 @@ cmd_status() {
         log_success "Django 开发服务器: 运行中 (PID: $(pgrep -f "manage.py runserver" | head -1))"
         log_detail "http://localhost:8000"
     else
-        log_warn "服务未运行"
+        log_warn "应用服务: 未运行"
     fi
 }
 
 cmd_migrate() {
-    TOTAL_STEPS=3
+    TOTAL_STEPS=4
+    print_banner
+    start_infra
     check_env
     install_deps
     migrate_db
 }
 
 cmd_build() {
-    TOTAL_STEPS=3
+    TOTAL_STEPS=4
+    print_banner
     check_env
     install_deps
     build_frontend
@@ -563,16 +634,28 @@ cmd_build() {
     log_success "构建完成"
 }
 
+cmd_services() {
+    TOTAL_STEPS=1
+    print_banner
+    start_infra
+    echo ""
+    echo -e "${GREEN}基础设施已启动:${NC}"
+    if pg_isready -q 2>/dev/null; then log_detail "  PostgreSQL: localhost:5432"; fi
+    if redis-cli ping 2>/dev/null | grep -q PONG; then log_detail "  Redis: localhost:6379"; fi
+    if curl -sf http://localhost:9200 > /dev/null 2>&1; then log_detail "  Elasticsearch: localhost:9200"; fi
+}
+
 main() {
     local command="${1:-start}"
     case "$command" in
-        start)   cmd_start ;;
-        dev)     cmd_dev ;;
-        stop)    cmd_stop ;;
-        restart) cmd_stop; sleep 1; cmd_start ;;
-        status)  cmd_status ;;
-        migrate) cmd_migrate ;;
-        build)   cmd_build ;;
+        start)     cmd_start ;;
+        dev)       cmd_dev ;;
+        stop)      cmd_stop ;;
+        restart)   cmd_stop; sleep 1; cmd_start ;;
+        status)    cmd_status ;;
+        migrate)   cmd_migrate ;;
+        build)     cmd_build ;;
+        services)  cmd_services ;;
         help|--help|-h) show_help ;;
         *) log_error "未知命令: $command"; show_help; exit 1 ;;
     esac
