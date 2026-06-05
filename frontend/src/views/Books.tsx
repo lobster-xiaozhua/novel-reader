@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import PageTitle from '@/components/PageTitle'
 import { BookOpen, Search, Eye, Tag, Upload, Loader2, Heart } from 'lucide-react'
 import { fetchBooks, importBooks } from '@/api/books'
 import { toggleFavorite } from '@/api/favorites'
@@ -61,6 +62,7 @@ export default function Books() {
 
   return (
     <div className="space-y-6">
+      <PageTitle title="书籍列表" />
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-text-primary">书籍管理</h2>
         <div className="flex items-center gap-3">

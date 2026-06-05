@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import PageTitle from '@/components/PageTitle'
 import { Heart, BookOpen, Clock, Trash2, ChevronRight } from 'lucide-react'
 import { fetchFavorites, toggleFavorite } from '@/api/favorites'
 import { FavoriteItem } from '@/types'
@@ -31,6 +32,7 @@ export default function Favorites() {
 
   return (
     <div className="space-y-6">
+      <PageTitle title="我的收藏" />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl glass-card--compact flex items-center justify-center">

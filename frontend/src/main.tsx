@@ -2,6 +2,7 @@ import { StrictMode, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, useNavigate } from 'react-router-dom'
+import { HelmetProvider } from 'react-helmet-async'
 import App from './App'
 import { ToastProvider, useToast } from './components/Toast'
 import { useUserStore } from './stores/userStore'
@@ -85,16 +86,18 @@ function AuthExpiredHandler({ children }: { children: React.ReactNode }) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <ToastProvider>
-          <GlobalErrorHandler>
-            <AuthExpiredHandler>
-              <App />
-            </AuthExpiredHandler>
-          </GlobalErrorHandler>
-        </ToastProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <HelmetProvider>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <ToastProvider>
+            <GlobalErrorHandler>
+              <AuthExpiredHandler>
+                <App />
+              </AuthExpiredHandler>
+            </GlobalErrorHandler>
+          </ToastProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </HelmetProvider>
   </StrictMode>,
 )

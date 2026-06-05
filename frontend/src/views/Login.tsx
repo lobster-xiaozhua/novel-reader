@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { BookOpen, Eye, EyeOff } from 'lucide-react'
 import { post } from '@/utils/http'
 import { useUserStore } from '@/stores/userStore'
+import PageTitle from '@/components/PageTitle'
 
 interface AuthResponse {
   success: boolean
@@ -53,6 +54,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-content-bg">
+      <PageTitle title="登录" />
       <div className="w-full max-w-md p-8 bg-card-bg border border-card-border rounded-2xl shadow-xl">
         <div className="flex flex-col items-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-primary-500/10 flex items-center justify-center mb-4">

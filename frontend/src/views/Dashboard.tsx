@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import PageTitle from '@/components/PageTitle'
 import {
   BookOpen,
   Clock,
@@ -51,6 +52,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <PageTitle title="仪表盘" />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 stagger-in">
         {cards.map((card, idx) => (
           <div key={card.title} className="glass-card p-5" style={{ animationDelay: `${idx * 0.03}s` }}>

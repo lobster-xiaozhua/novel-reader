@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import PageTitle from '@/components/PageTitle'
 import {
   Search, BookOpen, Clock, TrendingUp, Flame, Sparkles,
   ChevronRight, Eye, Calendar, Star, AlertCircle, Zap, Cpu
@@ -353,6 +354,7 @@ export default function HomePortal() {
 
   return (
     <div className="min-h-[calc(100vh-var(--navbar-height))] aurora-bg">
+      <PageTitle title="首页" />
       {/* Aurora extra orb */}
       <div className="aurora-orb aurora-orb--warm" />
 

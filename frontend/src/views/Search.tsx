@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import PageTitle from '@/components/PageTitle'
 import {
   Search, BookOpen, User, AlertCircle,
   FileText, ChevronRight, Cpu, Zap, ArrowLeft
@@ -204,6 +205,7 @@ export default function SearchPage() {
 
   return (
     <div className="space-y-6">
+      <PageTitle title="搜索" />
       <div>
         <div className="flex items-center gap-3 mb-4">
           <button
