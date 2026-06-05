@@ -1,18 +1,22 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
-import type { ApiResponse, AdminUser } from '@/shared/types';
+import type { ApiResponse, PaginatedData, AdminUser } from '@/shared/types';
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useQuery<ApiResponse<AdminUser[]>>({
-    queryKey: ['admin-users'],
-    queryFn: () => api.get('/admin/users'),
+  const { data, isLoading } = useQuery<ApiResponse<PaginatedData<AdminUser>>>({
+    queryKey: ['admin-users', page],
+    queryFn: () => api.get(`/admin/users?page=${page}`),
   });
 
-  const users = data?.data ?? [];
+  const users = data?.data?.items ?? [];
+  const total = data?.data?.total ?? 0;
+  const totalPages = Math.ceil(total / 20);
 
   const roleMutation = useMutation({
     mutationFn: ({ id, is_staff }: { id: number; is_staff: boolean }) =>
@@ -87,6 +91,30 @@ export default function UsersPage() {
             </tbody>
           </table>
         </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              共 {total} 条，第 {page} / {totalPages} 页
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="glass-btn text-sm disabled:opacity-40"
+              >
+                上一页
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="glass-btn text-sm disabled:opacity-40"
+              >
+                下一页
+              </button>
+            </div>
+          </div>
+        )}
       )}
     </div>
   );

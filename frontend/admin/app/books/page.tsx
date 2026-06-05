@@ -22,7 +22,16 @@ export default function BooksPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>书籍管理</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>书籍管理</h1>
+        <Link
+          href="/books/new"
+          className="glass-btn font-medium"
+          style={{ color: 'var(--accent)' }}
+        >
+          + 创建书籍
+        </Link>
+      </div>
 
       <input
         type="text"

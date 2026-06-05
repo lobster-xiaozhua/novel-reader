@@ -3,19 +3,19 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
-import type { ApiResponse, TagWithCount } from '@/shared/types';
+import type { ApiResponse, PaginatedData, TagWithCount } from '@/shared/types';
 
 export default function TagsPage() {
   const [name, setName] = useState('');
   const [color, setColor] = useState('#f59e0b');
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery<ApiResponse<TagWithCount[]>>({
+  const { data, isLoading } = useQuery<ApiResponse<PaginatedData<TagWithCount>>>({
     queryKey: ['admin-tags'],
     queryFn: () => api.get('/admin/tags'),
   });
 
-  const tags = data?.data ?? [];
+  const tags = data?.data?.items ?? [];
 
   const createMutation = useMutation({
     mutationFn: () => api.post('/admin/tags', { name, color }),

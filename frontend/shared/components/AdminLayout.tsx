@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { api } from '@/shared/lib/api';
 import {
   LayoutDashboard,
   BookOpen,
@@ -13,6 +14,7 @@ import {
   Activity,
   Menu,
   X,
+  LogOut,
 } from 'lucide-react';
 
 const navItems = [
@@ -28,58 +30,87 @@ const navItems = [
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    api.setToken('');
+    document.cookie = 'access_token=; path=/; max-age=0';
+    router.push('/login');
+  };
 
   return (
-    <div className="admin-layout">
-      <aside className="admin-sidebar">
-        <div className="flex items-center justify-between mb-6 pl-1">
+    <div className="flex h-screen">
+      <aside
+        className={`flex flex-col border-r transition-all duration-300 ${
+          collapsed ? 'w-16' : 'w-56'
+        }`}
+        style={{
+          background: 'var(--bg-secondary)',
+          borderColor: 'var(--border)',
+        }}
+      >
+        <div
+          className="flex items-center h-14 px-4 border-b"
+          style={{ borderColor: 'var(--border)' }}
+        >
           {!collapsed && (
-            <div>
-              <h1 className="text-xl font-extrabold tracking-tight" style={{ color: 'var(--accent)' }}>
-                管理后台
-              </h1>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                全站控制
-              </p>
-            </div>
+            <span
+              className="font-bold text-lg truncate"
+              style={{ color: 'var(--accent)' }}
+            >
+              Admin
+            </span>
           )}
           <button
             onClick={() => setCollapsed((v) => !v)}
-            className="p-1.5 rounded-lg transition-all hover:bg-white/5"
+            className="ml-auto p-1.5 rounded-lg transition-colors hover:opacity-80"
             style={{ color: 'var(--text-secondary)' }}
-            title={collapsed ? '展开菜单' : '收起菜单'}
           >
-            {collapsed ? <Menu size={19} strokeWidth={1.7} /> : <X size={19} strokeWidth={1.7} />}
+            {collapsed ? <Menu size={18} /> : <X size={18} />}
           </button>
         </div>
-
-        <nav className="flex-1 flex flex-col gap-1">
+        <nav className="flex-1 py-4 space-y-1 px-2">
           {navItems.map(({ href, icon: Icon, label }) => {
             const isActive = pathname === href;
             return (
               <Link
                 key={href}
                 href={href}
-                className="sidebar-icon"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm ${
+                  isActive ? 'font-semibold' : ''
+                }`}
                 style={{
-                  background: isActive ? 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(245,158,11,0.05))' : 'transparent',
-                  borderColor: isActive ? 'rgba(245,158,11,0.2)' : 'transparent',
+                  background: isActive ? 'var(--accent-soft)' : 'transparent',
                   color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
-                  boxShadow: isActive ? '0 0 24px rgba(245,158,11,0.08), inset 0 1px 0 rgba(245,158,11,0.12)' : 'none',
-                  border: isActive ? '1px solid' : '1px solid transparent',
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  padding: collapsed ? '0.75rem 0.5rem' : '0.75rem 0.9375rem',
                 }}
                 title={collapsed ? label : undefined}
               >
-                <Icon size={collapsed ? 20 : 19} strokeWidth={collapsed ? 1.8 : 1.7} className="shrink-0" />
+                <Icon size={20} className="shrink-0" />
                 {!collapsed && <span>{label}</span>}
               </Link>
             );
           })}
         </nav>
+        <div className="p-2 border-t" style={{ borderColor: 'var(--border)' }}>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg transition-all duration-200 text-sm"
+            style={{
+              color: 'var(--text-secondary)',
+            }}
+            title={collapsed ? '退出登录' : undefined}
+          >
+            <LogOut size={20} className="shrink-0" />
+            {!collapsed && <span>退出登录</span>}
+          </button>
+        </div>
       </aside>
-      <main className="admin-main">{children}</main>
+      <main
+        className="flex-1 overflow-auto p-6"
+        style={{ background: 'var(--bg-primary)' }}
+      >
+        {children}
+      </main>
     </div>
   );
 }

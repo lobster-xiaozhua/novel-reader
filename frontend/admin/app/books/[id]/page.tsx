@@ -3,6 +3,7 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import Link from 'next/link';
 import { api } from '@/shared/lib/api';
 import type { ApiResponse, BookDetail } from '@/shared/types';
 
@@ -75,7 +76,7 @@ export default function BookEditPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6">
       <div className="flex items-center gap-4">
         <button
           onClick={() => router.back()}
@@ -86,6 +87,21 @@ export default function BookEditPage() {
         <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
           编辑书籍 #{id}
         </h1>
+      </div>
+
+      <div className="glass-card p-4">
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/chapters?book_id=${id}`}
+            className="glass-btn font-medium"
+            style={{ color: 'var(--accent)' }}
+          >
+            📚 管理章节 ({book?.chapter_count || book?.total_chapters || 0})
+          </Link>
+          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            点击进入章节列表，可以编辑或删除章节
+          </span>
+        </div>
       </div>
 
       <div className="glass-card p-6 space-y-5">

@@ -59,43 +59,19 @@ export default function DashboardPage() {
       <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>仪表盘</h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="总书籍数" value={perf?.requests ?? '-'} />
-        <StatCard label="总章节数" value={perf?.cpu ? `${perf.cpu}` : '-'} />
-        <StatCard label="用户数" value={perf?.memory ? `${perf.memory}` : '-'} />
-        <StatCard label="活跃任务" value={perf?.uptime ? `${Math.round(perf.uptime / 3600)}h` : '-'} />
+        <StatCard label="总书籍数" value={perf?.books ?? '-'} />
+        <StatCard label="总章节数" value={perf?.chapters ?? '-'} />
+        <StatCard label="用户数" value={perf?.users ?? '-'} />
+        <StatCard label="标签数" value={perf?.tags ?? '-'} />
       </div>
 
       {health && (
         <div className="glass-card p-5">
           <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>系统健康</h2>
           <div className="flex flex-wrap gap-6">
-            <HealthBadge label="数据库" status={health.database} />
-            <HealthBadge label="缓存" status={health.cache} />
+            <HealthBadge label="数据库" status={health.database ? 'ok' : 'error'} />
+            <HealthBadge label="缓存" status={health.cache ? 'ok' : 'error'} />
             <HealthBadge label="系统" status={health.status} />
-          </div>
-        </div>
-      )}
-
-      {perf && (
-        <div className="glass-card p-5">
-          <h2 className="text-lg font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>性能指标</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-            <div>
-              <span style={{ color: 'var(--text-muted)' }}>CPU</span>
-              <p style={{ color: 'var(--text-primary)' }}>{perf.cpu}%</p>
-            </div>
-            <div>
-              <span style={{ color: 'var(--text-muted)' }}>内存</span>
-              <p style={{ color: 'var(--text-primary)' }}>{perf.memory} MB</p>
-            </div>
-            <div>
-              <span style={{ color: 'var(--text-muted)' }}>运行时间</span>
-              <p style={{ color: 'var(--text-primary)' }}>{Math.round(perf.uptime / 3600)}h</p>
-            </div>
-            <div>
-              <span style={{ color: 'var(--text-muted)' }}>平均响应</span>
-              <p style={{ color: 'var(--text-primary)' }}>{perf.avg_response_time}ms</p>
-            </div>
           </div>
         </div>
       )}

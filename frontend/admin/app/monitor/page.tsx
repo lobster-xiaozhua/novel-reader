@@ -45,10 +45,10 @@ export default function MonitorPage() {
 
       {perf && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="CPU 使用率" value={perf.cpu} unit="%" />
-          <StatCard label="内存使用" value={perf.memory} unit=" MB" />
-          <StatCard label="运行时间" value={Math.round(perf.uptime / 3600)} unit="h" />
-          <StatCard label="平均响应" value={perf.avg_response_time} unit="ms" />
+          <StatCard label="总书籍" value={perf.books} />
+          <StatCard label="总章节" value={perf.chapters} />
+          <StatCard label="用户数" value={perf.users} />
+          <StatCard label="标签数" value={perf.tags} />
         </div>
       )}
 
@@ -57,7 +57,7 @@ export default function MonitorPage() {
           <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
             健康状态
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <span className="text-sm" style={{ color: 'var(--text-muted)' }}>系统状态</span>
               <p
@@ -71,24 +71,18 @@ export default function MonitorPage() {
               <span className="text-sm" style={{ color: 'var(--text-muted)' }}>数据库</span>
               <p
                 className="text-lg font-semibold mt-1"
-                style={{ color: health.database === 'ok' ? 'var(--success)' : 'var(--danger)' }}
+                style={{ color: health.database ? 'var(--success)' : 'var(--danger)' }}
               >
-                {health.database}
+                {health.database ? '正常' : '异常'}
               </p>
             </div>
             <div>
               <span className="text-sm" style={{ color: 'var(--text-muted)' }}>缓存</span>
               <p
                 className="text-lg font-semibold mt-1"
-                style={{ color: health.cache === 'ok' ? 'var(--success)' : 'var(--danger)' }}
+                style={{ color: health.cache ? 'var(--success)' : 'var(--danger)' }}
               >
-                {health.cache}
-              </p>
-            </div>
-            <div>
-              <span className="text-sm" style={{ color: 'var(--text-muted)' }}>版本</span>
-              <p className="text-lg font-semibold mt-1" style={{ color: 'var(--text-primary)' }}>
-                {health.version}
+                {health.cache ? '正常' : '异常'}
               </p>
             </div>
           </div>
