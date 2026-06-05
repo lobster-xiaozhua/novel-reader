@@ -75,6 +75,62 @@ show_help() {
 EOF
 }
 
+# ─── APT 镜像源配置 ───
+
+_setup_apt_mirrors() {
+    local mirror="https://mirrors.aliyun.com"
+    local sources_list="/etc/apt/sources.list"
+
+    # 仅在 sources.list 不是阿里云镜像时进行替换
+    if [ -f "$sources_list" ] && ! grep -q "mirrors.aliyun.com" "$sources_list" 2>/dev/null; then
+        log_info "配置阿里云 APT 镜像源..."
+        local codename
+        codename=$(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME" || lsb_release -cs 2>/dev/null || echo "unknown")
+
+        # 备份原文件
+        cp "$sources_list" "${sources_list}.bak" 2>/dev/null || true
+
+        # 生成阿里云镜像源配置
+        cat > "$sources_list" << APT_EOF
+deb ${mirror}/ubuntu/ ${codename} main restricted universe multiverse
+deb ${mirror}/ubuntu/ ${codename}-security main restricted universe multiverse
+deb ${mirror}/ubuntu/ ${codename}-updates main restricted universe multiverse
+deb ${mirror}/ubuntu/ ${codename}-backports main restricted universe multiverse
+APT_EOF
+        log_success "APT 镜像源已配置"
+    fi
+}
+
+# ─── PostgreSQL 集群初始化 ───
+
+_init_pg_cluster_after_install() {
+    # Debian/Ubuntu: 使用 pg_createcluster 或 pg_ctlcluster
+    if command -v pg_createcluster &>/dev/null; then
+        local version=""
+        # 获取最新安装的 PostgreSQL 版本
+        version=$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
+        if [ -z "$version" ]; then
+            version=$(dpkg -l | grep postgresql- | head -1 | awk '{print $2}' | sed 's/postgresql-//')
+        fi
+        if [ -n "$version" ] && [ "$version" != "contrib" ]; then
+            log_info "初始化 PostgreSQL 集群 (版本 $version)..."
+            pg_createcluster "$version" main --start 2>/dev/null || true
+            return 0
+        fi
+    fi
+
+    # 通用方式: 使用 initdb 初始化数据目录
+    if command -v initdb &>/dev/null; then
+        local pgdata="/var/lib/postgresql/data"
+        if [ ! -f "$pgdata/PG_VERSION" ]; then
+            log_info "初始化 PostgreSQL 数据目录..."
+            mkdir -p "$pgdata"
+            chown postgres:postgres "$pgdata" 2>/dev/null || true
+            su - postgres -c "initdb -D $pgdata" 2>/dev/null || true
+        fi
+    fi
+}
+
 # ─── Infrastructure ───
 
 _ensure_postgres() {
@@ -115,13 +171,17 @@ _ensure_postgres() {
     # 自动安装 PostgreSQL
     log_info "PostgreSQL 未安装，开始自动安装..."
     if command -v apt-get &>/dev/null; then
-        log_info "使用 apt 安装 PostgreSQL..."
+        log_info "使用 apt 安装 PostgreSQL（阿里云镜像源）..."
+        # 配置阿里云镜像源加速
+        _setup_apt_mirrors
         apt-get update -qq >/dev/null 2>&1 && \
-        apt-get install -y -qq postgresql postgresql-contrib >/dev/null 2>&1 || {
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq postgresql postgresql-contrib >/dev/null 2>&1 || {
             log_error "PostgreSQL 安装失败"
             log_info "请手动执行: sudo apt-get install postgresql postgresql-contrib"
             return 1
         }
+        # 新安装后需要初始化集群
+        _init_pg_cluster_after_install
     elif command -v pkg &>/dev/null; then
         log_info "Termux 环境，使用 pkg 安装 PostgreSQL..."
         pkg install -y postgresql 2>/dev/null || {
@@ -129,6 +189,7 @@ _ensure_postgres() {
             log_info "请手动执行: pkg install postgresql"
             return 1
         }
+        _init_pg_cluster_after_install
     elif command -v yum &>/dev/null; then
         log_info "使用 yum 安装 PostgreSQL..."
         yum install -y postgresql-server postgresql-contrib >/dev/null 2>&1 || {
@@ -158,28 +219,43 @@ _ensure_postgres() {
 }
 
 _start_postgres_after_install() {
-    # 查找 pg_ctlcluster 或 pg_ctl
-    if command -v pg_ctlcluster &>/dev/null; then
-        local cluster
-        cluster=$(pg_lsclusters -h 2>/dev/null | head -1 | awk '{print $1, $2}')
-        if [ -n "$cluster" ]; then
-            log_info "启动 PostgreSQL ($cluster)..."
-            pg_ctlcluster $cluster start 2>/dev/null || true
+    log_info "正在初始化并启动 PostgreSQL..."
+
+    # 方式1: Debian/Ubuntu pg_createcluster + pg_ctlcluster
+    if command -v pg_createcluster &>/dev/null; then
+        local version
+        version=$(ls /usr/lib/postgresql/ 2>/dev/null | sort -V | tail -1)
+        if [ -n "$version" ] && [ "$version" != "contrib" ]; then
+            # 确保集群已初始化
+            local clusters
+            clusters=$(pg_lsclusters -h 2>/dev/null || true)
+            if [ -z "$clusters" ]; then
+                log_info "初始化 PostgreSQL 集群 (版本 $version)..."
+                pg_createcluster "$version" main --start 2>/dev/null || true
+            fi
+
+            # 启动集群
+            cluster=$(pg_lsclusters -h 2>/dev/null | head -1 | awk '{print $1, $2}')
+            if [ -n "$cluster" ]; then
+                log_info "启动 PostgreSQL ($cluster)..."
+                pg_ctlcluster "$cluster" start 2>/dev/null || true
+            fi
         fi
-    elif command -v pg_ctl &>/dev/null; then
+    fi
+
+    # 方式2: pg_ctl 直接启动
+    if ! pg_isready -q 2>/dev/null && command -v pg_ctl &>/dev/null; then
+        log_info "尝试 pg_ctl 启动..."
         local pgdata=""
-        for d in /var/lib/postgresql/*/main /var/lib/pgsql/*/data /usr/local/var/postgres ~/.termux/postgresql/data; do
+        for d in /var/lib/postgresql/*/main /var/lib/pgsql/*/data /usr/local/var/postgres; do
             [ -f "$d/PG_VERSION" ] && pgdata="$d" && break
         done
         if [ -n "$pgdata" ]; then
-            su - postgres -c "pg_ctl -D $pgdata -l $pgdata/logfile start" 2>/dev/null || \
-                pg_ctl -D "$pgdata" -l "$pgdata/logfile" start 2>/dev/null || true
+            su - postgres -c "pg_ctl -D $pgdata -l $pgdata/logfile start" 2>/dev/null || true
         fi
-    elif command -v pg-ctl &>/dev/null; then
-        # Termux
-        pg_ctl -D ${PREFIX:-/data/data/com.termux/files/usr}/var/postgresql start 2>/dev/null || true
     fi
 
+    # 等待启动
     sleep 3
 
     if pg_isready -q 2>/dev/null; then
@@ -188,7 +264,10 @@ _start_postgres_after_install() {
         return 0
     else
         log_error "PostgreSQL 启动失败"
-        log_info "请检查: pg_ctlcluster <version> <cluster> start"
+        log_info "手动排查:"
+        log_detail "1. 查看集群状态: pg_lsclusters"
+        log_detail "2. 查看日志: tail -f /var/log/postgresql/*.log"
+        log_detail "3. 手动启动: pg_ctlcluster <版本> main start"
         return 1
     fi
 }
