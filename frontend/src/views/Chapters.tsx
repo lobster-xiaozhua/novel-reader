@@ -80,6 +80,11 @@ export default function Chapters() {
               hasNext={readingChapterIdx! < chapters.length - 1}
               onPrev={() => setReadingChapterIdx((i) => (i !== null && i > 0 ? i - 1 : i))}
               onNext={() => setReadingChapterIdx((i) => (i !== null && i < chapters.length - 1 ? i + 1 : i))}
+              onJumpToChapter={(chapterId) => {
+                const idx = chapters.findIndex(ch => ch.id === chapterId)
+                if (idx !== -1) setReadingChapterIdx(idx)
+              }}
+              chapters={chapters.map(ch => ({ id: ch.id, chapter_number: ch.chapter_number, title: ch.title }))}
             />
           )}
         </div>

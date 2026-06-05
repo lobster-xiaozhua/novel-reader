@@ -459,6 +459,8 @@ export default function NovelReader({
   const toastTimerRef = useRef<number | null>(null)
   const bookmarkedRef = useRef(bookmarked)
   bookmarkedRef.current = bookmarked
+  const savingBookmarkRef = useRef(savingBookmark)
+  savingBookmarkRef.current = savingBookmark
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const touchStartTimeRef = useRef(0)
 
@@ -495,7 +497,7 @@ export default function NovelReader({
   useEffect(() => {
     const interval = setInterval(() => {
       const elapsed = Math.floor((Date.now() - readStartRef.current) / 1000)
-      if (elapsed >= 30 && elapsed % 30 < 10) {  // 每30秒保存一次
+      if (elapsed >= 30 && elapsed % 30 === 0) {  // 每30秒保存一次
         saveProgress({ book_id: bookId, chapter_id: chapterId, position: chapterNumber }).catch(() => {})
         trackStats({ seconds: 30, chapter_id: chapterId }).catch(() => {})
       }
@@ -541,7 +543,7 @@ export default function NovelReader({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [goToPrev, goToNext, settingsOpen, tocOpen, handleBookmark])
+  }, [goToPrev, goToNext, settingsOpen, tocOpen])
 
   // Touch/Swipe
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -582,20 +584,20 @@ export default function NovelReader({
 
   // Bookmark
   const handleBookmark = useCallback(async () => {
-    if (savingBookmark) return
+    if (savingBookmarkRef.current) return
     setSavingBookmark(true)
     try {
       // TODO: Replace with actual bookmark API call
       // await saveBookmark({ bookId, chapterId, chapterNumber })
       await new Promise(r => setTimeout(r, 300))
       setBookmarked(b => !b)
-      showToast(bookmarked ? '已取消书签' : '已添加书签')
+      showToast(bookmarkedRef.current ? '已取消书签' : '已添加书签')
     } catch {
       showToast('书签保存失败')
     } finally {
       setSavingBookmark(false)
     }
-  }, [bookmarked, savingBookmark, showToast])
+  }, [showToast])
 
   // Jump to chapter from TOC
   const handleJumpToChapter = useCallback((chapter: ChapterInfo) => {
