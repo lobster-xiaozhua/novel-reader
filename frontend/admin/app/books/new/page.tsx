@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { api } from '@/shared/lib/api';
 import { useToast } from '@/shared/components/Toast';
+import { ArrowLeft, BookOpen, Plus } from 'lucide-react';
 
 export default function BookCreatePage() {
   const router = useRouter();
@@ -42,23 +43,31 @@ export default function BookCreatePage() {
   };
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-8 max-w-2xl">
+      {/* Page Header */}
       <div className="flex items-center gap-4">
         <button
           onClick={() => router.back()}
           className="glass-btn text-sm"
         >
-          ← 返回
+          <ArrowLeft size={16} />
+          返回
         </button>
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-          创建书籍
-        </h1>
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+            创建书籍
+          </h1>
+          <p style={{ color: 'var(--text-tertiary)', marginTop: '0.25rem' }}>
+            填写书籍基本信息
+          </p>
+        </div>
       </div>
 
-      <div className="glass-card p-6 space-y-5">
+      {/* Form Card */}
+      <div className="glass-card p-7 space-y-6">
         <div>
           <label
-            className="block text-sm mb-1.5"
+            className="block text-sm font-medium mb-2"
             style={{ color: 'var(--text-secondary)' }}
           >
             书名 *
@@ -72,41 +81,43 @@ export default function BookCreatePage() {
           />
         </div>
 
-        <div>
-          <label
-            className="block text-sm mb-1.5"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            作者
-          </label>
-          <input
-            type="text"
-            value={author}
-            onChange={(e) => setAuthor(e.target.value)}
-            placeholder="请输入作者"
-            className="glass-input w-full"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div>
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              作者
+            </label>
+            <input
+              type="text"
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              placeholder="请输入作者"
+              className="glass-input w-full"
+            />
+          </div>
+
+          <div>
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              分类
+            </label>
+            <input
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="请输入分类"
+              className="glass-input w-full"
+            />
+          </div>
         </div>
 
         <div>
           <label
-            className="block text-sm mb-1.5"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            分类
-          </label>
-          <input
-            type="text"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            placeholder="请输入分类"
-            className="glass-input w-full"
-          />
-        </div>
-
-        <div>
-          <label
-            className="block text-sm mb-1.5"
+            className="block text-sm font-medium mb-2"
             style={{ color: 'var(--text-secondary)' }}
           >
             简介
@@ -114,20 +125,20 @@ export default function BookCreatePage() {
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            rows={5}
+            rows={6}
             placeholder="请输入书籍简介"
             className="glass-input w-full resize-y"
           />
         </div>
 
-        <div className="flex gap-3 pt-2">
+        <div className="flex gap-3 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
           <button
             onClick={handleCreate}
             disabled={loading}
-            className="glass-btn font-medium disabled:opacity-40"
-            style={{ color: 'var(--accent)' }}
+            className="glass-btn glass-btn-primary font-medium disabled:opacity-40"
           >
-            {loading ? '创建中...' : '创建'}
+            <Plus size={16} />
+            {loading ? '创建中...' : '创建书籍'}
           </button>
           <button
             onClick={() => router.back()}
