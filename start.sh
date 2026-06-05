@@ -576,15 +576,15 @@ migrate_db() {
     fi
 
     # ── Termux 内存优化 ──
-    local python_cmd="python -X faulthandler"
+    local python_prefix=""
     if [ "$IS_TERMUX" = true ]; then
-        python_cmd="PYTHONMALLOC=malloc $python_cmd"
+        python_prefix="PYTHONMALLOC=malloc"
     fi
 
     # ── 执行迁移 (set +e 防止 OOM kill 导致脚本静默退出) ──
     set +e
     local output
-    output=$(timeout 120 $python_cmd manage.py migrate --no-input 2>&1)
+    output=$(timeout 120 $python_prefix python -X faulthandler manage.py migrate --no-input 2>&1)
     local exit_code=$?
     set -e
 
