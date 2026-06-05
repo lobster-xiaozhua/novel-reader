@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { api } from '@/shared/lib/api';
+import { useToast } from '@/shared/components/Toast';
 
 export default function BookCreatePage() {
   const router = useRouter();
@@ -11,10 +12,11 @@ export default function BookCreatePage() {
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
+  const { showToast } = useToast();
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      alert('请输入书名');
+      showToast('请输入书名', 'warning');
       return;
     }
     setLoading(true);
@@ -26,14 +28,14 @@ export default function BookCreatePage() {
         description,
       });
       const bookId = (res as any).data?.id;
-      alert('创建成功');
+      showToast('创建成功', 'success');
       if (bookId) {
         router.push(`/books/${bookId}`);
       } else {
         router.push('/books');
       }
     } catch (err: any) {
-      alert(`创建失败: ${err.message || '未知错误'}`);
+      showToast(`创建失败: ${err.message || '未知错误'}`, 'error');
     } finally {
       setLoading(false);
     }

@@ -3,11 +3,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
+import { useToast } from '@/shared/components/Toast';
 import type { ApiResponse, PaginatedData, AdminUser } from '@/shared/types';
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
+  const { showToast } = useToast();
 
   const { data, isLoading } = useQuery<ApiResponse<PaginatedData<AdminUser>>>({
     queryKey: ['admin-users', page],
@@ -21,10 +23,11 @@ export default function UsersPage() {
   const roleMutation = useMutation({
     mutationFn: ({ id, is_staff }: { id: number; is_staff: boolean }) =>
       api.put(`/admin/users/${id}/role`, { is_staff }),
-    onSuccess: () => {
+    onSuccess: (_, { is_staff }) => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      showToast(is_staff ? '用户已升级为管理员' : '用户已降级为读者', 'success');
     },
-    onError: (err: Error) => alert(`操作失败: ${err.message}`),
+    onError: (err: Error) => showToast(`操作失败: ${err.message}`, 'error'),
   });
 
   return (

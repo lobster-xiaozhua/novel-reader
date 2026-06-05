@@ -4,16 +4,18 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { api } from '@/shared/lib/api';
+import { useDebounce } from '@/shared/hooks/useDebounce';
 import type { ApiResponse, PaginatedData, AdminBook } from '@/shared/types';
 
 export default function BooksPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading } = useQuery<ApiResponse<PaginatedData<AdminBook>>>({
-    queryKey: ['admin-books', page, search],
+    queryKey: ['admin-books', page, debouncedSearch],
     queryFn: () =>
-      api.get(`/admin/books?page=${page}&search=${encodeURIComponent(search)}`),
+      api.get(`/admin/books?page=${page}&search=${encodeURIComponent(debouncedSearch)}`),
   });
 
   const books = data?.data?.items ?? [];

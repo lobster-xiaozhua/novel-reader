@@ -33,8 +33,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const handleLogout = () => {
-    api.setToken('');
-    document.cookie = 'access_token=; path=/; max-age=0';
+    api.clearToken();
     router.push('/login');
   };
 

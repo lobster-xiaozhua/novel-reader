@@ -2,15 +2,17 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api } from '@/shared/lib/api';
+import { useToast } from '@/shared/components/Toast';
 import type { ApiResponse, BookDetail } from '@/shared/types';
 
 export default function BookEditPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const { data, isLoading } = useQuery<ApiResponse<BookDetail>>({
     queryKey: ['admin-book', id],
@@ -23,15 +25,16 @@ export default function BookEditPage() {
   const [author, setAuthor] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
-  const [loaded, setLoaded] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  if (book && !loaded) {
-    setTitle(book.title);
-    setAuthor(book.author);
-    setCategory(book.category);
-    setDescription(book.description || '');
-    setLoaded(true);
-  }
+  useEffect(() => {
+    if (book) {
+      setTitle(book.title);
+      setAuthor(book.author);
+      setCategory(book.category);
+      setDescription(book.description || '');
+    }
+  }, [book]);
 
   const updateMutation = useMutation({
     mutationFn: () =>
@@ -39,9 +42,9 @@ export default function BookEditPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-books'] });
       queryClient.invalidateQueries({ queryKey: ['admin-book', id] });
-      alert('保存成功');
+      showToast('保存成功', 'success');
     },
-    onError: (err: Error) => alert(`保存失败: ${err.message}`),
+    onError: (err: Error) => showToast(`保存失败: ${err.message}`, 'error'),
   });
 
   const deleteMutation = useMutation({
@@ -50,13 +53,11 @@ export default function BookEditPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-books'] });
       router.back();
     },
-    onError: (err: Error) => alert(`删除失败: ${err.message}`),
+    onError: (err: Error) => showToast(`删除失败: ${err.message}`, 'error'),
   });
 
   const handleDelete = () => {
-    if (window.confirm('确定要删除这本书吗？此操作不可撤销。')) {
-      deleteMutation.mutate();
-    }
+    deleteMutation.mutate();
   };
 
   if (isLoading) {
@@ -174,14 +175,35 @@ export default function BookEditPage() {
           >
             {updateMutation.isPending ? '保存中...' : '保存'}
           </button>
-          <button
-            onClick={handleDelete}
-            disabled={deleteMutation.isPending}
-            className="glass-btn font-medium disabled:opacity-40"
-            style={{ color: 'var(--danger)' }}
-          >
-            {deleteMutation.isPending ? '删除中...' : '删除'}
-          </button>
+          {!confirmDelete ? (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleteMutation.isPending}
+              className="glass-btn font-medium disabled:opacity-40"
+              style={{ color: 'var(--danger)' }}
+            >
+              删除
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span style={{ color: 'var(--text-muted)' }}>确定删除？</span>
+              <button
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+                className="glass-btn font-medium disabled:opacity-40"
+                style={{ color: 'var(--danger)' }}
+              >
+                {deleteMutation.isPending ? '删除中...' : '确认'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleteMutation.isPending}
+                className="glass-btn font-medium disabled:opacity-40"
+              >
+                取消
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

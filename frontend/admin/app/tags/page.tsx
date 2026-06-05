@@ -3,12 +3,15 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
+import { useToast } from '@/shared/components/Toast';
 import type { ApiResponse, PaginatedData, TagWithCount } from '@/shared/types';
 
 export default function TagsPage() {
   const [name, setName] = useState('');
   const [color, setColor] = useState('#f59e0b');
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const { data, isLoading } = useQuery<ApiResponse<PaginatedData<TagWithCount>>>({
     queryKey: ['admin-tags'],
@@ -23,16 +26,19 @@ export default function TagsPage() {
       setName('');
       setColor('#f59e0b');
       queryClient.invalidateQueries({ queryKey: ['admin-tags'] });
+      showToast('标签创建成功', 'success');
     },
-    onError: (err: Error) => alert(`创建失败: ${err.message}`),
+    onError: (err: Error) => showToast(`创建失败: ${err.message}`, 'error'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (tagId: number) => api.delete(`/admin/tags/${tagId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-tags'] });
+      setConfirmDelete(null);
+      showToast('标签已删除', 'success');
     },
-    onError: (err: Error) => alert(`删除失败: ${err.message}`),
+    onError: (err: Error) => showToast(`删除失败: ${err.message}`, 'error'),
   });
 
   return (
@@ -118,18 +124,35 @@ export default function TagsPage() {
                   </td>
                   <td className="py-3 px-3" style={{ color: 'var(--accent)' }}>{tag.book_count}</td>
                   <td className="py-3 px-3">
-                    <button
-                      onClick={() => {
-                        if (window.confirm('确定删除此标签？')) {
-                          deleteMutation.mutate(tag.id);
-                        }
-                      }}
-                      disabled={deleteMutation.isPending}
-                      className="text-sm font-medium disabled:opacity-40 transition-colors hover:underline"
-                      style={{ color: 'var(--danger)' }}
-                    >
-                      删除
-                    </button>
+                    {confirmDelete === tag.id ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => deleteMutation.mutate(tag.id)}
+                          disabled={deleteMutation.isPending}
+                          className="text-sm font-medium disabled:opacity-40 transition-colors hover:underline"
+                          style={{ color: 'var(--danger)' }}
+                        >
+                          确认
+                        </button>
+                        <button
+                          onClick={() => setConfirmDelete(null)}
+                          disabled={deleteMutation.isPending}
+                          className="text-sm font-medium disabled:opacity-40 transition-colors hover:underline"
+                          style={{ color: 'var(--text-muted)' }}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmDelete(tag.id)}
+                        disabled={deleteMutation.isPending}
+                        className="text-sm font-medium disabled:opacity-40 transition-colors hover:underline"
+                        style={{ color: 'var(--danger)' }}
+                      >
+                        删除
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

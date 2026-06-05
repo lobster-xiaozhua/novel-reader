@@ -20,8 +20,7 @@ export default function AdminLoginPage() {
     try {
       const res = await api.post('/auth/login', { username, password });
       const token = (res as { data: { tokens: { access_token: string } } }).data.tokens.access_token;
-      api.setToken(token);
-      document.cookie = `access_token=${token}; path=/; max-age=86400; SameSite=Lax`;
+      api.setToken(token); // 现在会同时存 localStorage 和 cookie
       router.push('/');
     } catch (err: unknown) {
       setError((err as { message?: string })?.message || '登录失败');
