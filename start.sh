@@ -562,54 +562,97 @@ migrate_db() {
     log_step "数据库迁移"
     source venv/bin/activate
 
+    # ── 预检查：自动安装缺失依赖 ──
+    local missing_deps=""
+    python -c "import diskcache" 2>/dev/null || missing_deps="$missing_deps diskcache"
+    python -c "import django_redis" 2>/dev/null || missing_deps="$missing_deps django-redis"
+    if [ -n "$missing_deps" ]; then
+        log_warn "缺失依赖:${missing_deps}，自动安装..."
+        pip install $missing_deps -i https://mirrors.aliyun.com/pypi/simple/ -q 2>&1 || {
+            log_error "安装失败，请手动: pip install${missing_deps}"
+            exit 1
+        }
+        log_success "依赖已补全"
+    fi
+
+    # ── Termux 内存优化 ──
+    local python_cmd="python -X faulthandler"
+    if [ "$IS_TERMUX" = true ]; then
+        python_cmd="PYTHONMALLOC=malloc $python_cmd"
+    fi
+
+    # ── 执行迁移 (set +e 防止 OOM kill 导致脚本静默退出) ──
+    set +e
     local output
-    output=$(python manage.py migrate 2>&1)
+    output=$(timeout 120 $python_cmd manage.py migrate --no-input 2>&1)
     local exit_code=$?
+    set -e
 
-    if [ $exit_code -ne 0 ]; then
-        log_error "数据库迁移失败"
-
-        # 诊断常见错误
-        if echo "$output" | grep -qiE "sqlite.*OPTIONS\|sqlite.*statement_timeout\|no such.*statement_timeout"; then
-            log_error "诊断：SQLite3 不支持 PostgreSQL 的 OPTIONS 参数"
-            log_detail "settings.py 已自动处理此兼容性问题，请确认代码为最新版本"
-        elif echo "$output" | grep -qiE "connection.*refused\|could not connect\|pg_ctl"; then
-            log_error "诊断：PostgreSQL 连接失败"
-            log_detail "请确认 PostgreSQL 正在运行: pg_isready"
-            log_detail "或切换为 SQLite3: 在 .env 中设置 DATABASE_URL=sqlite:///data/novel_reader.db"
-        elif echo "$output" | grep -qiE "django_redis\|No module named.*django_redis"; then
-            log_error "诊断：django-redis 模块缺失"
-            log_detail "请安装: pip install django-redis>=5.4.0"
-            log_detail "或停止 Redis 服务，系统将自动降级为 DiskCache"
-        elif echo "$output" | grep -qiE "relation.*already exists\|duplicate.*key"; then
-            log_warn "诊断：迁移冲突（表已存在）"
-            log_detail "尝试: python manage.py migrate --fake <app> <migration>"
+    if [ $exit_code -eq 0 ]; then
+        # 成功
+        local applied
+        applied=$(echo "$output" | grep -c "Applying\|OK" || true)
+        if [ "$applied" -gt 0 ]; then
+            echo "$output" | grep "Applying" | while read -r line; do
+                log_detail "$line"
+            done
         else
-            echo "$output" | tail -10 | while IFS= read -r line; do
+            log_detail "无待执行的迁移"
+        fi
+    elif [ $exit_code -eq 124 ]; then
+        log_error "数据库迁移超时（120秒）—— 系统资源不足"
+        log_detail "解决方案:"
+        log_detail "  1. 关闭其他应用释放内存后重试"
+        log_detail "  2. 手动执行: python manage.py migrate --no-input"
+        exit 1
+    elif [ $exit_code -eq 137 ] || [ $exit_code -eq 139 ]; then
+        log_error "数据库迁移被系统终止（OOM / 内存不足）"
+        log_detail "这是 Termux/Android 常见问题，进程被系统杀掉"
+        log_detail ""
+        log_detail "解决方案（按优先级）:"
+        log_detail "  1. 关闭其他应用释放内存后重试"
+        log_detail "  2. 手动分段迁移:"
+        log_detail "     source venv/bin/activate"
+        log_detail "     python manage.py migrate auth --no-input"
+        log_detail "     python manage.py migrate contenttypes --no-input"
+        log_detail "     python manage.py migrate books --no-input"
+        log_detail "     python manage.py migrate chapters --no-input"
+        log_detail "     python manage.py migrate reader --no-input"
+        log_detail "     python manage.py migrate favorites --no-input"
+        log_detail "     python manage.py migrate crawler --no-input"
+        log_detail "  3. 使用 PostgreSQL 数据库后端"
+        exit 1
+    else
+        log_error "数据库迁移失败 (exit=$exit_code)"
+        if echo "$output" | grep -qiE "No module named.*diskcache"; then
+            log_error "诊断：diskcache 模块缺失"
+            log_detail "安装: pip install diskcache>=5.6.0"
+        elif echo "$output" | grep -qiE "No module named.*django_redis"; then
+            log_error "诊断：django-redis 模块缺失"
+            log_detail "安装: pip install django-redis>=5.4.0"
+        elif echo "$output" | grep -qiE "concurrently"; then
+            log_error "诊断：PostgreSQL 专用迁移在 SQLite3 上不兼容"
+            log_detail "请确保代码为最新版本（已自动适配 SQLite3）"
+        elif echo "$output" | grep -qiE "connection.*refused|could not connect"; then
+            log_error "诊断：数据库连接失败"
+            log_detail "检查 PostgreSQL 状态或切换到 SQLite3"
+        else
+            echo "$output" | tail -15 | while IFS= read -r line; do
                 log_error "  $line"
             done
         fi
-
         exit 1
-    fi
-
-    local applied
-    applied=$(echo "$output" | grep -c "Applying\|OK" || true)
-    if [ "$applied" -gt 0 ]; then
-        echo "$output" | grep "Applying" | while read -r line; do
-            log_detail "$line"
-        done
-    else
-        log_detail "无待执行的迁移"
     fi
 
     # 显示当前数据库后端
     local db_engine
+    set +e
     db_engine=$(python -c "
 from django.conf import settings
 engine = settings.DATABASES['default']['ENGINE']
 print('SQLite3' if 'sqlite' in engine else 'PostgreSQL' if 'postgres' in engine else engine)
 " 2>/dev/null || echo "未知")
+    set -e
     log_detail "数据库后端: $db_engine"
 
     step_done
