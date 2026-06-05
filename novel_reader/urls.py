@@ -20,41 +20,37 @@ def log_startup_info(sender, **kwargs):
     from pathlib import Path
 
     logger.info('=' * 60)
-    logger.info('🚀 Novel Reader 启动健康检查')
+    logger.info('Novel Reader 启动健康检查')
     logger.info('=' * 60)
     logger.info(f'  Python: {platform.python_version()} | Django: {django.VERSION[:3]}')
     logger.info(f'  模式: {"DEBUG" if settings.DEBUG else "PRODUCTION"}')
     logger.info(f'  数据库: {connection.vendor} ({settings.DATABASES["default"]["ENGINE"].split(".")[-1]})')
 
-    # 数据库检查
     try:
         with connection.cursor() as cursor:
             cursor.execute('SELECT 1')
-        logger.info('  ✅ 数据库连接正常')
+        logger.info('  数据库连接正常')
     except Exception as e:
-        logger.error(f'  ❌ 数据库连接失败: {e}')
+        logger.error(f'  数据库连接失败: {e}')
 
-    # 缓存检查
     try:
         cache.set('_health_check', 'ok', 10)
         result = cache.get('_health_check')
         if result == 'ok':
-            logger.info(f'  ✅ 缓存正常: {settings.CACHES["default"]["BACKEND"].split(".")[-1]}')
+            logger.info(f'  缓存正常: {settings.CACHES["default"]["BACKEND"].split(".")[-1]}')
         else:
-            logger.warning('  ⚠️ 缓存读写异常')
+            logger.warning('  缓存读写异常')
     except Exception as e:
-        logger.warning(f'  ⚠️ 缓存不可用: {e}')
+        logger.warning(f'  缓存不可用: {e}')
 
-    # 统计信息
     try:
         user_count = User.objects.count()
         from apps.books.models import Book
         book_count = Book.objects.count()
-        logger.info(f'  📊 用户数: {user_count} | 书籍数: {book_count}')
+        logger.info(f'  用户数: {user_count} | 书籍数: {book_count}')
     except Exception:
         pass
 
-    # 磁盘空间
     try:
         data_dir = Path(settings.BASE_DIR) / 'data'
         if data_dir.exists():
@@ -62,14 +58,14 @@ def log_startup_info(sender, **kwargs):
             free_gb = (stat.f_bavail * stat.f_frsize) / (1024**3)
             total_gb = (stat.f_blocks * stat.f_frsize) / (1024**3)
             usage_pct = ((total_gb - free_gb) / total_gb * 100) if total_gb > 0 else 0
-            logger.info(f'  💾 磁盘: {free_gb:.1f}GB 可用 / {total_gb:.1f}GB 总计 (使用 {usage_pct:.0f}%)')
+            logger.info(f'  磁盘: {free_gb:.1f}GB 可用 / {total_gb:.1f}GB 总计 (使用 {usage_pct:.0f}%)')
     except Exception:
         pass
 
     logger.info('=' * 60)
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('sys-admin/', admin.site.urls),
     path('api/v1/', api.urls),
     path('api/v2/', api_v2.urls),
 ]
@@ -79,9 +75,4 @@ if settings.DEBUG:
     urlpatterns += staticfiles_urlpatterns()
     urlpatterns += [
         path('__debug__/', include('debug_toolbar.urls')),
-        re_path(r'^(?!static/|admin/|api/|__debug__/).*$', TemplateView.as_view(template_name='index.html')),
-    ]
-else:
-    urlpatterns += [
-        re_path(r'^(?!static/|admin/|api/).*$', TemplateView.as_view(template_name='index.html')),
     ]

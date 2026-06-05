@@ -2,8 +2,7 @@ from django.contrib import admin
 from django.db.models import Count, Sum
 from django.utils import timezone
 from datetime import timedelta
-from unfold.admin import ModelAdmin
-from unfold.decorators import display
+from django.contrib.admin import ModelAdmin, display
 from .models import Book, Tag
 from apps.reader.models import ReadingStats
 from apps.crawler.models import CrawlerTask

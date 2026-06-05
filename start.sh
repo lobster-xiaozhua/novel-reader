@@ -797,7 +797,7 @@ print('Redis' if 'redis' in b else 'DiskCache')
         echo -e "  ${GREEN}🎨${NC} 前端:       http://localhost:${frontend_port}"
     fi
     echo -e "  ${GREEN}📋${NC} API v2 文档: http://localhost:${port}/api/v2/docs/"
-    echo -e "  ${GREEN}🔧${NC} Admin 后台:  http://localhost:${port}/admin"
+    echo -e "  ${GREEN}🔧${NC} 系统后台:  http://localhost:${port}/sys-admin"
     echo ""
     echo -e "  ${DIM}数据库: ${db_engine} | 缓存: ${cache_mode}${NC}"
     echo -e "  ${DIM}按 Ctrl+C 停止服务${NC}"
