@@ -1,6 +1,30 @@
-# Add concurrent index for reader_readingprogress (user_id, book_id, updated_at)
-from django.contrib.postgres.operations import AddIndexConcurrently
-from django.db import migrations, models
+# Add concurrent index for reader_readingprogress - PostgreSQL only
+from django.db import migrations, models, connection
+
+
+def add_pg_index(apps, schema_editor):
+    """仅在 PostgreSQL 上添加并发索引"""
+    if connection.vendor != 'postgresql':
+        return
+
+    schema_editor.add_index(
+        model=apps.get_model('reader', 'ReadingProgress'),
+        index=models.Index(
+            fields=["user_id", "book_id", "updated_at"],
+            name="idx_progress_user_book",
+        ),
+    )
+
+
+def remove_pg_index(apps, schema_editor):
+    """回滚：仅在 PostgreSQL 上移除"""
+    if connection.vendor != 'postgresql':
+        return
+
+    schema_editor.remove_index(
+        model=apps.get_model('reader', 'ReadingProgress'),
+        index_name="idx_progress_user_book",
+    )
 
 
 class Migration(migrations.Migration):
@@ -11,11 +35,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        AddIndexConcurrently(
-            model_name="readingprogress",
-            index=models.Index(
-                fields=["user_id", "book_id", "updated_at"],
-                name="idx_progress_user_book",
-            ),
-        ),
+        migrations.RunPython(add_pg_index, remove_pg_index),
     ]
