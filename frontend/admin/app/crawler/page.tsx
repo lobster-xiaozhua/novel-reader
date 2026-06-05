@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/lib/api';
-import { useToast } from '@/shared/components/Toast';
 import type { ApiResponse, CrawlerTask } from '@/shared/types';
 
 const statusColors: Record<string, string> = {
@@ -40,7 +39,6 @@ function StatusBadge({ status }: { status: string }) {
 export default function CrawlerPage() {
   const [url, setUrl] = useState('');
   const queryClient = useQueryClient();
-  const { showToast } = useToast();
 
   const { data, isLoading } = useQuery<ApiResponse<CrawlerTask[]>>({
     queryKey: ['admin-crawler'],
@@ -55,18 +53,16 @@ export default function CrawlerPage() {
     onSuccess: () => {
       setUrl('');
       queryClient.invalidateQueries({ queryKey: ['admin-crawler'] });
-      showToast('任务创建成功', 'success');
     },
-    onError: (err: Error) => showToast(`创建失败: ${err.message}`, 'error'),
+    onError: (err: Error) => alert(`创建失败: ${err.message}`),
   });
 
   const stopMutation = useMutation({
     mutationFn: (taskId: number) => api.post(`/admin/crawler/${taskId}/stop`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-crawler'] });
-      showToast('任务已停止', 'info');
     },
-    onError: (err: Error) => showToast(`停止失败: ${err.message}`, 'error'),
+    onError: (err: Error) => alert(`停止失败: ${err.message}`),
   });
 
   return (
@@ -107,49 +103,34 @@ export default function CrawlerPage() {
             </thead>
             <tbody>
               {tasks.map((task) => (
-                <React.Fragment key={task.id}>
-                  <tr
-                    className="border-b transition-colors hover:opacity-80"
-                    style={{ borderColor: 'var(--border)' }}
-                  >
-                    <td className="py-3 px-3" style={{ color: 'var(--text-muted)' }}>{task.id}</td>
-                    <td className="py-3 px-3 max-w-[300px] truncate" title={task.url}>
-                      {task.url}
-                    </td>
-                    <td className="py-3 px-3">
-                      <StatusBadge status={task.status} />
-                    </td>
-                    <td className="py-3 px-3" style={{ color: 'var(--accent)' }}>
-                      {task.downloaded_chapters}/{task.total_chapters || '?'}
-                    </td>
-                    <td className="py-3 px-3">
-                      {task.status === 'running' && (
-                        <button
-                          onClick={() => stopMutation.mutate(task.id)}
-                          disabled={stopMutation.isPending}
-                          className="text-sm font-medium disabled:opacity-40 transition-colors hover:underline"
-                          style={{ color: 'var(--danger)' }}
-                        >
-                          停止
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                  {task.status === 'failed' && (task as any).error && (
-                    <tr className="border-b" style={{ borderColor: 'var(--border)' }}>
-                      <td colSpan={5} className="py-3 px-3">
-                        <div className="glass-card p-3" style={{ borderLeft: '3px solid var(--danger)' }}>
-                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                            错误信息:
-                          </p>
-                          <p className="text-sm mt-1" style={{ color: 'var(--danger)' }}>
-                            {(task as any).error}
-                          </p>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                <tr
+                  key={task.id}
+                  className="border-b transition-colors hover:opacity-80"
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  <td className="py-3 px-3" style={{ color: 'var(--text-muted)' }}>{task.id}</td>
+                  <td className="py-3 px-3 max-w-[300px] truncate" title={task.url}>
+                    {task.url}
+                  </td>
+                  <td className="py-3 px-3">
+                    <StatusBadge status={task.status} />
+                  </td>
+                  <td className="py-3 px-3" style={{ color: 'var(--accent)' }}>
+                    {task.downloaded_chapters}/{task.total_chapters || '?'}
+                  </td>
+                  <td className="py-3 px-3">
+                    {task.status === 'running' && (
+                      <button
+                        onClick={() => stopMutation.mutate(task.id)}
+                        disabled={stopMutation.isPending}
+                        className="text-sm font-medium disabled:opacity-40 transition-colors hover:underline"
+                        style={{ color: 'var(--danger)' }}
+                      >
+                        停止
+                      </button>
+                    )}
+                  </td>
+                </tr>
               ))}
               {tasks.length === 0 && (
                 <tr>

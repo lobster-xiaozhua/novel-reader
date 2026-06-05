@@ -4,43 +4,19 @@ const BASE_URL = '/api/v2';
 
 const TOKEN_KEY = 'access_token';
 
-function getCookie(name: string): string | null {
-  if (typeof window === 'undefined') return null;
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
-  return null;
-}
-
-function setCookie(name: string, value: string, days: number = 1): void {
-  if (typeof window === 'undefined') return;
-  const date = new Date();
-  date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
-  const expires = `expires=${date.toUTCString()}`;
-  document.cookie = `${name}=${value};${expires};path=/;SameSite=Lax`;
-}
-
-function deleteCookie(name: string): void {
-  if (typeof window === 'undefined') return;
-  document.cookie = `${name}=;path=/;expires=Thu, 01 Jan 1970 00:00:01 GMT`;
-}
-
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
-  // 优先从 localStorage 读取，降级到 cookie
-  return localStorage.getItem(TOKEN_KEY) || getCookie(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY);
 }
 
 function setToken(token: string): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(TOKEN_KEY, token);
-  setCookie(TOKEN_KEY, token, 1);
 }
 
 function clearToken(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(TOKEN_KEY);
-  deleteCookie(TOKEN_KEY);
 }
 
 class ApiError extends Error {

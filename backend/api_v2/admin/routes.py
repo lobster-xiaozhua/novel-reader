@@ -21,39 +21,18 @@ router = Router(tags=['admin'], auth=admin_auth)
 
 # ── Books CRUD ──
 
-@router.post('/books', response=ApiResponse)
-def create_book(request):
-    """创建书籍"""
-    data = request.json_body if hasattr(request, 'json_body') else {}
-    if not data or not data.get('title'):
-        return ApiResponse.fail('书名不能为空')
-    
-    book = Book.objects.create(
-        title=data['title'],
-        author=data.get('author', ''),
-        category=data.get('category', ''),
-        description=data.get('description', ''),
-    )
-    logger.info(f'[AdminV2] 创建书籍: id={book.id}, title={book.title}')
-    return ApiResponse.ok(data={
-        'id': book.id, 'title': book.title, 'author': book.author,
-        'category': book.category, 'description': book.description,
-    })
-
-
 @router.get('/books', response=ApiResponse[PaginatedData])
 def list_books(
     request,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=200),
     q: str = Query('', description='搜索标题/作者'),
-    search: str = Query('', description='搜索标题/作者(前端别名)'),
     category: str = Query('', description='分类筛选'),
 ):
     """书籍列表（分页 + 搜索 + 分类筛选）"""
     qs = Book.objects.prefetch_related('tags').annotate(_ch_count=Count('chapters'))
 
-    query = (q or search).strip()
+    query = q.strip()
     if query:
         qs = qs.filter(Q(title__icontains=query) | Q(author__icontains=query))
     if category:
@@ -219,27 +198,6 @@ def delete_chapter(request, chapter_id: int):
 
 # ── Crawler Tasks ──
 
-def _crawler_task_to_dict(t):
-    return {
-        'id': t.id, 'url': t.url or '', 'name': t.name or '',
-        'status': t.status, 'progress': getattr(t, 'progress', 0),
-        'downloaded_chapters': getattr(t, 'downloaded_chapters', 0),
-        'total_chapters': getattr(t, 'total_chapters', None),
-        'error': getattr(t, 'error', ''),
-        'created_at': t.created_at.isoformat() if t.created_at else '',
-        'updated_at': t.updated_at.isoformat() if t.updated_at else '',
-    }
-
-
-@router.get('/crawler', response=ApiResponse)
-def list_crawler_simple(request):
-    """爬虫任务列表（精简版，前端用）"""
-    qs = CrawlerTask.objects.order_by('-created_at')[:50]
-    items = [_crawler_task_to_dict(t) for t in qs]
-    logger.info(f'[AdminV2] 爬虫任务列表(精简): {len(items)}个')
-    return ApiResponse.ok(data=items)
-
-
 @router.get('/crawler/tasks', response=ApiResponse[PaginatedData])
 def list_crawler_tasks(
     request,
@@ -253,25 +211,21 @@ def list_crawler_tasks(
     offset = (page - 1) * per_page
     tasks = qs[offset:offset + per_page]
 
-    items = [_crawler_task_to_dict(t) for t in tasks]
+    items = [
+        {
+            'id': t.id, 'url': t.url or '', 'name': t.name or '',
+            'status': t.status, 'progress': getattr(t, 'progress', 0),
+            'error': getattr(t, 'error', ''),
+            'created_at': t.created_at.isoformat() if t.created_at else '',
+            'updated_at': t.updated_at.isoformat() if t.updated_at else '',
+        }
+        for t in tasks
+    ]
     logger.info(f'[AdminV2] 爬虫任务列表: page={page}/{total_pages}, total={total}')
     return ApiResponse.ok(
         data={'items': items, 'total': total},
         meta=Meta(page=page, total_pages=total_pages, total_items=total),
     )
-
-
-@router.post('/crawler', response=ApiResponse)
-def create_crawler_task_simple(request):
-    """创建爬虫任务（精简版，前端用）"""
-    data = request.json_body if hasattr(request, 'json_body') else {}
-    url = data.get('url') or request.GET.get('url', '')
-    if not url:
-        return ApiResponse.fail('url不能为空')
-    task = CrawlerTask.objects.create(url=url, status='pending')
-    run_crawler_task.delay(task.id)
-    logger.info(f'[AdminV2] 创建爬虫任务: id={task.id}, url={url}')
-    return ApiResponse.ok(data=_crawler_task_to_dict(task))
 
 
 @router.post('/crawler/tasks', response=ApiResponse)
@@ -287,16 +241,6 @@ def create_crawler_task(
         'id': task.id, 'url': task.url, 'status': task.status,
         'message': '任务已创建并加入队列',
     })
-
-
-@router.post('/crawler/{task_id}/stop', response=ApiResponse)
-def stop_crawler_task_simple(request, task_id: int):
-    """停止爬虫任务（精简版，前端用）"""
-    task = get_object_or_404(CrawlerTask, id=task_id)
-    task.status = 'stopped'
-    task.save(update_fields=['status', 'updated_at'])
-    logger.info(f'[AdminV2] 停止爬虫任务: id={task_id}')
-    return ApiResponse.ok(data=_crawler_task_to_dict(task))
 
 
 @router.post('/crawler/tasks/{task_id}/stop', response=ApiResponse)
@@ -363,7 +307,7 @@ def update_user_role(request, user_id: int, is_staff: bool = Query(..., descript
 
 # ── Tags ──
 
-@router.get('/tags', response=ApiResponse[PaginatedData])
+@router.get('/tags', response=ApiResponse)
 def list_tags(request):
     """标签列表（含书籍计数）"""
     tags = Tag.objects.annotate(book_count=Count('books')).order_by('-book_count', 'name')
@@ -372,20 +316,16 @@ def list_tags(request):
         for t in tags
     ]
     logger.info(f'[AdminV2] 标签列表: {len(items)}个标签')
-    return ApiResponse.ok(
-        data={'items': items, 'total': len(items)},
-        meta=Meta(page=1, total_pages=1, total_items=len(items)),
-    )
+    return ApiResponse.ok(data={'items': items, 'total': len(items)})
 
 
 @router.post('/tags', response=ApiResponse)
-def create_tag(request):
+def create_tag(
+    request,
+    name: str = Query(..., description='标签名称'),
+    color: str = Query('#f59e0b', description='标签颜色'),
+):
     """创建标签"""
-    data = request.json_body if hasattr(request, 'json_body') else {}
-    name = data.get('name', '') or request.GET.get('name', '')
-    color = data.get('color', '#f59e0b') or request.GET.get('color', '#f59e0b')
-    if not name:
-        return ApiResponse.fail('标签名称不能为空')
     tag, created = Tag.objects.get_or_create(name=name, defaults={'color': color})
     if not created and tag.color != color:
         tag.color = color

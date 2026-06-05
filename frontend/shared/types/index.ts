@@ -201,25 +201,8 @@ export interface AdminBook {
   title: string;
   author: string;
   category: string;
-  description: string;
   total_chapters: number;
-  chapter_count: number;
-  tags: Tag[];
-  gradient: [string, string];
   created_at: string;
-  updated_at: string;
-}
-
-export interface AdminChapter {
-  id: number;
-  chapter_number: number;
-  title: string;
-  word_count: number;
-  content?: string;
-  book_id: number;
-  book_title: string;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface AdminUser {
@@ -229,23 +212,23 @@ export interface AdminUser {
   is_staff: boolean;
   date_joined: string;
   last_login: string | null;
-  favorites: number;
-  reading_count: number;
+  book_count: number;
 }
 
 // ──── Health ────
 
 export interface HealthStatus {
   status: string;
-  database: boolean;
-  cache: boolean;
-  timestamp: string;
+  database: string;
+  cache: string;
+  disk_usage: string;
+  version: string;
 }
 
 export interface PerfMetrics {
-  books: number;
-  chapters: number;
-  users: number;
-  tags: number;
-  timestamp: string;
+  cpu: number;
+  memory: number;
+  uptime: number;
+  requests: number;
+  avg_response_time: number;
 }

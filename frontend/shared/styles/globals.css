@@ -1,112 +1,52 @@
 @import "tailwindcss";
 
 :root {
-  /* 主色调 */
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #0f0f17;
-  --bg-tertiary: #15151e;
-  
-  /* 表面和边框 */
-  --surface: rgba(255, 255, 255, 0.04);
-  --surface-hover: rgba(255, 255, 255, 0.06);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(255, 255, 255, 0.15);
-  
-  /* 文字 */
-  --text-primary: #f5f5f7;
-  --text-secondary: #a0a0ab;
-  --text-tertiary: #6b6b78;
-  --text-muted: #52525b;
-  
-  /* 品牌色 */
+  --bg: #0a0a0f;
+  --surface: rgba(255, 255, 255, 0.03);
+  --border: rgba(255, 255, 255, 0.06);
+  --text: #e5e5e5;
+  --text-muted: #888;
   --accent: #6366f1;
-  --accent-soft: rgba(99, 102, 241, 0.14);
-  --accent-strong: rgba(99, 102, 241, 0.25);
   --accent2: #8b5cf6;
-  --accent-gradient: linear-gradient(135deg, var(--accent), var(--accent2));
-  
-  /* 功能色 */
-  --success: #22c55e;
-  --success-soft: rgba(34, 197, 94, 0.12);
-  --warning: #f59e0b;
-  --warning-soft: rgba(245, 158, 11, 0.12);
   --danger: #ef4444;
-  --danger-soft: rgba(239, 68, 68, 0.12);
-  --info: #3b82f6;
-  --info-soft: rgba(59, 130, 246, 0.12);
+  --success: #22c55e;
 }
 
 body {
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  background: var(--bg);
+  color: var(--text);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
 }
 
-/* ──── Glass Components ──── */
+/* ──── Glass ──── */
 .glass-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 1.25rem;
-  backdrop-filter: blur(20px);
-  transition: all 0.2s ease;
+  border-radius: 12px;
+  padding: 1rem;
+  backdrop-filter: blur(12px);
+  transition: border-color 0.2s, transform 0.15s;
 }
 .glass-card:hover {
-  border-color: var(--border-hover);
-  background: var(--surface-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
 }
 .glass-input {
   width: 100%;
-  background: var(--bg-tertiary);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.75rem 1rem;
-  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 0.625rem 0.875rem;
+  color: var(--text);
   font-size: 0.9375rem;
   outline: none;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s;
 }
 .glass-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .glass-input::placeholder {
-  color: var(--text-tertiary);
-}
-.glass-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.625rem 1.125rem;
-  color: var(--text-primary);
-  font-size: 0.9375rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  text-decoration: none;
-}
-.glass-btn:hover {
-  background: var(--surface-hover);
-  border-color: var(--border-hover);
-}
-.glass-btn:active {
-  transform: translateY(1px);
-}
-.glass-btn-primary {
-  background: var(--accent-gradient);
-  border: none;
-  color: white;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
-}
-.glass-btn-primary:hover {
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
-  transform: translateY(-1px);
+  color: var(--text-muted);
 }
 
 /* ──── Gradient Bar ──── */
