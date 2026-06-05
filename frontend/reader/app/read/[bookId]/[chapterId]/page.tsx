@@ -1,27 +1,23 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from '@/shared/lib/api';
 import type { ApiResponse, ChapterContent, ChapterItem, PaginatedData } from '@/shared/types';
 
 export default function ReaderPage() {
-  const { id } = useParams<{ id: string }>();
-  const searchParams = useSearchParams();
+  const { bookId, chapterId } = useParams<{ bookId: string; chapterId: string }>();
   const router = useRouter();
 
-  const initialChapterId = searchParams.get('chapter');
-  const [currentChapterId, setCurrentChapterId] = useState<number | null>(
-    initialChapterId ? Number(initialChapterId) : null,
-  );
+  const currentChapterId = Number(chapterId);
 
   // Fetch all chapters metadata (for navigation)
   const { data: chaptersData } = useQuery({
-    queryKey: ['chapters', id],
-    queryFn: () => api.get<ApiResponse<PaginatedData<ChapterItem>>>(`/reader/books/${id}/chapters`),
-    enabled: !!id,
+    queryKey: ['chapters', bookId],
+    queryFn: () => api.get<ApiResponse<PaginatedData<ChapterItem>>>(`/reader/books/${bookId}/chapters`),
+    enabled: !!bookId,
   });
 
   const chapters = chaptersData?.data?.items || [];
@@ -32,40 +28,32 @@ export default function ReaderPage() {
 
   // Fetch current chapter content
   const { data: contentData, isLoading } = useQuery({
-    queryKey: ['chapterContent', id, currentChapterId],
-    queryFn: () => api.get<ApiResponse<ChapterContent>>(`/reader/books/${id}/chapters/${currentChapterId}`),
-    enabled: !!id && !!currentChapterId,
+    queryKey: ['chapterContent', bookId, currentChapterId],
+    queryFn: () => api.get<ApiResponse<ChapterContent>>(`/reader/books/${bookId}/chapters/${currentChapterId}`),
+    enabled: !!bookId && !!currentChapterId,
   });
 
   // Pre-fetch next chapter
   useQuery({
-    queryKey: ['chapterContent', id, nextChapter?.id],
-    queryFn: () => api.get<ApiResponse<ChapterContent>>(`/reader/books/${id}/chapters/${nextChapter?.id}`),
-    enabled: !!id && !!nextChapter?.id,
+    queryKey: ['chapterContent', bookId, nextChapter?.id],
+    queryFn: () => api.get<ApiResponse<ChapterContent>>(`/reader/books/${bookId}/chapters/${nextChapter?.id}`),
+    enabled: !!bookId && !!nextChapter?.id,
   });
-
-  // Set initial chapter on first load
-  useEffect(() => {
-    if (!currentChapterId && chapters.length > 0) {
-      setCurrentChapterId(chapters[0].id);
-    }
-  }, [chapters, currentChapterId]);
 
   // Auto-save progress every 30s
   useEffect(() => {
-    if (!id || !currentChapterId) return;
+    if (!bookId || !currentChapterId) return;
     const interval = setInterval(() => {
-      api.post(`/reader/books/${id}/progress`, { chapter_id: currentChapterId, position: 0 }).catch(() => {});
+      api.post(`/reader/books/${bookId}/progress`, { chapter_id: currentChapterId, position: 0 }).catch(() => {});
     }, 30000);
     return () => clearInterval(interval);
-  }, [id, currentChapterId]);
+  }, [bookId, currentChapterId]);
 
   const navigate = useCallback(
     (ch: ChapterItem) => {
-      setCurrentChapterId(ch.id);
-      router.replace(`/read/${id}?chapter=${ch.id}`, { scroll: false });
+      router.push(`/read/${bookId}/${ch.id}`, { scroll: false });
     },
-    [id, router],
+    [bookId, router],
   );
 
   const content = contentData?.data;

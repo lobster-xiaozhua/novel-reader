@@ -65,7 +65,7 @@ export default function BookDetailPage() {
             className="btn-primary"
             onClick={() => {
               const chId = progressChapterId || firstChapter?.id;
-              if (chId) router.push(`/read/${id}?chapter=${chId}`);
+              if (chId) router.push(`/read/${id}/${chId}`);
             }}
           >
             <BookOpen size={16} />
@@ -99,7 +99,7 @@ export default function BookDetailPage() {
                 borderColor: 'var(--border)',
                 color: 'var(--text)',
               }}
-              onClick={() => router.push(`/read/${id}?chapter=${ch.id}`)}
+              onClick={() => router.push(`/read/${id}/${ch.id}`)}
             >
               <span className="text-xs" style={{ color: 'var(--text-muted)' }}>第{ch.chapter_number}章</span>
               <br />
