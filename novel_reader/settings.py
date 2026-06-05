@@ -188,7 +188,17 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_DIRS = [BASE_DIR / 'static'] + [d for d in [BASE_DIR / 'frontend' / 'dist' / 'static', BASE_DIR / 'frontend' / 'dist'] if d.is_dir()]
+# Next.js 构建输出路径（reader 和 admin 都放在 .next 目录，静态文件会被 collectstatic 收集）
+STATICFILES_DIRS = [BASE_DIR / 'static']
+# 检查不同的构建输出位置
+for d in [
+    BASE_DIR / 'frontend' / '.next' / 'static',
+    BASE_DIR / 'frontend' / 'out' / 'static',
+    BASE_DIR / 'frontend' / 'dist' / 'static',
+    BASE_DIR / 'frontend' / 'dist',
+]:
+    if d.is_dir():
+        STATICFILES_DIRS.append(d)
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 WHITENOISE_MAX_AGE = 31536000
 WHITENOISE_INDEX_FILE = True
@@ -279,8 +289,10 @@ CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
 if DEBUG:
     CORS_ALLOWED_ORIGINS += [
         'http://localhost:5173',
-        'http://localhost:3000',
+        'http://localhost:3000',  # Next.js dev
+        'http://localhost:3001',  # Next.js production
         'http://127.0.0.1:5173',
+        'http://127.0.0.1:3000',
     ]
 
 LOGGING = {

@@ -46,8 +46,8 @@ step_done() {
 print_banner() {
     echo ""
     echo -e "${MAGENTA}╔═══════════════════════════════════════════════════╗${NC}"
-    echo -e "${MAGENTA}║${NC}  ${CYAN}Novel Reader v2.0 - 高性能小说阅读器${NC}        ${MAGENTA}║${NC}"
-    echo -e "${MAGENTA}║${NC}  ${DIM}PG + Redis + DiskCache + 液态玻璃 UI${NC}          ${MAGENTA}║${NC}"
+    echo -e "${MAGENTA}║${NC}  ${CYAN}Novel Reader v2.0 - 沉浸式小说阅读器${NC}        ${MAGENTA}║${NC}"
+    echo -e "${MAGENTA}║${NC}  ${DIM}Next.js 15 + Django Ninja + 液态玻璃 UI${NC}      ${MAGENTA}║${NC}"
     echo -e "${MAGENTA}╚═══════════════════════════════════════════════════╝${NC}"
 }
 
@@ -64,7 +64,7 @@ show_help() {
   migrate    执行数据库迁移
   build      构建前端
   dev        开发模式（前后端分离）
-  services   启动基础设施（PG/Redis/ES）
+  services   启动基础设施（PG/Redis）
   help       显示此帮助
 
 示例:
@@ -83,12 +83,10 @@ fix_env_bom() {
         return 0
     fi
 
-    # 检测 UTF-8 BOM (EF BB BF)
     local bom
     bom=$(head -c 3 "$env_file" | xxd -p 2>/dev/null || true)
     if [ "$bom" = "efbbbf" ]; then
         log_warn ".env 文件包含 UTF-8 BOM，正在修复..."
-        # 去除 BOM：跳过前3字节
         local tmp_file
         tmp_file=$(mktemp)
         tail -c +4 "$env_file" > "$tmp_file"
@@ -100,7 +98,6 @@ fix_env_bom() {
 # ─── 数据库后端检测 ───
 
 detect_db_backend() {
-    # 检查 .env 中是否配置了 DATABASE_URL
     local db_url=""
     if [ -f ".env" ]; then
         db_url=$(grep -E '^DATABASE_URL=' .env 2>/dev/null | head -1 | cut -d'=' -f2- || true)
@@ -115,7 +112,6 @@ detect_db_backend() {
             echo "unknown"
         fi
     else
-        # 无 DATABASE_URL，默认使用 PostgreSQL
         echo "postgresql"
     fi
 }
@@ -128,20 +124,15 @@ setup_sqlite_fallback() {
     local env_file=".env"
     local db_path="data/novel_reader.db"
 
-    # 确保数据目录存在
     mkdir -p data
 
     if [ -f "$env_file" ]; then
-        # 检查是否已有 DATABASE_URL
         if grep -qE '^DATABASE_URL=' "$env_file" 2>/dev/null; then
-            # 替换为 SQLite3
             sed -i 's|^DATABASE_URL=.*|DATABASE_URL=sqlite:///'"$db_path"'|' "$env_file"
         else
-            # 追加
             echo "DATABASE_URL=sqlite:///$db_path" >> "$env_file"
         fi
     else
-        # 创建 .env
         echo "DATABASE_URL=sqlite:///$db_path" > "$env_file"
         echo "DEBUG=true" >> "$env_file"
     fi
@@ -156,7 +147,6 @@ setup_sqlite_fallback() {
 _ensure_postgres() {
     log_info "PostgreSQL 未运行，正在检查..."
 
-    # 尝试直接启动已有实例
     if command -v pg_ctlcluster &>/dev/null; then
         local cluster
         cluster=$(pg_lsclusters -h 2>/dev/null | head -1 | awk '{print $1, $2}')
@@ -173,15 +163,15 @@ _ensure_postgres() {
         fi
     fi
 
-    # 尝试 pg_ctl 直接启动
     if command -v pg_ctl &>/dev/null; then
         log_info "尝试 pg_ctl 启动..."
         local pgdata=""
-        for d in /var/lib/postgresql/*/main /var/lib/pgsql/*/data /usr/local/var/postgres; do
+        for d in /var/lib/postgresql/*/main /var/lib/pgsql/*/data /usr/local/var/postgres \
+                 "${PREFIX:-/data/data/com.termux/files/usr}/var/lib/postgresql"; do
             [ -f "$d/PG_VERSION" ] && pgdata="$d" && break
         done
         if [ -n "$pgdata" ]; then
-            su - postgres -c "pg_ctl -D $pgdata -l $pgdata/logfile start" 2>/dev/null && {
+            pg_ctl -D "$pgdata" -l "$pgdata/logfile" start 2>/dev/null && {
                 sleep 2
                 pg_isready -q 2>/dev/null && log_success "PostgreSQL 已启动" && return 0
             }
@@ -211,7 +201,6 @@ _ensure_postgres() {
             log_error "PostgreSQL 安装失败"
             return 1
         }
-        # 首次安装需要初始化
         if command -v postgresql-setup &>/dev/null; then
             postgresql-setup --initdb --unit postgresql 2>/dev/null || true
         fi
@@ -228,13 +217,10 @@ _ensure_postgres() {
     fi
 
     log_success "PostgreSQL 安装完成"
-
-    # 初始化并启动
     _start_postgres_after_install
 }
 
 _start_postgres_after_install() {
-    # 查找 pg_ctlcluster 或 pg_ctl
     if command -v pg_ctlcluster &>/dev/null; then
         local cluster
         cluster=$(pg_lsclusters -h 2>/dev/null | head -1 | awk '{print $1, $2}')
@@ -244,16 +230,13 @@ _start_postgres_after_install() {
         fi
     elif command -v pg_ctl &>/dev/null; then
         local pgdata=""
-        for d in /var/lib/postgresql/*/main /var/lib/pgsql/*/data /usr/local/var/postgres ~/.termux/postgresql/data; do
+        for d in /var/lib/postgresql/*/main /var/lib/pgsql/*/data /usr/local/var/postgres \
+                 "${PREFIX:-/data/data/com.termux/files/usr}/var/lib/postgresql"; do
             [ -f "$d/PG_VERSION" ] && pgdata="$d" && break
         done
         if [ -n "$pgdata" ]; then
-            su - postgres -c "pg_ctl -D $pgdata -l $pgdata/logfile start" 2>/dev/null || \
-                pg_ctl -D "$pgdata" -l "$pgdata/logfile" start 2>/dev/null || true
+            pg_ctl -D "$pgdata" -l "$pgdata/logfile" start 2>/dev/null || true
         fi
-    elif command -v pg-ctl &>/dev/null; then
-        # Termux
-        pg_ctl -D ${PREFIX:-/data/data/com.termux/files/usr}/var/postgresql start 2>/dev/null || true
     fi
 
     sleep 3
@@ -274,20 +257,18 @@ _setup_postgres_user_and_db() {
     local pg_pass="${PG_PASS:-novel_pass}"
     local pg_db="${PG_DB:-novel_reader}"
 
-    # 检查用户是否已存在
     local user_exists
     user_exists=$(su - postgres -c "psql -tAc \"SELECT 1 FROM pg_roles WHERE rolname='$pg_user'\"" 2>/dev/null || echo "")
 
     if [ "$user_exists" != "1" ]; then
         log_info "创建 PostgreSQL 用户: $pg_user"
         su - postgres -c "psql -c \"CREATE USER $pg_user WITH PASSWORD '$pg_pass' CREATEDB;\"" 2>/dev/null || {
-            log_warn "创建用户失败，可能权限不足，尝试使用 sudo"
+            log_warn "创建用户失败，尝试使用 sudo"
             sudo -u postgres psql -c "CREATE USER $pg_user WITH PASSWORD '$pg_pass' CREATEDB;" 2>/dev/null || \
                 log_warn "无法创建 PostgreSQL 用户，请手动创建"
         }
     fi
 
-    # 检查数据库是否存在
     local db_exists
     db_exists=$(su - postgres -c "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='$pg_db'\"" 2>/dev/null || echo "")
 
@@ -304,7 +285,6 @@ _setup_postgres_user_and_db() {
 start_infra() {
     log_step "启动基础设施"
 
-    # 检测当前数据库后端
     local db_backend
     db_backend=$(detect_db_backend)
 
@@ -320,7 +300,6 @@ start_infra() {
             log_warn "可切换为 SQLite3 模式继续运行（仅适用于开发/测试）"
             echo ""
             echo -e "  ${YELLOW}是否切换为 SQLite3 模式？${NC}"
-            echo -e "  ${DIM}SQLite3 不支持并发写入，适合单用户开发${NC}"
             echo -ne "  ${BOLD}[y/N]${NC}: "
             local answer
             read -r answer 2>/dev/null || answer="n"
@@ -356,23 +335,8 @@ start_infra() {
     # Elasticsearch (optional)
     if curl -sf http://localhost:9200 > /dev/null 2>&1; then
         log_success "Elasticsearch 已运行"
-        ES_AVAILABLE=true
     else
-        if command -v elasticsearch &> /dev/null || [ -d "/usr/share/elasticsearch" ]; then
-            log_info "启动 Elasticsearch..."
-            systemctl start elasticsearch 2>/dev/null || \
-                /usr/share/elasticsearch/bin/elasticsearch -d 2>/dev/null || \
-                log_warn "Elasticsearch 启动失败"
-            sleep 5
-            if curl -sf http://localhost:9200 > /dev/null 2>&1; then
-                log_success "Elasticsearch 已运行"
-                ES_AVAILABLE=true
-            else
-                log_warn "Elasticsearch 未就绪，搜索将降级为数据库模式"
-            fi
-        else
-            log_detail "Elasticsearch 未安装，搜索使用数据库 LIKE 模式"
-        fi
+        log_detail "Elasticsearch 未安装，搜索使用数据库 LIKE 模式"
     fi
 
     step_done
@@ -405,17 +369,11 @@ check_env() {
 
         # Termux 下检测 Node 兼容性
         if [ "$IS_TERMUX" = true ]; then
-            local node_path=$(which node)
-            if [[ "$node_path" == *".nvm"* ]]; then
-                log_warn "当前 Node 通过 nvm 安装，在 Termux 下可能不兼容"
-                log_info "建议执行: nvm uninstall $(nvm current) && pkg install nodejs-lts"
-            fi
-
             if ! node -e "console.log('ok')" 2>/dev/null; then
                 log_error "Node.js 无法正常运行 (Illegal instruction?)"
                 log_info "修复方法:"
-                log_detail "1. nvm uninstall $(nvm current 2>/dev/null || echo '版本')"
-                log_detail "2. pkg install nodejs-lts"
+                log_detail "1. 卸载 nvm Node: nvm uninstall \$(nvm current 2>/dev/null || echo '版本')"
+                log_detail "2. 安装 Termux 原生 Node: pkg install nodejs-lts"
                 log_detail "3. 重新运行 ./start.sh"
                 ((errors++))
             fi
@@ -438,15 +396,11 @@ install_python_deps() {
         base_ok=false
     fi
 
-    # Redis 可用时检查 django-redis
-    local redis_dep_ok=true
-    if [ "${REDIS_AVAILABLE:-false}" = true ]; then
-        if ! python -c "import django_redis" 2>/dev/null; then
-            redis_dep_ok=false
-        fi
+    if [ "${REDIS_AVAILABLE:-false}" = true ] && ! python -c "import django_redis" 2>/dev/null; then
+        base_ok=false
     fi
 
-    if $base_ok && $redis_dep_ok; then
+    if $base_ok; then
         log_success "Python 依赖已就绪，跳过安装"
         return 0
     fi
@@ -480,22 +434,7 @@ install_python_deps() {
         log_success "已安装: ${pkgs:0:80}..."
     fi
 
-    # Redis 可用时单独验证 django-redis
-    if [ "${REDIS_AVAILABLE:-false}" = true ]; then
-        if ! python -c "import django_redis" 2>/dev/null; then
-            log_warn "django-redis 未安装，尝试单独安装..."
-            pip install django-redis>=5.4.0 \
-                -i https://mirrors.aliyun.com/pypi/simple/ \
-                --trusted-host mirrors.aliyun.com 2>&1 || {
-                log_warn "django-redis 安装失败，Redis 缓存将不可用"
-                log_detail "系统将自动降级为 DiskCache 模式"
-            }
-        fi
-    fi
-
-    if python -c "import django" 2>/dev/null; then
-        return 0
-    else
+    if ! python -c "import django" 2>/dev/null; then
         log_error "Python 依赖验证失败，请检查网络或镜像源"
         exit 1
     fi
@@ -576,13 +515,11 @@ migrate_db() {
     fi
 
     # ── Termux 内存优化 ──
-    local malloc_env=""
     if [ "$IS_TERMUX" = true ]; then
-        malloc_env="PYTHONMALLOC=malloc"
         export PYTHONMALLOC=malloc
     fi
 
-    # ── 执行迁移 (set +e 防止 OOM kill 导致脚本静默退出) ──
+    # ── 执行迁移 ──
     set +e
     local output
     output=$(timeout 120 python -X faulthandler manage.py migrate --no-input 2>&1)
@@ -590,7 +527,6 @@ migrate_db() {
     set -e
 
     if [ $exit_code -eq 0 ]; then
-        # 成功
         local applied
         applied=$(echo "$output" | grep -c "Applying\|OK" || true)
         if [ "$applied" -gt 0 ]; then
@@ -602,9 +538,7 @@ migrate_db() {
         fi
     elif [ $exit_code -eq 124 ]; then
         log_error "数据库迁移超时（120秒）—— 系统资源不足"
-        log_detail "解决方案:"
-        log_detail "  1. 关闭其他应用释放内存后重试"
-        log_detail "  2. 手动执行: python manage.py migrate --no-input"
+        log_detail "解决方案: 关闭其他应用释放内存后重试"
         exit 1
     elif [ $exit_code -eq 137 ] || [ $exit_code -eq 139 ]; then
         log_error "数据库迁移被系统终止（OOM / 内存不足）"
@@ -628,12 +562,6 @@ migrate_db() {
         if echo "$output" | grep -qiE "No module named.*diskcache"; then
             log_error "诊断：diskcache 模块缺失"
             log_detail "安装: pip install diskcache>=5.6.0"
-        elif echo "$output" | grep -qiE "No module named.*django_redis"; then
-            log_error "诊断：django-redis 模块缺失"
-            log_detail "安装: pip install django-redis>=5.4.0"
-        elif echo "$output" | grep -qiE "concurrently"; then
-            log_error "诊断：PostgreSQL 专用迁移在 SQLite3 上不兼容"
-            log_detail "请确保代码为最新版本（已自动适配 SQLite3）"
         elif echo "$output" | grep -qiE "connection.*refused|could not connect"; then
             log_error "诊断：数据库连接失败"
             log_detail "检查 PostgreSQL 状态或切换到 SQLite3"
@@ -689,8 +617,8 @@ build_frontend() {
     log_step "构建前端"
 
     # 如果已有构建产物，跳过
-    if [ -f "frontend/dist/index.html" ]; then
-        log_success "前端已构建，跳过（删除 frontend/dist 可强制重建）"
+    if [ -d "frontend/.next" ] && [ -f "frontend/.next/BUILD_ID" ]; then
+        log_success "前端已构建，跳过（删除 frontend/.next 可强制重建）"
         return 0
     fi
 
@@ -700,7 +628,6 @@ build_frontend() {
 
     cd frontend
 
-    # 显示前端环境信息
     log_detail "Node: $(node --version) | npm: $(npm --version)"
     log_detail "工作目录：$(pwd)"
 
@@ -712,12 +639,10 @@ build_frontend() {
     log_detail "可用内存: ${mem_mb}MB"
 
     # Termux / 低内存环境优化
-    local build_cmd="./node_modules/.bin/vite build"
     local node_opts=""
 
     if [ "$IS_TERMUX" = true ]; then
         log_info "Termux 环境：优化构建配置"
-        # 限制 Node 堆内存，防止 OOM
         if [ "$mem_mb" -gt 0 ] && [ "$mem_mb" -lt 2048 ]; then
             local heap_mb=$((mem_mb * 70 / 100))
             node_opts="--max-old-space-size=${heap_mb}"
@@ -725,11 +650,17 @@ build_frontend() {
         fi
     fi
 
+    # 低内存环境：使用更保守的内存限制
+    if [ "$mem_mb" -gt 0 ] && [ "$mem_mb" -lt 1024 ]; then
+        node_opts="${node_opts} --max-old-space-size=512"
+        log_warn "可用内存不足 1GB，限制 Node 堆内存为 512MB"
+    fi
+
     export NODE_OPTIONS="${node_opts}"
 
     local output
     local start_time=$SECONDS
-    output=$($build_cmd 2>&1)
+    output=$(npm run build 2>&1)
     local exit_code=$?
     local build_seconds=$((SECONDS - start_time))
 
@@ -742,8 +673,8 @@ build_frontend() {
             log_error "内存不足，前端构建失败"
             log_info "解决方案:"
             log_detail "1. 关闭其他应用释放内存后重试"
-            log_detail "2. 使用预构建版本: 从仓库拉取 frontend/dist/"
-            log_detail "3. 在电脑上构建后拷贝 dist/ 到手机"
+            log_detail "2. 在电脑上构建后拷贝 .next/ 到手机"
+            log_detail "3. 使用开发模式: ./start.sh dev"
             exit 1
         fi
 
@@ -752,7 +683,7 @@ build_frontend() {
             cd ..
             log_error "Node.js 与当前 CPU 不兼容 (Illegal instruction)"
             log_info "修复方法:"
-            log_detail "1. 卸载 nvm Node: nvm uninstall $(nvm current 2>/dev/null || echo '版本')"
+            log_detail "1. 卸载 nvm Node: nvm uninstall \$(nvm current 2>/dev/null || echo '版本')"
             log_detail "2. 安装 Termux 原生 Node: pkg install nodejs-lts"
             log_detail "3. 清理并重建: cd frontend && rm -rf node_modules && npm install"
             log_detail "4. 重新运行: ./start.sh"
@@ -763,85 +694,57 @@ build_frontend() {
         log_error "前端构建失败 (退出码：$exit_code, 耗时：${build_seconds}s)"
         echo ""
 
-        # 输出完整日志（不截断）
         echo -e "${DIM}===== 完整构建日志 =====${NC}"
-        echo "$output"
+        echo "$output" | tail -50
         echo -e "${DIM}===== 日志结束 =====${NC}"
         echo ""
 
-        # 常见错误诊断
         if echo "$output" | grep -qiE "ENOENT|Cannot find module|Module not found"; then
             log_error "诊断：缺少依赖模块"
             log_detail "建议：cd frontend && rm -rf node_modules && npm install && npm run build"
-        elif echo "$output" | grep -qiE "SyntaxError|Unexpected token"; then
-            log_error "诊断：代码语法错误"
-            log_detail "建议：检查最近修改的 TypeScript/JSX 文件"
         elif echo "$output" | grep -qiE "Type.*error|TS[0-9]+"; then
             log_error "诊断：TypeScript 类型错误"
             log_detail "建议：cd frontend && npx tsc --noEmit 查看详细信息"
         elif echo "$output" | grep -qiE "EACCES|permission denied"; then
             log_error "诊断：权限不足"
-            log_detail "建议：sudo chown -R $USER:$USER frontend/"
+            log_detail "建议：sudo chown -R \$USER:\$USER frontend/"
         else
             log_error "诊断：未知错误，请查看上方完整日志"
-            log_detail "建议：cd frontend && rm -rf node_modules dist && npm install && npm run build"
+            log_detail "建议：cd frontend && rm -rf node_modules dist .next && npm install && npm run build"
         fi
 
         exit 1
     fi
 
-    local build_time
-    build_time=$(echo "$output" | grep -oE 'built in [0-9]+ms' || echo "耗时 ${build_seconds}s")
-    local chunk_count
-    chunk_count=$(echo "$output" | grep -cE "^dist/" || true)
+    log_detail "构建耗时: ${build_seconds}s"
 
     # 显示构建产物大小
-    local total_size
-    if command -v du &> /dev/null; then
-        total_size=$(du -sh dist/ 2>/dev/null | cut -f1 || echo "?")
-        log_detail "${chunk_count} 个文件，${build_time}, 总大小：${total_size}"
-    else
-        log_detail "${chunk_count} 个文件，${build_time}"
+    if [ -d ".next" ]; then
+        local total_size
+        if command -v du &> /dev/null; then
+            total_size=$(du -sh .next/ 2>/dev/null | cut -f1 || echo "?")
+            log_detail "构建产物大小: ${total_size}"
+        fi
     fi
 
     cd ..
-
-    # 同步 index.html 到 Django 模板（自动更新 JS/CSS 引用）
-    if [ -f "frontend/dist/index.html" ]; then
-        python3 -c "
-import re, sys
-with open('frontend/dist/index.html', 'r') as f:
-    html = f.read()
-# 将 /static/ 替换为 {% static '' %} 标签
-html = html.replace('src=\"/static/', 'src=\"{% static \\'')
-html = html.replace('.js\"></script>', '.js\\' %}\"></script>')
-html = html.replace('href=\"/static/', 'href=\"{% static \\'')
-html = html.replace('.js\">', '.js\\' %}\">')
-html = html.replace('.css\">', '.css\\' %}\">')
-# 添加 Django static tag
-if '{% load static %}' not in html:
-    html = '{% load static %}' + html
-with open('templates/index.html', 'w') as f:
-    f.write(html)
-print('index.html 已同步')
-" 2>/dev/null && log_detail "Django 模板已同步"
-    fi
-
     step_done
 }
 
 start_server() {
     local port="${1:-8000}"
+    local frontend_port="${2:-3000}"
     source venv/bin/activate
 
     log_step "启动服务"
+
+    # 收集静态文件
     local static_output
     static_output=$(python manage.py collectstatic --noinput --clear 2>&1)
     local static_count
     static_count=$(echo "$static_output" | grep -oE '[0-9]+ static files' || true)
     log_detail "静态文件: ${static_count}"
 
-    # 如果 collectstatic 失败，显示错误
     if [ -z "$static_count" ]; then
         log_warn "静态文件收集异常"
         echo "$static_output" | tail -5 | while IFS= read -r line; do
@@ -849,7 +752,7 @@ start_server() {
         done
     fi
 
-    # 初始化引擎（推荐/搜索/缓存预热）
+    # 初始化引擎
     log_info "初始化系统引擎..."
     python manage.py init_engines 2>&1 || {
         log_warn "引擎初始化异常，服务仍可运行"
@@ -870,23 +773,38 @@ b = settings.CACHES['default']['BACKEND']
 print('Redis' if 'redis' in b else 'DiskCache')
 " 2>/dev/null || echo "未知")
 
+    # 启动 Next.js 前端
+    if [ -d "frontend/.next" ] && [ -f "frontend/.next/BUILD_ID" ]; then
+        log_info "启动 Next.js 生产模式..."
+        cd frontend
+        nohup npm run start -- -p "$frontend_port" > ../logs/frontend.log 2>&1 &
+        FRONTEND_PID=$!
+        cd ..
+        log_success "前端已启动 (PID: $FRONTEND_PID, 端口: $frontend_port)"
+    else
+        log_warn "前端未构建，仅启动 API 服务"
+        log_info "前端构建: ./start.sh build"
+        frontend_port=""
+    fi
+
     echo ""
     echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}  🚀 服务已启动!${NC}"
     echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
     echo ""
-    echo -e "  ${GREEN}📖${NC} 访问地址:  ${BOLD}http://localhost:${port}${NC}"
-    echo -e "  ${GREEN}🔧${NC} Admin 后台: http://localhost:${port}/admin"
-    echo -e "  ${GREEN}📋${NC} API 文档:   http://localhost:${port}/api/v1/docs/"
-    echo -e "  ${GREEN}📊${NC} 性能监控:   http://localhost:${port}/api/v1/health/perf/"
+    echo -e "  ${GREEN}📖${NC} API 服务:   ${BOLD}http://localhost:${port}${NC}"
+    if [ -n "$frontend_port" ]; then
+        echo -e "  ${GREEN}🎨${NC} 前端:       http://localhost:${frontend_port}"
+    fi
+    echo -e "  ${GREEN}📋${NC} API v2 文档: http://localhost:${port}/api/v2/docs/"
+    echo -e "  ${GREEN}🔧${NC} Admin 后台:  http://localhost:${port}/admin"
     echo ""
     echo -e "  ${DIM}数据库: ${db_engine} | 缓存: ${cache_mode}${NC}"
     echo -e "  ${DIM}按 Ctrl+C 停止服务${NC}"
     echo ""
 
-    # 后台预热 API 缓存，避免首次请求慢
-    (sleep 3 && curl -sf http://localhost:${port}/api/v1/books/ > /dev/null 2>&1 && \
-     curl -sf http://localhost:${port}/api/v1/books/rankings/ > /dev/null 2>&1 && \
+    # 后台预热 API 缓存
+    (sleep 3 && curl -sf "http://localhost:${port}/api/v2/reader/discover/" > /dev/null 2>&1 && \
      log_detail "API 缓存预热完成") &
 
     exec granian novel_reader.asgi:application \
@@ -898,25 +816,21 @@ cmd_start() {
     print_banner
     TOTAL_STEPS=8
 
-    # 修复 .env BOM
     fix_env_bom
-
     start_infra
     check_env
     install_deps
     migrate_db
     create_superuser
     build_frontend
-    start_server 8000
+    start_server 8000 3000
 }
 
 cmd_dev() {
     print_banner
     TOTAL_STEPS=5
 
-    # 修复 .env BOM
     fix_env_bom
-
     start_infra
     check_env
     install_deps
@@ -925,29 +839,34 @@ cmd_dev() {
 
     local mem_mb=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
     if [ "$mem_mb" -gt 0 ] && [ "$mem_mb" -lt 1500 ]; then
-        log_warn "可用内存 ${mem_mb}MB，不足同时运行 Django + Vite"
+        log_warn "可用内存 ${mem_mb}MB，不足同时运行 Django + Next.js"
         log_info "切换为低内存模式：构建前端 → 启动后端"
         build_frontend
-        start_server 8000
+        start_server 8000 3000
     else
         echo ""
         echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
         echo -e "${GREEN}  🛠️  开发模式启动!${NC}"
         echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
         echo ""
-        echo -e "  ${GREEN}📖${NC} 前端: ${BOLD}http://localhost:5173${NC}"
+        echo -e "  ${GREEN}🎨${NC} 前端: ${BOLD}http://localhost:3000${NC}"
         echo -e "  ${GREEN}🔧${NC} 后端: http://localhost:8000"
+        echo -e "  ${GREEN}📋${NC} API v2: http://localhost:8000/api/v2/docs/"
         echo ""
 
+        mkdir -p logs
         source venv/bin/activate
-        python manage.py runserver 0.0.0.0:8000 &
+        python manage.py runserver 0.0.0.0:8000 > logs/backend.log 2>&1 &
+        BACKEND_PID=$!
+        log_info "后端已启动 (PID: $BACKEND_PID)"
+
         cd frontend && exec npm run dev
     fi
 }
 
 cmd_stop() {
     log_step "停止服务"
-    local pids=$(pgrep -f "granian|manage.py runserver|vite" || true)
+    local pids=$(pgrep -f "granian|manage.py runserver|next dev|next start" || true)
     if [ -n "$pids" ]; then
         echo "$pids" | xargs kill 2>/dev/null || true
         log_success "服务已停止"
@@ -980,7 +899,7 @@ cmd_status() {
         log_warn "Elasticsearch: 未运行 (搜索将使用数据库模式)"
     fi
 
-    # App
+    # Django
     if pgrep -f "granian" > /dev/null; then
         log_success "Granian 服务: 运行中 (PID: $(pgrep -f "granian" | head -1))"
         log_detail "http://localhost:8000"
@@ -989,6 +908,17 @@ cmd_status() {
         log_detail "http://localhost:8000"
     else
         log_warn "应用服务: 未运行"
+    fi
+
+    # Next.js
+    if pgrep -f "next dev" > /dev/null; then
+        log_success "Next.js 开发模式: 运行中 (PID: $(pgrep -f "next dev" | head -1))"
+        log_detail "http://localhost:3000"
+    elif pgrep -f "next start" > /dev/null; then
+        log_success "Next.js 生产模式: 运行中 (PID: $(pgrep -f "next start" | head -1))"
+        log_detail "http://localhost:3000"
+    else
+        log_warn "Next.js: 未运行"
     fi
 
     # 数据库后端
