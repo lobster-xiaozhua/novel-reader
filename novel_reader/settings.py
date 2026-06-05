@@ -1,6 +1,7 @@
 import environ
 import secrets
 from pathlib import Path
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -30,7 +31,6 @@ _SECRET_KEY = env('SECRET_KEY', default='')
 if not _SECRET_KEY:
     _is_debug = env('DEBUG')
     if not _is_debug:
-        from django.core.exceptions import ImproperlyConfigured
         raise ImproperlyConfigured(
             '生产环境必须通过环境变量 SECRET_KEY 设置密钥。'
             '请在 .env 文件或环境变量中配置 SECRET_KEY。'

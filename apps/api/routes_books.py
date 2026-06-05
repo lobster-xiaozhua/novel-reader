@@ -305,13 +305,13 @@ def list_book_dirs(request) -> dict:
 def add_book_dir(request, path: str) -> dict:
     """添加外挂书籍目录"""
     path = os.path.normpath(path)
-    # 安全检查：禁止访问系统关键目录
-    real_path = os.path.realpath(path)
-    forbidden_prefixes = ['/etc', '/proc', '/sys', '/dev', '/root', '/home', '/var', '/tmp', '/boot', '/usr', '/bin', '/sbin', '/lib', '/opt']
-    if any(real_path.startswith(p + '/') or real_path == p for p in forbidden_prefixes):
-        return {'success': False, 'error': '不允许在系统目录下操作'}
     if not os.path.isabs(path):
         return {'success': False, 'error': '必须使用绝对路径'}
+    # 安全检查：解析后的真实路径必须在允许的父目录下
+    real_path = os.path.realpath(path)
+    forbidden_prefixes = ['/etc', '/proc', '/sys', '/dev', '/root', '/home', '/var', '/tmp', '/boot', '/usr', '/bin', '/sbin', '/lib', '/opt']
+    if any(real_path.startswith(p) for p in forbidden_prefixes):
+        return {'success': False, 'error': '不允许在系统目录下操作'}
     config = _load_dirs_config()
     if path in config.get('extra_dirs', []):
         return {'success': False, 'error': '该目录已存在'}
