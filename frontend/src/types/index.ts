@@ -150,9 +150,11 @@ export interface ShelfData {
 // ──── Discover ────
 
 export interface DiscoverFeed {
+  recommendations: RankingBook[];
   hot_today: RankingBook[];
   hot_week: RankingBook[];
   new_arrivals: RankingBook[];
+  categories: { category: string; count: number }[];
 }
 
 export interface RankingBook {
