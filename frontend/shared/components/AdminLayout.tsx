@@ -16,13 +16,13 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { href: '/', icon: LayoutDashboard, label: '仪表盘' },
-  { href: '/books', icon: BookOpen, label: '书籍' },
-  { href: '/chapters', icon: FileText, label: '章节' },
-  { href: '/crawler', icon: Globe, label: '爬虫' },
-  { href: '/users', icon: Users, label: '用户' },
-  { href: '/tags', icon: Tags, label: '标签' },
-  { href: '/monitor', icon: Activity, label: '监控' },
+  { href: '/admin', icon: LayoutDashboard, label: '仪表盘' },
+  { href: '/admin/books', icon: BookOpen, label: '书籍' },
+  { href: '/admin/chapters', icon: FileText, label: '章节' },
+  { href: '/admin/crawler', icon: Globe, label: '爬虫' },
+  { href: '/admin/users', icon: Users, label: '用户' },
+  { href: '/admin/tags', icon: Tags, label: '标签' },
+  { href: '/admin/monitor', icon: Activity, label: '监控' },
 ];
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -62,7 +62,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="flex-1 py-4 space-y-1 px-2">
           {navItems.map(({ href, icon: Icon, label }) => {
-            const isActive = pathname === href;
+            const isActive = href === '/admin' ? pathname === '/admin' : pathname.startsWith(href);
             return (
               <Link
                 key={href}

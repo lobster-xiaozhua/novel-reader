@@ -62,7 +62,7 @@ export default function BooksPage() {
                     <td className="py-3 px-3" style={{ color: 'var(--accent)' }}>{book.total_chapters}</td>
                     <td className="py-3 px-3">
                       <Link
-                        href={`/books/${book.id}`}
+                        href={`/admin/books/${book.id}`}
                         className="text-sm font-medium transition-colors hover:underline"
                         style={{ color: 'var(--accent)' }}
                       >
