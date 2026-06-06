@@ -718,15 +718,24 @@ build_frontend() {
 
     export NODE_OPTIONS="${node_opts}"
 
-    local output
+    # 构建前端 - 使用临时文件捕获输出以避免 set -e 干扰
+    local build_log
+    build_log=$(mktemp)
     local start_time=$SECONDS
-    output=$(npm run build 2>&1)
-    local exit_code=$?
-    local build_seconds=$((SECONDS - start_time))
 
+    set +e
+    npm run build > "$build_log" 2>&1
+    local exit_code=$?
+    set -e
+
+    local build_seconds=$((SECONDS - start_time))
     unset NODE_OPTIONS
 
     if [ $exit_code -ne 0 ]; then
+        local output
+        output=$(cat "$build_log")
+        rm -f "$build_log"
+
         # 检测 OOM / 内存不足
         if echo "$output" | grep -qiE "OOM|out of memory|Cannot allocate|killed"; then
             cd ..
@@ -734,7 +743,7 @@ build_frontend() {
             log_info "解决方案:"
             log_detail "1. 关闭其他应用释放内存后重试"
             log_detail "2. 在电脑上构建后拷贝 .next/ 到手机"
-            log_detail "3. 使用开发模式: ./start.sh dev"
+            log_detail "3. 使用简单模式: ./start.sh simple"
             exit 1
         fi
 
@@ -776,6 +785,7 @@ build_frontend() {
         exit 1
     fi
 
+    rm -f "$build_log"
     log_detail "构建耗时: ${build_seconds}s"
 
     # 显示构建产物大小
