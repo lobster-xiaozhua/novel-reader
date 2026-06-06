@@ -14,7 +14,7 @@
 /coverage
 
 # next.js
-/.next/
+# /.next/  — 预构建产物已提交，不再忽略
 /out/
 
 # production

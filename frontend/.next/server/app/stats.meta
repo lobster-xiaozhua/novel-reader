@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/(reader)/layout,_N_T_/(reader)/stats/layout,_N_T_/(reader)/stats/page,_N_T_/stats"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/!KHJlYWRlcik/stats/__PAGE__",
+    "/!KHJlYWRlcik/stats",
+    "/!KHJlYWRlcik",
+    "/_index",
+    "/_head"
+  ]
+}

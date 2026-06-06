@@ -1,0 +1,3 @@
+{
+  "/(reader)/book/[id]/page": "app/(reader)/book/[id]/page.js"
+}

@@ -1,0 +1,19 @@
+{
+  "/(admin)/admin/books/[id]/page": "app/(admin)/admin/books/[id]/page.js",
+  "/(admin)/admin/books/page": "app/(admin)/admin/books/page.js",
+  "/(admin)/admin/crawler/page": "app/(admin)/admin/crawler/page.js",
+  "/(admin)/admin/monitor/page": "app/(admin)/admin/monitor/page.js",
+  "/(admin)/admin/page": "app/(admin)/admin/page.js",
+  "/(admin)/admin/tags/page": "app/(admin)/admin/tags/page.js",
+  "/(admin)/admin/users/page": "app/(admin)/admin/users/page.js",
+  "/(reader)/book/[id]/page": "app/(reader)/book/[id]/page.js",
+  "/(reader)/login/page": "app/(reader)/login/page.js",
+  "/(reader)/page": "app/(reader)/page.js",
+  "/(reader)/read/[id]/page": "app/(reader)/read/[id]/page.js",
+  "/(reader)/search/page": "app/(reader)/search/page.js",
+  "/(reader)/shelf/page": "app/(reader)/shelf/page.js",
+  "/(reader)/stats/page": "app/(reader)/stats/page.js",
+  "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js"
+}

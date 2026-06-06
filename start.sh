@@ -682,6 +682,16 @@ build_frontend() {
         return 0
     fi
 
+    # Termux 环境不支持本地构建 Next.js（Turbopack 无 ARM64 原生绑定，webpack SIGSEGV）
+    if [ "$IS_TERMUX" = true ]; then
+        log_error "Termux 环境无法构建 Next.js 前端"
+        log_info "解决方案:"
+        log_detail "1. 从已构建的仓库拉取（git pull 获取预构建产物）"
+        log_detail "2. 在电脑上构建后拷贝 frontend/.next/ 到手机"
+        log_detail "3. 使用简单模式: ./start.sh simple（仅后端）"
+        exit 1
+    fi
+
     if [ ! -d "frontend/node_modules" ] || [ ! -d "frontend/node_modules/react" ]; then
         install_node_deps
     fi
