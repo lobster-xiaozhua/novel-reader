@@ -306,7 +306,17 @@
     "turbopack": {
       "root": "/workspace/frontend"
     },
-    "distDirRoot": ".next"
+    "distDirRoot": ".next",
+    "_originalRewrites": {
+      "beforeFiles": [],
+      "afterFiles": [
+        {
+          "source": "/api/:path*",
+          "destination": "http://localhost:8000/api/:path*"
+        }
+      ],
+      "fallback": []
+    }
   },
   "appDir": "/workspace/frontend",
   "relativeAppDir": "",

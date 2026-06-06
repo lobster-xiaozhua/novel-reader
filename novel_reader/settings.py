@@ -54,6 +54,10 @@ SECRET_KEY = _SECRET_KEY
 DEBUG = env('DEBUG')
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '0.0.0.0'])
 
+# 开发环境允许所有 host（局域网设备访问）
+if DEBUG:
+    ALLOWED_HOSTS = ['*']
+
 if not DEBUG:
     SECURE_SSL_REDIRECT = env('SECURE_SSL_REDIRECT')
     SESSION_COOKIE_SECURE = True
@@ -289,6 +293,12 @@ if DEBUG:
         'http://localhost:3001',  # Next.js production
         'http://127.0.0.1:5173',
         'http://127.0.0.1:3000',
+    ]
+    # 允许局域网 IP 访问（Next.js 前端从局域网 IP 发起请求）
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r'^https?://192\.168\.\d+\.\d+:\d+$',
+        r'^https?://10\.\d+\.\d+\.\d+:\d+$',
+        r'^https?://172\.(1[6-9]|2\d|3[01])\.\d+\.\d+:\d+$',
     ]
 
 LOGGING = {

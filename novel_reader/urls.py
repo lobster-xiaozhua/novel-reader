@@ -8,10 +8,22 @@ from django.dispatch import receiver
 from django.urls import path, include, re_path
 from django.conf import settings
 from django.views.generic import TemplateView
+from django.http import JsonResponse
 from apps.api.router import api
 from backend.api_v2.router import api_v2
 
 logger = logging.getLogger('novel_reader.startup')
+
+
+def api_root(request):
+    """根路由：返回 API 状态信息"""
+    return JsonResponse({
+        'name': 'Novel Reader API',
+        'version': '2.0.0',
+        'docs': '/api/v2/docs/',
+        'health': '/api/v1/health/',
+    })
+
 
 @receiver(post_migrate)
 def log_startup_info(sender, **kwargs):
@@ -65,6 +77,7 @@ def log_startup_info(sender, **kwargs):
     logger.info('=' * 60)
 
 urlpatterns = [
+    path('', api_root),
     path('sys-admin/', admin.site.urls),
     path('api/v1/', api.urls),
     path('api/v2/', api_v2.urls),

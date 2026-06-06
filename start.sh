@@ -818,6 +818,9 @@ start_server() {
 
     log_step "启动服务"
 
+    # 确保日志目录存在
+    mkdir -p logs
+
     # 收集静态文件
     local static_output
     static_output=$(python manage.py collectstatic --noinput --clear 2>&1)
@@ -840,14 +843,16 @@ start_server() {
 
     # 显示当前运行模式
     local db_engine
-    db_engine=$(python -c "
+    db_engine=$(python manage.py shell -c "
+import django; django.setup()
 from django.conf import settings
 e = settings.DATABASES['default']['ENGINE']
 print('SQLite3' if 'sqlite' in e else 'PostgreSQL' if 'postgres' in e else e)
 " 2>/dev/null || echo "未知")
 
     local cache_mode
-    cache_mode=$(python -c "
+    cache_mode=$(python manage.py shell -c "
+import django; django.setup()
 from django.conf import settings
 b = settings.CACHES['default']['BACKEND']
 print('Redis' if 'redis' in b else 'DiskCache')

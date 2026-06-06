@@ -12,11 +12,14 @@ function getToken(): string | null {
 function setToken(token: string): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(TOKEN_KEY, token);
+  // 同步写入 cookie，供 Next.js middleware 读取
+  document.cookie = `access_token=${token}; path=/; max-age=${15 * 60}; SameSite=Lax`;
 }
 
 function clearToken(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(TOKEN_KEY);
+  document.cookie = 'access_token=; path=/; max-age=0';
 }
 
 class ApiError extends Error {
