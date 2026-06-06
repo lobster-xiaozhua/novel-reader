@@ -87,6 +87,7 @@ INSTALLED_APPS = [
     'apps.crawler',
     'apps.recommender',
     'apps.search',
+    'apps.config',
     'ninja',
 ]
 

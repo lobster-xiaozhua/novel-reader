@@ -587,6 +587,33 @@ print('SQLite3' if 'sqlite' in engine else 'PostgreSQL' if 'postgres' in engine 
     step_done
 }
 
+initialize_configs() {
+    log_step "初始化系统配置"
+    source venv/bin/activate
+
+    local result
+    result=$(python manage.py shell -c "
+try:
+    from apps.config.models import ConfigManager
+    count = ConfigManager.initialize_defaults()
+    print(f'INITIALIZED:{count}')
+except Exception as e:
+    print(f'ERROR:{e}')
+" 2>&1) || true
+
+    if [[ "$result" == INITIALIZED:* ]]; then
+        local count="${result#INITIALIZED:}"
+        if [ "$count" -gt 0 ]; then
+            log_success "已初始化 $count 个默认系统配置"
+        else
+            log_success "系统配置已存在"
+        fi
+    elif [[ "$result" == ERROR:* ]]; then
+        log_warn "配置初始化跳过: ${result#ERROR:}"
+    fi
+    step_done
+}
+
 create_superuser() {
     log_step "初始化管理员"
     source venv/bin/activate
@@ -607,6 +634,7 @@ else:
         local pwd="${result#CREATED:admin:}"
         log_success "管理员账号: admin / $pwd"
         log_warn "请妥善保存此密码！"
+        log_detail "登录系统后台后可在'系统配置'中修改各项设置"
     else
         log_success "管理员账号已存在: admin"
     fi
@@ -814,13 +842,14 @@ print('Redis' if 'redis' in b else 'DiskCache')
 
 cmd_start() {
     print_banner
-    TOTAL_STEPS=8
+    TOTAL_STEPS=9
 
     fix_env_bom
     start_infra
     check_env
     install_deps
     migrate_db
+    initialize_configs
     create_superuser
     build_frontend
     start_server 8000 3000

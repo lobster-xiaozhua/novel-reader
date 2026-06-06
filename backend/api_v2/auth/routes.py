@@ -7,7 +7,7 @@ from ninja import Router
 from ..schemas import ApiResponse, LoginIn, RegisterIn, TokenOut, UserOut
 from .auth import (
     create_access_token, create_refresh_token, jwt_auth,
-    _get_user_role, JWT_ACCESS_LIFETIME, JWT_REFRESH_LIFETIME,
+    _get_user_role, decode_token, get_user_from_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,6 @@ def refresh_token(request):
     refresh = request.COOKIES.get('refresh_token') or request.headers.get('X-Refresh-Token', '')
     if not refresh:
         return 401, ApiResponse.fail('缺少刷新令牌')
-    from .auth import decode_token, get_user_from_token
     user = get_user_from_token(refresh, token_type='refresh')
     if not user:
         return 401, ApiResponse.fail('刷新令牌无效或已过期')

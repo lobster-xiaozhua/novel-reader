@@ -9,7 +9,7 @@ from django.urls import path, include, re_path
 from django.conf import settings
 from django.views.generic import TemplateView
 from apps.api.router import api
-# from backend.api_v2.router import api_v2  # 暂时注释，v2 模块需要完整实现
+from backend.api_v2.router import api_v2
 
 logger = logging.getLogger('novel_reader.startup')
 
@@ -67,7 +67,7 @@ def log_startup_info(sender, **kwargs):
 urlpatterns = [
     path('sys-admin/', admin.site.urls),
     path('api/v1/', api.urls),
-    # path('api/v2/', api_v2.urls),  # 暂时注释
+    path('api/v2/', api_v2.urls),
 ]
 
 if settings.DEBUG:
