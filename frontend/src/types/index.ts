@@ -136,13 +136,15 @@ export interface ShelfItem {
   title: string;
   author: string;
   category: string;
-  total_chapters: number;
+  gradient?: [string, string];
+  chapter_count: number;
+  progress: { chapter_id: number; position: number } | null;
   created_at: string;
 }
 
 export interface ShelfData {
-  items: ShelfItem[];
-  total: number;
+  favorites: ShelfItem[];
+  recent_reads: ShelfItem[];
 }
 
 // ──── Discover ────

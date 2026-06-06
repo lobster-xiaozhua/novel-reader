@@ -7,13 +7,28 @@ import { ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { ApiResponse, ChapterContent, ChapterItem, PaginatedData } from '@/types';
 
-type ReaderTheme = 'light' | 'sepia' | 'dark';
+const FONT_SIZES = [14, 16, 18, 20, 22, 24];
+const LINE_HEIGHTS = [1.5, 1.75, 2, 2.25, 2.5];
+const THEMES = [
+  { name: '默认', bg: 'var(--bg)', color: '#d1d5db' },
+  { name: '暖色', bg: '#1a1510', color: '#d4c5a9' },
+  { name: '护眼', bg: '#0d1a0d', color: '#a9d4a9' },
+];
 
-const READER_THEMES: Record<ReaderTheme, { bg: string; text: string; label: string }> = {
-  light: { bg: '#ffffff', text: '#1a1a1a', label: '日间' },
-  sepia: { bg: '#f5f0e8', text: '#3d3225', label: '护眼' },
-  dark: { bg: '#1a1a2e', text: '#d1d5db', label: '夜间' },
-};
+interface ReaderSettings {
+  fontSize: number;
+  lineHeight: number;
+  themeIdx: number;
+}
+
+function loadSettings(): ReaderSettings {
+  if (typeof window === 'undefined') return { fontSize: 17, lineHeight: 2, themeIdx: 0 };
+  try {
+    const saved = localStorage.getItem('reader-settings');
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return { fontSize: 17, lineHeight: 2, themeIdx: 0 };
+}
 
 export default function ReaderPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,37 +39,19 @@ export default function ReaderPage() {
   const [currentChapterId, setCurrentChapterId] = useState<number | null>(
     initialChapterId ? Number(initialChapterId) : null,
   );
-
-  // 阅读器设置
-  const [fontSize, setFontSize] = useState(18);
-  const [lineHeight, setLineHeight] = useState(2);
-  const [theme, setTheme] = useState<ReaderTheme>('dark');
   const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState<ReaderSettings>(loadSettings);
 
-  // P1-6: 使用 useRef 保存最新 currentChapterId，避免 setInterval 闭包过期
+  // 使用 useRef 避免闭包过期
   const currentChapterIdRef = useRef(currentChapterId);
   useEffect(() => { currentChapterIdRef.current = currentChapterId; }, [currentChapterId]);
 
-  // 从 localStorage 恢复阅读设置
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('reader-settings');
-      if (saved) {
-        const s = JSON.parse(saved);
-        if (s.fontSize) setFontSize(s.fontSize);
-        if (s.lineHeight) setLineHeight(s.lineHeight);
-        if (s.theme) setTheme(s.theme);
-      }
-    } catch {}
-  }, []);
+  const saveSettings = (s: ReaderSettings) => {
+    setSettings(s);
+    localStorage.setItem('reader-settings', JSON.stringify(s));
+  };
 
-  // 保存阅读设置到 localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader-settings', JSON.stringify({ fontSize, lineHeight, theme }));
-    } catch {}
-  }, [fontSize, lineHeight, theme]);
-
+  // Fetch chapters metadata
   const { data: chaptersData } = useQuery({
     queryKey: ['chapters', id],
     queryFn: () => api.get<ApiResponse<PaginatedData<ChapterItem>>>(`/reader/books/${id}/chapters`),
@@ -67,45 +64,46 @@ export default function ReaderPage() {
   const prevChapter = chapterIndex > 0 ? chapters[chapterIndex - 1] : null;
   const nextChapter = chapterIndex >= 0 && chapterIndex < chapters.length - 1 ? chapters[chapterIndex + 1] : null;
 
+  // Fetch current chapter content
   const { data: contentData, isLoading } = useQuery({
     queryKey: ['chapterContent', id, currentChapterId],
     queryFn: () => api.get<ApiResponse<ChapterContent>>(`/reader/books/${id}/chapters/${currentChapterId}`),
     enabled: !!id && !!currentChapterId,
   });
 
+  // Pre-fetch next chapter
   useQuery({
     queryKey: ['chapterContent', id, nextChapter?.id],
     queryFn: () => api.get<ApiResponse<ChapterContent>>(`/reader/books/${id}/chapters/${nextChapter?.id}`),
     enabled: !!id && !!nextChapter?.id,
   });
 
+  // Set initial chapter
   useEffect(() => {
     if (!currentChapterId && chapters.length > 0) {
       setCurrentChapterId(chapters[0].id);
     }
   }, [chapters, currentChapterId]);
 
-  // P1-6: 自动保存进度，使用 ref 获取最新 chapterId
+  // 自动保存进度（30s），使用 ref 避免闭包过期
   useEffect(() => {
     if (!id) return;
     const interval = setInterval(() => {
       const chId = currentChapterIdRef.current;
       if (chId) {
-        api.post(`/reader/books/${id}/progress`, { chapter_id: chId, position: 0 }).catch(() => {});
+        api.post(`/reader/books/${id}/progress`, { book_id: Number(id), chapter_id: chId, position: 0 }).catch(() => {});
       }
     }, 30000);
     return () => clearInterval(interval);
   }, [id]);
 
-  // P1-5: 离开页面前保存进度
+  // 离开页面前保存进度
   useEffect(() => {
     const handleBeforeUnload = () => {
       const chId = currentChapterIdRef.current;
       if (id && chId) {
-        navigator.sendBeacon(
-          `/api/v2/reader/books/${id}/progress`,
-          JSON.stringify({ chapter_id: chId, position: 0 }),
-        );
+        const payload = JSON.stringify({ book_id: Number(id), chapter_id: chId, position: 0 });
+        navigator.sendBeacon('/api/reader/books/' + id + '/progress', payload);
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -121,13 +119,20 @@ export default function ReaderPage() {
   );
 
   const content = contentData?.data;
-  const themeConfig = READER_THEMES[theme];
+  const theme = THEMES[settings.themeIdx];
 
   return (
     <div>
+      {/* 导航栏 */}
       <div className="flex items-center justify-between mb-4">
-        <button className="btn-ghost" disabled={!prevChapter} onClick={() => prevChapter && navigate(prevChapter)}>
-          <ChevronLeft size={16} /> 上一章
+        <button
+          className="btn-ghost"
+          disabled={!prevChapter}
+          onClick={() => prevChapter && navigate(prevChapter)}
+          aria-label="上一章"
+        >
+          <ChevronLeft size={16} />
+          上一章
         </button>
         <div className="flex items-center gap-2">
           <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
@@ -141,52 +146,93 @@ export default function ReaderPage() {
             <Settings size={16} />
           </button>
         </div>
-        <button className="btn-ghost" disabled={!nextChapter} onClick={() => nextChapter && navigate(nextChapter)}>
-          下一章 <ChevronRight size={16} />
+        <button
+          className="btn-ghost"
+          disabled={!nextChapter}
+          onClick={() => nextChapter && navigate(nextChapter)}
+          aria-label="下一章"
+        >
+          下一章
+          <ChevronRight size={16} />
         </button>
       </div>
 
+      {/* 阅读设置面板 */}
       {showSettings && (
-        <div className="glass-card mb-4 flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>字号</span>
-            <input type="range" min={14} max={24} value={fontSize} onChange={(e) => setFontSize(Number(e.target.value))} aria-label="字号" />
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{fontSize}px</span>
+        <div className="glass-card mb-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>字号</span>
+            <div className="flex gap-1">
+              {FONT_SIZES.map(s => (
+                <button
+                  key={s}
+                  className="px-2 py-1 text-xs rounded"
+                  style={{
+                    background: settings.fontSize === s ? 'var(--accent)' : 'var(--surface)',
+                    color: settings.fontSize === s ? '#fff' : 'var(--text-muted)',
+                    border: '1px solid var(--border)',
+                  }}
+                  onClick={() => saveSettings({ ...settings, fontSize: s })}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>行距</span>
-            <input type="range" min={15} max={30} value={lineHeight * 10} onChange={(e) => setLineHeight(Number(e.target.value) / 10)} step={1} aria-label="行距" />
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{lineHeight.toFixed(1)}</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>行距</span>
+            <div className="flex gap-1">
+              {LINE_HEIGHTS.map(h => (
+                <button
+                  key={h}
+                  className="px-2 py-1 text-xs rounded"
+                  style={{
+                    background: settings.lineHeight === h ? 'var(--accent)' : 'var(--surface)',
+                    color: settings.lineHeight === h ? '#fff' : 'var(--text-muted)',
+                    border: '1px solid var(--border)',
+                  }}
+                  onClick={() => saveSettings({ ...settings, lineHeight: h })}
+                >
+                  {h}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            {(Object.entries(READER_THEMES) as [ReaderTheme, typeof READER_THEMES[ReaderTheme]][]).map(([key, val]) => (
-              <button
-                key={key}
-                onClick={() => setTheme(key)}
-                className="px-2 py-1 text-xs rounded"
-                style={{
-                  background: theme === key ? 'var(--accent)' : 'var(--surface)',
-                  color: theme === key ? '#fff' : 'var(--text-muted)',
-                  border: '1px solid var(--border)',
-                }}
-              >
-                {val.label}
-              </button>
-            ))}
+          <div className="flex items-center justify-between">
+            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>主题</span>
+            <div className="flex gap-1">
+              {THEMES.map((t, i) => (
+                <button
+                  key={i}
+                  className="px-2 py-1 text-xs rounded"
+                  style={{
+                    background: settings.themeIdx === i ? 'var(--accent)' : t.bg,
+                    color: settings.themeIdx === i ? '#fff' : t.color,
+                    border: '1px solid var(--border)',
+                  }}
+                  onClick={() => saveSettings({ ...settings, themeIdx: i })}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {isLoading && <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>加载中...</div>}
+      {/* 内容 */}
+      {isLoading && (
+        <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>加载中...</div>
+      )}
       {content && (
-        <div className="glass-card" style={{ background: themeConfig.bg }}>
-          <h2 className="text-lg font-semibold mb-4" style={{ color: themeConfig.text }}>{content.title}</h2>
+        <div className="glass-card" style={{ background: theme.bg }}>
+          <h2 className="text-lg font-semibold mb-4" style={{ color: theme.color }}>{content.title}</h2>
           <div
             className="prose-reader"
             style={{
-              fontSize: `${fontSize}px`,
-              lineHeight: lineHeight,
-              color: themeConfig.text,
+              fontSize: `${settings.fontSize}px`,
+              lineHeight: settings.lineHeight,
+              color: theme.color,
             }}
           >
             {content.content}
@@ -194,16 +240,29 @@ export default function ReaderPage() {
         </div>
       )}
 
+      {/* 底部导航 */}
       {content && (
         <div className="flex items-center justify-between mt-4 mb-8">
-          <button className="btn-ghost" disabled={!prevChapter} onClick={() => prevChapter && navigate(prevChapter)}>
-            <ChevronLeft size={16} /> 上一章
+          <button
+            className="btn-ghost"
+            disabled={!prevChapter}
+            onClick={() => prevChapter && navigate(prevChapter)}
+            aria-label="上一章"
+          >
+            <ChevronLeft size={16} />
+            上一章
           </button>
           <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
             第 {content.chapter_number} 章 · {content.word_count} 字
           </span>
-          <button className="btn-ghost" disabled={!nextChapter} onClick={() => nextChapter && navigate(nextChapter)}>
-            下一章 <ChevronRight size={16} />
+          <button
+            className="btn-ghost"
+            disabled={!nextChapter}
+            onClick={() => nextChapter && navigate(nextChapter)}
+            aria-label="下一章"
+          >
+            下一章
+            <ChevronRight size={16} />
           </button>
         </div>
       )}

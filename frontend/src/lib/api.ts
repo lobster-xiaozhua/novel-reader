@@ -1,6 +1,6 @@
 'use client';
 
-const BASE_URL = '/api/v2';
+const BASE_URL = '/api';
 
 class ApiError extends Error {
   status: number;
@@ -14,21 +14,15 @@ class ApiError extends Error {
   }
 }
 
-let _isRefreshing = false;
-
 async function tryRefreshToken(): Promise<boolean> {
-  if (_isRefreshing) return false;
-  _isRefreshing = true;
   try {
     const res = await fetch(`${BASE_URL}/auth/refresh`, {
       method: 'POST',
-      credentials: 'Include',
+      credentials: 'include',
     });
     return res.ok;
   } catch {
     return false;
-  } finally {
-    _isRefreshing = false;
   }
 }
 
@@ -49,6 +43,7 @@ async function request<T = unknown>(
   });
 
   if (res.status === 401) {
+    // 尝试刷新 token
     const refreshed = await tryRefreshToken();
     if (refreshed) {
       const retryRes = await fetch(`${BASE_URL}${path}`, {
@@ -58,9 +53,11 @@ async function request<T = unknown>(
         credentials: 'include',
       });
       if (retryRes.ok) {
-        return retryRes.json();
+        const data = await retryRes.json();
+        return data as T;
       }
     }
+    // 刷新失败，跳转登录
     if (typeof window !== 'undefined') {
       window.location.href = '/login';
     }

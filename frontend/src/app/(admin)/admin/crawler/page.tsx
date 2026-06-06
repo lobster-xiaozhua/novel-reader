@@ -44,6 +44,7 @@ export default function CrawlerPage() {
     queryKey: ['admin-crawler'],
     queryFn: () => api.get('/admin/crawler'),
     refetchInterval: 5000,
+    refetchIntervalInBackground: false,
   });
 
   const tasks = data?.data ?? [];
@@ -72,6 +73,7 @@ export default function CrawlerPage() {
       <div className="flex gap-3">
         <input
           type="text"
+          aria-label="小说源URL"
           placeholder="输入小说源URL..."
           value={url}
           onChange={(e) => setUrl(e.target.value)}

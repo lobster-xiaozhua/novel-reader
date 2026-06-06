@@ -28,7 +28,7 @@ export default function SearchPage() {
     <div>
       <div className="flex gap-2 mb-6">
         <input
-          aria-label="搜索书名或作者"
+          aria-label="搜索书名、作者"
           className="glass-input flex-1"
           type="text"
           placeholder="搜索书名、作者..."

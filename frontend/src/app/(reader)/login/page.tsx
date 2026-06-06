@@ -64,7 +64,7 @@ export default function LoginPage() {
           />
           {mode === 'register' && (
             <input
-              aria-label="邮箱（选填）"
+              aria-label="邮箱"
               className="glass-input"
               type="email"
               placeholder="邮箱（选填）"

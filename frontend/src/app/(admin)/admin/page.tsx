@@ -32,15 +32,17 @@ function HealthBadge({ label, status }: { label: string; status: string }) {
 
 export default function DashboardPage() {
   const { data: perfData, isLoading: perfLoading } = useQuery<ApiResponse<PerfMetrics>>({
-    queryKey: ['admin-perf'],
+    queryKey: ['admin-dashboard-perf'],
     queryFn: () => api.get('/admin/monitor/perf'),
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   const { data: healthData, isLoading: healthLoading } = useQuery<ApiResponse<HealthStatus>>({
-    queryKey: ['admin-health'],
+    queryKey: ['admin-dashboard-health'],
     queryFn: () => api.get('/admin/monitor/health'),
     refetchInterval: 60000,
+    refetchIntervalInBackground: false,
   });
 
   const perf = perfData?.data;

@@ -65,9 +65,12 @@ export default function UsersPage() {
                   </td>
                   <td className="py-3 px-3">
                     <button
-                      onClick={() =>
-                        roleMutation.mutate({ id: user.id, is_staff: !user.is_staff })
-                      }
+                      onClick={() => {
+                        const action = user.is_staff ? '降级为普通读者' : '升级为管理员';
+                        if (window.confirm(`确定要将 ${user.username} ${action}吗？`)) {
+                          roleMutation.mutate({ id: user.id, is_staff: !user.is_staff });
+                        }
+                      }}
                       disabled={roleMutation.isPending}
                       className="text-sm font-medium disabled:opacity-40 transition-colors hover:underline"
                       style={{ color: user.is_staff ? 'var(--danger)' : 'var(--accent)' }}

@@ -4,6 +4,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Home, Library, Search, BarChart3 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import type { ApiResponse } from '@/types';
 
 const NAV = [
   { href: '/', icon: Home, label: '发现' },
@@ -26,6 +29,14 @@ function useIsMobile() {
 export function ReaderLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isMobile = useIsMobile();
+
+  const { data: shelfData } = useQuery({
+    queryKey: ['shelf-sidebar'],
+    queryFn: () => api.get<ApiResponse<any>>('/reader/shelf'),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const recentRead = (shelfData?.data as any)?.recent_reads?.[0];
 
   const Sidebar = () => (
     <nav className="reader-sidebar">
@@ -67,7 +78,13 @@ export function ReaderLayout({ children }: { children: ReactNode }) {
         <aside className="reader-right">
           <div className="glass-card">
             <h3 className="text-sm font-semibold mb-2">继续阅读</h3>
-            <p className="text-xs text-gray-500">暂无阅读记录</p>
+            {recentRead ? (
+              <Link href={`/read/${recentRead.book_id}?chapter=${recentRead.progress?.chapter_id || ''}`} className="text-sm no-underline" style={{ color: 'var(--accent)' }}>
+                {recentRead.title}
+              </Link>
+            ) : (
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>暂无阅读记录</p>
+            )}
           </div>
         </aside>
       )}

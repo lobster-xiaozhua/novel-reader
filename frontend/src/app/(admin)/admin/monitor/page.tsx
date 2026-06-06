@@ -17,15 +17,17 @@ function StatCard({ label, value, unit = '' }: { label: string; value: number | 
 
 export default function MonitorPage() {
   const { data: perfData, isLoading: perfLoading } = useQuery<ApiResponse<PerfMetrics>>({
-    queryKey: ['admin-perf'],
+    queryKey: ['admin-monitor-perf'],
     queryFn: () => api.get('/admin/monitor/perf'),
     refetchInterval: 15000,
+    refetchIntervalInBackground: false,
   });
 
   const { data: healthData, isLoading: healthLoading } = useQuery<ApiResponse<HealthStatus>>({
-    queryKey: ['admin-health'],
+    queryKey: ['admin-monitor-health'],
     queryFn: () => api.get('/admin/monitor/health'),
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   const perf = perfData?.data;

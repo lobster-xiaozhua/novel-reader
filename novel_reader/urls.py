@@ -7,7 +7,7 @@ from django.db.models.signals import post_migrate
 from django.dispatch import receiver
 from django.urls import path, include
 from django.conf import settings
-from backend.api.router import api_v2
+from backend.api.router import api
 
 logger = logging.getLogger('novel_reader.startup')
 
@@ -64,7 +64,7 @@ def log_startup_info(sender, **kwargs):
 
 urlpatterns = [
     path('sys-admin/', admin.site.urls),
-    path('api/v2/', api_v2.urls),
+    path('api/', api.urls),
 ]
 
 if settings.DEBUG:

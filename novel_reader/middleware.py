@@ -102,9 +102,9 @@ class JWTAuthMiddleware:
         return self.get_response(request)
 
     _PUBLIC_PREFIXES = (
-        '/api/v2/books/', '/api/v2/books/rankings/', '/api/v2/books/categories/',
-        '/api/v2/search/', '/api/v2/recommendations/', '/api/v2/auth/',
-        '/api/v2/health/', '/static/', '/admin/',
+        '/api/books/', '/api/books/rankings/', '/api/books/categories/',
+        '/api/search/', '/api/recommendations/', '/api/auth/',
+        '/api/health/', '/static/', '/sys-admin/',
     )
 
     def _authenticate(self, request):
@@ -171,15 +171,18 @@ class RequestTimingMiddleware:
         content_length = len(response.content) if hasattr(response, 'content') else 0
 
         # CSP 安全头
-        response['Content-Security-Policy'] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: blob:; "
-            "font-src 'self' data:; "
-            "connect-src 'self'; "
-            "frame-ancestors 'none';"
-        )
+        if not response.has_header('Content-Security-Policy'):
+            response['Content-Security-Policy'] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: blob:; "
+                "font-src 'self' data:; "
+                "connect-src 'self'; "
+                "frame-ancestors 'none';"
+            )
+        if not response.has_header('X-Content-Type-Options'):
+            response['X-Content-Type-Nosniff'] = 'nosniff'
 
         log_level = 'error' if status >= 500 else 'warning' if status >= 400 else 'info'
         if elapsed > self.SLOW_THRESHOLD:
@@ -223,8 +226,8 @@ class SuppressBadAuthLog(logging.Filter):
 class LoginRateLimitMiddleware:
     """登录/注册接口速率限制：每IP每分钟5次"""
     PROTECTED_PATHS = [
-        '/api/v2/auth/login',
-        '/api/v2/auth/register',
+        '/api/auth/login',
+        '/api/auth/register',
     ]
     MAX_ATTEMPTS = 5
     WINDOW_SECONDS = 60

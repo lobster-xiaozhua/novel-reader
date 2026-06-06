@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useDeferredValue } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { api } from '@/shared/lib/api';
@@ -8,12 +8,13 @@ import type { ApiResponse, PaginatedData, AdminBook } from '@/shared/types';
 
 export default function BooksPage() {
   const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search);
   const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery<ApiResponse<PaginatedData<AdminBook>>>({
-    queryKey: ['admin-books', page, search],
+    queryKey: ['admin-books', page, deferredSearch],
     queryFn: () =>
-      api.get(`/admin/books?page=${page}&search=${encodeURIComponent(search)}`),
+      api.get(`/admin/books?page=${page}&search=${encodeURIComponent(deferredSearch)}`),
   });
 
   const books = data?.data?.items ?? [];
@@ -26,6 +27,7 @@ export default function BooksPage() {
 
       <input
         type="text"
+        aria-label="搜索书名"
         placeholder="搜索书名..."
         value={search}
         onChange={(e) => { setSearch(e.target.value); setPage(1); }}
