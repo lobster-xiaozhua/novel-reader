@@ -3,6 +3,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+MODE="full"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -57,7 +59,8 @@ show_help() {
 用法: ./start.sh <command>
 
 命令:
-  start      启动项目（默认）
+  simple     简单模式 - SQLite，零配置，仅启动后端（推荐）
+  start      启动项目（完整模式，含前端构建）
   stop       停止服务
   restart    重启服务
   status     查看服务状态
@@ -68,8 +71,8 @@ show_help() {
   help       显示此帮助
 
 示例:
-  ./start.sh start          # 启动生产服务
-  ./start.sh services       # 仅启动 PG + Redis
+  ./start.sh simple          # 简单模式，开箱即用
+  ./start.sh start          # 完整模式
   ./start.sh dev            # 开发模式
   ./start.sh build          # 构建前端
 EOF
@@ -285,58 +288,77 @@ _setup_postgres_user_and_db() {
 start_infra() {
     log_step "启动基础设施"
 
-    local db_backend
-    db_backend=$(detect_db_backend)
-
-    # PostgreSQL
-    if [ "$db_backend" = "sqlite3" ]; then
-        log_info "数据库后端: SQLite3（跳过 PostgreSQL 检查）"
-        log_detail "如需使用 PostgreSQL，请移除 .env 中的 DATABASE_URL 或改为 postgres://"
-    elif pg_isready -q 2>/dev/null; then
-        log_success "PostgreSQL 已运行"
+    # simple 模式 - 确保使用 SQLite，跳过 PostgreSQL
+    if [ "$MODE" = "simple" ]; then
+        if [ ! -f ".env" ]; then
+            log_info "创建简单模式配置文件..."
+            mkdir -p data
+            cat > .env << 'EOF'
+DEBUG=true
+DATABASE_URL=sqlite:///data/novel_reader.db
+EOF
+        fi
+        log_info "数据库后端: SQLite3（simple 模式）"
+        log_detail "前端将不构建，仅启动后端服务"
     else
-        _ensure_postgres || {
-            log_error "PostgreSQL 无法启动"
-            log_warn "可切换为 SQLite3 模式继续运行（仅适用于开发/测试）"
-            echo ""
-            echo -e "  ${YELLOW}是否切换为 SQLite3 模式？${NC}"
-            echo -ne "  ${BOLD}[y/N]${NC}: "
-            local answer
-            read -r answer 2>/dev/null || answer="n"
-            if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
-                setup_sqlite_fallback
-            else
-                log_error "PostgreSQL 是硬性依赖，请手动安装后重试"
-                log_info "安装指引:"
-                log_detail "Ubuntu/Debian: sudo apt-get install postgresql"
-                log_detail "CentOS/RHEL:  sudo dnf install postgresql-server"
-                log_detail "macOS:        brew install postgresql"
-                log_detail "Termux:       pkg install postgresql"
-                exit 1
-            fi
-        }
+        local db_backend
+        db_backend=$(detect_db_backend)
+
+        # PostgreSQL
+        if [ "$db_backend" = "sqlite3" ]; then
+            log_info "数据库后端: SQLite3（跳过 PostgreSQL 检查）"
+            log_detail "如需使用 PostgreSQL，请移除 .env 中的 DATABASE_URL 或改为 postgres://"
+        elif pg_isready -q 2>/dev/null; then
+            log_success "PostgreSQL 已运行"
+        else
+            _ensure_postgres || {
+                log_error "PostgreSQL 无法启动"
+                log_warn "可切换为 SQLite3 模式继续运行（仅适用于开发/测试）"
+                echo ""
+                echo -e "  ${YELLOW}是否切换为 SQLite3 模式？${NC}"
+                echo -ne "  ${BOLD}[y/N]${NC}: "
+                local answer
+                read -r answer 2>/dev/null || answer="n"
+                if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
+                    setup_sqlite_fallback
+                else
+                    log_error "PostgreSQL 是硬性依赖，请手动安装后重试"
+                    log_info "安装指引:"
+                    log_detail "Ubuntu/Debian: sudo apt-get install postgresql"
+                    log_detail "CentOS/RHEL:  sudo dnf install postgresql-server"
+                    log_detail "macOS:        brew install postgresql"
+                    log_detail "Termux:       pkg install postgresql"
+                    exit 1
+                fi
+            }
+        fi
     fi
 
-    # Redis
+    # Redis（simple 模式同样尝试）
     if redis-cli ping 2>/dev/null | grep -q PONG; then
         log_success "Redis 已运行"
         REDIS_AVAILABLE=true
     else
-        log_info "启动 Redis..."
         redis-server --daemonize yes --maxmemory 256mb --maxmemory-policy allkeys-lru 2>/dev/null && {
             log_success "Redis 已启动"
             REDIS_AVAILABLE=true
         } || {
-            log_warn "Redis 启动失败，将使用 DiskCache 模式"
+            if [ "$MODE" = "simple" ]; then
+                log_detail "Redis 未安装，使用 DiskCache（simple 模式正常）"
+            else
+                log_warn "Redis 启动失败，将使用 DiskCache 模式"
+            fi
             REDIS_AVAILABLE=false
         }
     fi
 
     # Elasticsearch (optional)
-    if curl -sf http://localhost:9200 > /dev/null 2>&1; then
-        log_success "Elasticsearch 已运行"
-    else
-        log_detail "Elasticsearch 未安装，搜索使用数据库 LIKE 模式"
+    if [ "$MODE" != "simple" ]; then
+        if curl -sf http://localhost:9200 > /dev/null 2>&1; then
+            log_success "Elasticsearch 已运行"
+        else
+            log_detail "Elasticsearch 未安装，搜索使用数据库 LIKE 模式"
+        fi
     fi
 
     step_done
@@ -360,22 +382,27 @@ check_env() {
         log_success "Python $(python3 --version | cut -d' ' -f2)"
     fi
 
-    if ! command -v node &> /dev/null; then
-        log_error "Node.js 未安装"
-        ((errors++))
+    # simple 模式跳过 Node.js 检查
+    if [ "$MODE" = "simple" ]; then
+        log_info "Simple 模式：跳过 Node.js 检查"
     else
-        local node_ver=$(node --version)
-        log_success "Node ${node_ver}"
+        if ! command -v node &> /dev/null; then
+            log_error "Node.js 未安装"
+            ((errors++))
+        else
+            local node_ver=$(node --version)
+            log_success "Node ${node_ver}"
 
-        # Termux 下检测 Node 兼容性
-        if [ "$IS_TERMUX" = true ]; then
-            if ! node -e "console.log('ok')" 2>/dev/null; then
-                log_error "Node.js 无法正常运行 (Illegal instruction?)"
-                log_info "修复方法:"
-                log_detail "1. 卸载 nvm Node: nvm uninstall \$(nvm current 2>/dev/null || echo '版本')"
-                log_detail "2. 安装 Termux 原生 Node: pkg install nodejs-lts"
-                log_detail "3. 重新运行 ./start.sh"
-                ((errors++))
+            # Termux 下检测 Node 兼容性
+            if [ "$IS_TERMUX" = true ]; then
+                if ! node -e "console.log('ok')" 2>/dev/null; then
+                    log_error "Node.js 无法正常运行 (Illegal instruction?)"
+                    log_info "修复方法:"
+                    log_detail "1. 卸载 nvm Node: nvm uninstall \$(nvm current 2>/dev/null || echo '版本')"
+                    log_detail "2. 安装 Termux 原生 Node: pkg install nodejs-lts"
+                    log_detail "3. 重新运行 ./start.sh"
+                    ((errors++))
+                fi
             fi
         fi
     fi
@@ -492,8 +519,13 @@ install_deps() {
 
     log_info "Python 依赖..."
     install_python_deps
-    log_info "Node 依赖..."
-    install_node_deps
+
+    if [ "$MODE" != "simple" ]; then
+        log_info "Node 依赖..."
+        install_node_deps
+    else
+        log_info "Simple 模式：跳过 Node 依赖"
+    fi
     step_done
 }
 
@@ -840,6 +872,22 @@ print('Redis' if 'redis' in b else 'DiskCache')
         --interface asginl --workers 1
 }
 
+cmd_simple() {
+    MODE="simple"
+    print_banner
+    TOTAL_STEPS=7
+    log_info "Simple 模式 - 仅后端，SQLite 数据库，零配置"
+
+    fix_env_bom
+    start_infra
+    check_env
+    install_deps
+    migrate_db
+    initialize_configs
+    create_superuser
+    start_server 8000 ""
+}
+
 cmd_start() {
     print_banner
     TOTAL_STEPS=9
@@ -992,6 +1040,7 @@ cmd_services() {
 main() {
     local command="${1:-start}"
     case "$command" in
+        simple)    cmd_simple ;;
         start)     cmd_start ;;
         dev)       cmd_dev ;;
         stop)      cmd_stop ;;
