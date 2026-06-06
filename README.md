@@ -27,7 +27,39 @@
 
 ## 快速开始
 
-### 使用 Docker（推荐）
+### 最简单的方式（推荐，零配置）
+
+#### Windows
+```bash
+python start.py
+```
+
+#### Linux / macOS
+```bash
+python3 start.py
+```
+
+或者使用启动脚本：
+```bash
+# Linux / macOS
+./start.sh simple
+
+# Windows
+start.bat simple
+```
+
+第一次运行会自动：
+- 创建虚拟环境
+- 安装依赖
+- 初始化 SQLite 数据库
+- 创建管理员账号
+- 启动服务
+
+访问 http://localhost:8000
+
+---
+
+### 使用 Docker（完整功能模式
 
 ```bash
 # 启动所有服务
@@ -38,8 +70,6 @@ docker-compose exec web python manage.py rebuild_index
 ```
 
 访问 http://localhost:8000
-
-默认账号: `admin` / `admin123`
 
 ### 传统方式
 

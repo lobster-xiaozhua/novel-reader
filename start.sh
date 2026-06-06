@@ -3,6 +3,28 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# Check if we should use the simple mode
+if [ $# -eq 0 ] || [ "$1" = "simple" ]; then
+    echo
+    echo "Novel Reader - 一键启动"
+    echo "=========================="
+    echo
+    echo "1. 简单模式 (推荐) - 使用 SQLite，零配置，开箱即用"
+    echo "2. 完整模式 - 使用 PostgreSQL + Redis"
+    echo
+    read -p "请选择模式 (1 或 2，默认1): " choice
+    case "$choice" in
+        2)
+            echo "你选择了完整模式，继续执行..."
+            ;;
+        *)
+            echo "你选择了简单模式，使用 Python 脚本启动..."
+            python start.py
+            exit 0
+            ;;
+    esac
+fi
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -54,21 +76,23 @@ print_banner() {
 show_help() {
     print_banner
     cat << EOF
-用法: ./start.sh <command>
+Usage: ./start.sh <command>
 
-命令:
-  start      启动项目（默认）
+Commands:
+  start      启动项目（默认，提供模式选择）
+  simple     简单模式 - 使用 SQLite，零配置，开箱即用
   stop       停止服务
   restart    重启服务
   status     查看服务状态
   migrate    执行数据库迁移
   build      构建前端
   dev        开发模式（前后端分离）
-  services   启动基础设施（PG/Redis）
+  services   启动基础设施（PG + Redis）
   help       显示此帮助
 
-示例:
-  ./start.sh start          # 启动生产服务
+Examples:
+  ./start.sh simple         # 使用简单模式启动
+  ./start.sh start          # 启动（带模式选择）
   ./start.sh services       # 仅启动 PG + Redis
   ./start.sh dev            # 开发模式
   ./start.sh build          # 构建前端
@@ -993,6 +1017,7 @@ main() {
     local command="${1:-start}"
     case "$command" in
         start)     cmd_start ;;
+        simple)    python start.py ;;
         dev)       cmd_dev ;;
         stop)      cmd_stop ;;
         restart)   cmd_stop; sleep 1; cmd_start ;;
@@ -1001,7 +1026,7 @@ main() {
         build)     cmd_build ;;
         services)  cmd_services ;;
         help|--help|-h) show_help ;;
-        *) log_error "未知命令: $command"; show_help; exit 1 ;;
+        *) log_error "Unknown command: $command"; show_help; exit 1 ;;
     esac
 }
 

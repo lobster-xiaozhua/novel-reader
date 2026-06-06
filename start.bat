@@ -4,6 +4,33 @@ chcp 65001 >nul 2>&1
 
 cd /d "%~dp0"
 
+:: Check if we should use simple mode
+if "%~1"=="" goto :ask_mode
+if /i "%~1"=="simple" goto :simple_mode
+goto :main_entry
+
+:ask_mode
+echo.
+echo Novel Reader - 一键启动
+echo ==========================
+echo.
+echo 1. 简单模式 (推荐) - 使用 SQLite，零配置，开箱即用
+echo 2. 完整模式 - 使用 PostgreSQL + Redis
+echo.
+set /p choice="请选择模式 (1 或 2，默认1): "
+if "%choice%"=="2" goto :main_entry
+:: Default to simple mode
+:simple_mode
+echo 你选择了简单模式，使用 Python 脚本启动...
+python start.py
+if %errorlevel% neq 0 (
+    echo 错误: 启动失败
+    pause
+)
+exit /b
+
+:main_entry
+
 :: ─── Colors (via PowerShell) ───
 set "ESC="
 for /f "delims=" %%i in ('powershell -NoProfile -Command "[char]27"') do set "ESC=%%i"
@@ -608,7 +635,8 @@ call :print_banner
 echo Usage: start.bat ^<command^>
 echo.
 echo Commands:
-echo   start      Start production server (default)
+echo   simple     简单模式 - 使用 SQLite，零配置，开箱即用
+echo   start      启动项目（默认，提供模式选择）
 echo   stop       Stop services
 echo   restart    Restart services
 echo   status     Check service status
@@ -624,6 +652,7 @@ goto :eof
 set "CMD=%~1"
 if "%CMD%"=="" set "CMD=start"
 
+if /i "%CMD%"=="simple"    goto simple_mode
 if /i "%CMD%"=="start"     goto cmd_start
 if /i "%CMD%"=="stop"      goto cmd_stop
 if /i "%CMD%"=="restart"   call :cmd_stop & timeout /t 2 /nobreak >nul & goto cmd_start
