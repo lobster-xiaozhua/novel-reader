@@ -217,7 +217,7 @@ def shelf(request):
 
 # ── Book Detail ──
 
-@router.get('/book/{book_id}', response=ApiResponse[BookDetail])
+@router.get('/books/{book_id}', response=ApiResponse[BookDetail])
 def book_detail(request, book_id: int):
     """书籍详情"""
     book = get_object_or_404(Book.objects.prefetch_related('tags'), id=book_id)
@@ -259,7 +259,7 @@ def book_detail(request, book_id: int):
 
 # ── Chapters ──
 
-@router.get('/book/{book_id}/chapters', response=ApiResponse[PaginatedData])
+@router.get('/books/{book_id}/chapters', response=ApiResponse[PaginatedData])
 def book_chapters(request, book_id: int, page: int = Query(1, ge=1), per_page: int = Query(50, ge=1, le=200)):
     """书籍章节目录（分页）"""
     book = get_object_or_404(Book, id=book_id)
@@ -280,7 +280,7 @@ def book_chapters(request, book_id: int, page: int = Query(1, ge=1), per_page: i
 
 # ── Read Chapter ──
 
-@router.get('/read/{book_id}/{chapter_id}', response=ApiResponse[ChapterContent])
+@router.get('/books/{book_id}/chapters/{chapter_id}', response=ApiResponse[ChapterContent])
 def read_chapter(request, book_id: int, chapter_id: int):
     """阅读章节内容（含前后章节导航）"""
     chapter = get_object_or_404(Chapter.objects.select_related('book'), book_id=book_id, id=chapter_id)
@@ -344,8 +344,8 @@ def read_chapter(request, book_id: int, chapter_id: int):
 
 # ── Progress ──
 
-@router.post('/progress', response=ApiResponse[ProgressOut], auth=jwt_auth)
-def save_progress(request, payload: ProgressIn):
+@router.post('/books/{book_id}/progress', response=ApiResponse[ProgressOut], auth=jwt_auth)
+def save_progress(request, book_id: int, payload: ProgressIn):
     """保存阅读进度"""
     book = get_object_or_404(Book.objects.only('id', 'title', 'author', 'total_chapters'), id=payload.book_id)
     progress, _ = ReadingProgress.objects.update_or_create(
@@ -505,15 +505,23 @@ def search_books(
 
 # ── Toggle Favorite ──
 
-@router.post('/favorite/toggle', response=ApiResponse[MessageOut], auth=jwt_auth)
-def toggle_favorite(request, book_id: int = Query(..., description='书籍ID')):
-    """收藏/取消收藏切换"""
+@router.post('/books/{book_id}/favorite', response=ApiResponse[MessageOut], auth=jwt_auth)
+def add_favorite(request, book_id: int):
+    """收藏书籍"""
+    book = get_object_or_404(Book.objects.only('id', 'title'), id=book_id)
+    if Favorite.objects.filter(user=request.user, book=book).exists():
+        return ApiResponse.ok(data={'message': '已收藏'})
+    Favorite.objects.create(user=request.user, book=book)
+    logger.info(f'[ReaderV2] 添加收藏: {book.title}')
+    return ApiResponse.ok(data={'message': '已收藏'})
+
+
+@router.delete('/books/{book_id}/favorite', response=ApiResponse[MessageOut], auth=jwt_auth)
+def remove_favorite(request, book_id: int):
+    """取消收藏"""
     book = get_object_or_404(Book.objects.only('id', 'title'), id=book_id)
     fav = Favorite.objects.filter(user=request.user, book=book).first()
     if fav:
         fav.delete()
         logger.info(f'[ReaderV2] 取消收藏: {book.title}')
-        return ApiResponse.ok(data={'message': '已取消收藏'})
-    Favorite.objects.create(user=request.user, book=book)
-    logger.info(f'[ReaderV2] 添加收藏: {book.title}')
-    return ApiResponse.ok(data={'message': '已收藏'})
+    return ApiResponse.ok(data={'message': '已取消收藏'})

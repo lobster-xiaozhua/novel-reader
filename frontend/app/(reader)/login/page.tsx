@@ -27,11 +27,12 @@ export default function LoginPage() {
 
       const res = await api.post<AuthResponse>(endpoint, body);
 
-      if (res.access_token) {
-        api.setToken(res.access_token);
+      const tokens = res.data?.tokens;
+      if (tokens?.access_token) {
+        api.setToken(tokens.access_token);
       }
-      if (res.refresh_token) {
-        localStorage.setItem('refresh_token', res.refresh_token);
+      if (tokens?.refresh_token) {
+        localStorage.setItem('refresh_token', tokens.refresh_token);
       }
       router.push('/');
     } catch (err: unknown) {

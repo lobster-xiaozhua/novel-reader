@@ -16,7 +16,10 @@ export interface Tokens {
 
 export interface AuthResponse {
   success: boolean;
-  user?: User;
+  data?: {
+    user?: User;
+    tokens?: Tokens;
+  };
   error?: string;
   access_token?: string;
   refresh_token?: string;

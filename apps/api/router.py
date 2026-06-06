@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 api = NinjaAPI(
     title='NovelReader API',
-    version='2.0.0',
+    version='1.0.0',
     description='高性能小说阅读器 API',
     docs_url='/docs/',
     openapi_url='/openapi.json',

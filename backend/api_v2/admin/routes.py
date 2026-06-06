@@ -26,13 +26,13 @@ def list_books(
     request,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=200),
-    q: str = Query('', description='搜索标题/作者'),
+    search: str = Query('', description='搜索标题/作者'),
     category: str = Query('', description='分类筛选'),
 ):
     """书籍列表（分页 + 搜索 + 分类筛选）"""
     qs = Book.objects.prefetch_related('tags').annotate(_ch_count=Count('chapters'))
 
-    query = q.strip()
+    query = search.strip()
     if query:
         qs = qs.filter(Q(title__icontains=query) | Q(author__icontains=query))
     if category:
@@ -198,7 +198,7 @@ def delete_chapter(request, chapter_id: int):
 
 # ── Crawler Tasks ──
 
-@router.get('/crawler/tasks', response=ApiResponse[PaginatedData])
+@router.get('/crawler', response=ApiResponse)
 def list_crawler_tasks(
     request,
     page: int = Query(1, ge=1),
@@ -228,7 +228,7 @@ def list_crawler_tasks(
     )
 
 
-@router.post('/crawler/tasks', response=ApiResponse)
+@router.post('/crawler', response=ApiResponse)
 def create_crawler_task(
     request,
     url: str = Query(..., description='爬取目标URL'),
@@ -243,7 +243,7 @@ def create_crawler_task(
     })
 
 
-@router.post('/crawler/tasks/{task_id}/stop', response=ApiResponse)
+@router.post('/crawler/{task_id}/stop', response=ApiResponse)
 def stop_crawler_task(request, task_id: int):
     """停止爬虫任务"""
     task = get_object_or_404(CrawlerTask, id=task_id)
