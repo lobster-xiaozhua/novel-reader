@@ -876,7 +876,7 @@ print('Redis' if 'redis' in b else 'DiskCache')
     if [ -n "$frontend_port" ]; then
         echo -e "  ${GREEN}🎨${NC} 前端:       http://localhost:${frontend_port}"
     fi
-    echo -e "  ${GREEN}📋${NC} API v2 文档: http://localhost:${port}/api/v2/docs/"
+    echo -e "  ${GREEN}📋${NC} API 文档:   http://localhost:${port}/api/docs/"
     echo -e "  ${GREEN}🔧${NC} 系统后台:  http://localhost:${port}/sys-admin"
     echo ""
     echo -e "  ${DIM}数据库: ${db_engine} | 缓存: ${cache_mode}${NC}"
@@ -884,7 +884,7 @@ print('Redis' if 'redis' in b else 'DiskCache')
     echo ""
 
     # 后台预热 API 缓存
-    (sleep 3 && curl -sf "http://localhost:${port}/api/v2/reader/discover/" > /dev/null 2>&1 && \
+    (sleep 3 && curl -sf "http://localhost:${port}/api/reader/discover/" > /dev/null 2>&1 && \
      log_detail "API 缓存预热完成") &
 
     exec granian novel_reader.asgi:application \
@@ -948,7 +948,7 @@ cmd_dev() {
         echo ""
         echo -e "  ${GREEN}🎨${NC} 前端: ${BOLD}http://localhost:3000${NC}"
         echo -e "  ${GREEN}🔧${NC} 后端: http://localhost:8000"
-        echo -e "  ${GREEN}📋${NC} API v2: http://localhost:8000/api/v2/docs/"
+        echo -e "  ${GREEN}📋${NC} API: http://localhost:8000/api/docs/"
         echo ""
 
         mkdir -p logs

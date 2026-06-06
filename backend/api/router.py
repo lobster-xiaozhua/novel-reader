@@ -1,4 +1,4 @@
-"""API v2 路由入口"""
+"""API 路由入口"""
 import logging
 import traceback
 

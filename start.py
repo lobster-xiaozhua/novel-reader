@@ -189,7 +189,7 @@ def start_server(venv_python: Path, port: int = 8000):
     print(f"""
 {Colors.GREEN}═══════════════════════════════════════════════════
   📖 API 服务:   http://localhost:{port}
-  📋 API v2 文档: http://localhost:{port}/api/v2/docs/
+  📋 API 文档:   http://localhost:{port}/api/docs/
   🔧 系统后台:  http://localhost:{port}/sys-admin
   ⚙️  配置管理:  登录后台后在'系统配置'中修改
 ═══════════════════════════════════════════════════{Colors.NC}

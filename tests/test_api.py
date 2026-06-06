@@ -102,7 +102,7 @@ class AuthAPITest(TestCase):
         self.user = User.objects.create_user(username='testuser', password='testpass123')
 
     def test_login_success(self):
-        res = self.client.post('/api/v2/auth/login/', data=json.dumps({
+        res = self.client.post('/api/auth/login/', data=json.dumps({
             'username': 'testuser', 'password': 'testpass123'
         }), content_type='application/json')
         self.assertEqual(res.status_code, 200)
@@ -113,7 +113,7 @@ class AuthAPITest(TestCase):
         self.assertEqual(data['user']['username'], 'testuser')
 
     def test_login_wrong_password(self):
-        res = self.client.post('/api/v2/auth/login/', data=json.dumps({
+        res = self.client.post('/api/auth/login/', data=json.dumps({
             'username': 'testuser', 'password': 'wrongpass'
         }), content_type='application/json')
         self.assertEqual(res.status_code, 200)
@@ -122,7 +122,7 @@ class AuthAPITest(TestCase):
         self.assertIn('错误', data['error'])
 
     def test_register_success(self):
-        res = self.client.post('/api/v2/auth/register/', data=json.dumps({
+        res = self.client.post('/api/auth/register/', data=json.dumps({
             'username': 'newuser', 'password': 'newpass123'
         }), content_type='application/json')
         self.assertEqual(res.status_code, 200)
@@ -131,7 +131,7 @@ class AuthAPITest(TestCase):
         self.assertIn('access_token', data)
 
     def test_register_duplicate(self):
-        res = self.client.post('/api/v2/auth/register/', data=json.dumps({
+        res = self.client.post('/api/auth/register/', data=json.dumps({
             'username': 'testuser', 'password': 'testpass123'
         }), content_type='application/json')
         self.assertEqual(res.status_code, 200)
@@ -141,24 +141,24 @@ class AuthAPITest(TestCase):
 
     def test_me_authenticated(self):
         token = create_access_token(self.user.id)
-        res = self.client.get('/api/v2/auth/me/', HTTP_AUTHORIZATION=f'Bearer {token}')
+        res = self.client.get('/api/auth/me/', HTTP_AUTHORIZATION=f'Bearer {token}')
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertTrue(data['success'])
         self.assertEqual(data['user']['username'], 'testuser')
 
     def test_me_unauthenticated(self):
-        res = self.client.get('/api/v2/auth/me/')
+        res = self.client.get('/api/auth/me/')
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertFalse(data['success'])
 
     def test_refresh_token(self):
-        res = self.client.post('/api/v2/auth/login/', data=json.dumps({
+        res = self.client.post('/api/auth/login/', data=json.dumps({
             'username': 'testuser', 'password': 'testpass123'
         }), content_type='application/json')
         refresh_token = res.json()['refresh_token']
-        res2 = self.client.post('/api/v2/auth/refresh/', data=json.dumps({
+        res2 = self.client.post('/api/auth/refresh/', data=json.dumps({
             'refresh_token': refresh_token
         }), content_type='application/json')
         self.assertEqual(res2.status_code, 200)
@@ -167,20 +167,20 @@ class AuthAPITest(TestCase):
         self.assertIn('access_token', data)
 
     def test_refresh_invalid_token(self):
-        res = self.client.post('/api/v2/auth/refresh/', data=json.dumps({
+        res = self.client.post('/api/auth/refresh/', data=json.dumps({
             'refresh_token': 'invalid'
         }), content_type='application/json')
         self.assertEqual(res.status_code, 401)
 
     def test_logout(self):
         token = create_access_token(self.user.id)
-        res = self.client.post('/api/v2/auth/logout/', HTTP_AUTHORIZATION=f'Bearer {token}')
+        res = self.client.post('/api/auth/logout/', HTTP_AUTHORIZATION=f'Bearer {token}')
         self.assertEqual(res.status_code, 200)
 
 
 class HealthAPITest(TestCase):
     def test_health_check(self):
-        res = self.client.get('/api/v2/health/')
+        res = self.client.get('/api/health/')
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data['status'], 'ok')
@@ -201,41 +201,41 @@ class BooksAPITest(TestCase):
         )
 
     def test_list_books(self):
-        res = self.client.get('/api/v2/books/')
+        res = self.client.get('/api/books/')
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertIn('items', data)
 
     def test_list_books_search(self):
-        res = self.client.get('/api/v2/books/?search=测试')
+        res = self.client.get('/api/books/?search=测试')
         self.assertEqual(res.status_code, 200)
 
     def test_get_book_detail(self):
-        res = self.client.get(f'/api/v2/books/{self.book.id}/')
+        res = self.client.get(f'/api/books/{self.book.id}/')
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data['title'], '测试书籍')
 
     def test_get_book_not_found(self):
-        res = self.client.get('/api/v2/books/99999/')
+        res = self.client.get('/api/books/99999/')
         self.assertEqual(res.status_code, 404)
 
     def test_list_chapters(self):
-        res = self.client.get(f'/api/v2/books/{self.book.id}/chapters/')
+        res = self.client.get(f'/api/books/{self.book.id}/chapters/')
         self.assertEqual(res.status_code, 200)
 
     def test_chapters_not_found_book(self):
-        res = self.client.get('/api/v2/books/99999/chapters/')
+        res = self.client.get('/api/books/99999/chapters/')
         self.assertEqual(res.status_code, 404)
 
     def test_search_books(self):
-        res = self.client.get('/api/v2/search/?q=测试')
+        res = self.client.get('/api/search/?q=测试')
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertGreater(data['total'], 0)
 
     def test_search_empty(self):
-        res = self.client.get('/api/v2/search/')
+        res = self.client.get('/api/search/')
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data['total'], 0)
@@ -254,11 +254,11 @@ class ProgressAPITest(TestCase):
         )
 
     def test_list_progress_unauthenticated(self):
-        res = self.client.get('/api/v2/progress/')
+        res = self.client.get('/api/progress/')
         self.assertEqual(res.status_code, 401)
 
     def test_create_progress(self):
-        res = self.client.post('/api/v2/progress/', data=json.dumps({
+        res = self.client.post('/api/progress/', data=json.dumps({
             'book_id': self.book.id, 'chapter_id': self.chapter.id, 'position': 5
         }), content_type='application/json', HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.assertEqual(res.status_code, 200)
@@ -267,17 +267,17 @@ class ProgressAPITest(TestCase):
 
     def test_list_progress_authenticated(self):
         ReadingProgress.objects.create(user=self.user, book=self.book, chapter=self.chapter, position=3)
-        res = self.client.get('/api/v2/progress/', HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        res = self.client.get('/api/progress/', HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.assertEqual(res.status_code, 200)
 
     def test_track_stats(self):
-        res = self.client.post('/api/v2/progress/track-stats/', data=json.dumps({
+        res = self.client.post('/api/progress/track-stats/', data=json.dumps({
             'seconds': 60, 'chapter_id': self.chapter.id
         }), content_type='application/json', HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.assertEqual(res.status_code, 200)
 
     def test_track_stats_too_short(self):
-        res = self.client.post('/api/v2/progress/track-stats/', data=json.dumps({
+        res = self.client.post('/api/progress/track-stats/', data=json.dumps({
             'seconds': 2
         }), content_type='application/json', HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.assertEqual(res.status_code, 200)
@@ -289,11 +289,11 @@ class TagsAPITest(TestCase):
         self.token = create_access_token(self.user.id)
 
     def test_list_tags(self):
-        res = self.client.get('/api/v2/tags/')
+        res = self.client.get('/api/tags/')
         self.assertEqual(res.status_code, 200)
 
     def test_create_tag(self):
-        res = self.client.post('/api/v2/tags/', data=json.dumps({
+        res = self.client.post('/api/tags/', data=json.dumps({
             'name': '测试标签', 'color': '#ff0000'
         }), content_type='application/json', HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.assertEqual(res.status_code, 200)
@@ -301,14 +301,14 @@ class TagsAPITest(TestCase):
         self.assertEqual(data['name'], '测试标签')
 
     def test_create_tag_unauthenticated(self):
-        res = self.client.post('/api/v2/tags/', data=json.dumps({
+        res = self.client.post('/api/tags/', data=json.dumps({
             'name': '测试', 'color': '#ff0000'
         }), content_type='application/json')
         self.assertEqual(res.status_code, 401)
 
     def test_delete_tag(self):
         tag = Tag.objects.create(name='删除标签', color='#00ff00')
-        res = self.client.delete(f'/api/v2/tags/{tag.id}/', HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        res = self.client.delete(f'/api/tags/{tag.id}/', HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.assertEqual(res.status_code, 200)
         self.assertFalse(Tag.objects.filter(id=tag.id).exists())
 
@@ -322,7 +322,7 @@ class FavoritesAPITest(TestCase):
         )
 
     def test_toggle_favorite_add(self):
-        res = self.client.post('/api/v2/favorites/toggle/', data=json.dumps({
+        res = self.client.post('/api/favorites/toggle/', data=json.dumps({
             'book_id': self.book.id
         }), content_type='application/json', HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.assertEqual(res.status_code, 200)
@@ -330,7 +330,7 @@ class FavoritesAPITest(TestCase):
 
     def test_toggle_favorite_remove(self):
         Favorite.objects.create(user=self.user, book=self.book)
-        res = self.client.post('/api/v2/favorites/toggle/', data=json.dumps({
+        res = self.client.post('/api/favorites/toggle/', data=json.dumps({
             'book_id': self.book.id
         }), content_type='application/json', HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.assertEqual(res.status_code, 200)
@@ -338,11 +338,11 @@ class FavoritesAPITest(TestCase):
 
     def test_list_favorites(self):
         Favorite.objects.create(user=self.user, book=self.book)
-        res = self.client.get('/api/v2/favorites/', HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        res = self.client.get('/api/favorites/', HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.assertEqual(res.status_code, 200)
 
     def test_favorites_unauthenticated(self):
-        res = self.client.get('/api/v2/favorites/')
+        res = self.client.get('/api/favorites/')
         self.assertEqual(res.status_code, 401)
 
 
@@ -352,11 +352,11 @@ class CrawlerAPITest(TestCase):
         self.token = create_access_token(self.user.id)
 
     def test_list_crawler_tasks(self):
-        res = self.client.get('/api/v2/crawler/', HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        res = self.client.get('/api/crawler/', HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.assertEqual(res.status_code, 200)
 
     def test_crawler_unauthenticated(self):
-        res = self.client.get('/api/v2/crawler/')
+        res = self.client.get('/api/crawler/')
         self.assertEqual(res.status_code, 401)
 
 
@@ -366,11 +366,11 @@ class UsersAPITest(TestCase):
         self.token = create_access_token(self.user.id)
 
     def test_list_users(self):
-        res = self.client.get('/api/v2/users/', HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        res = self.client.get('/api/users/', HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.assertEqual(res.status_code, 200)
 
     def test_list_users_unauthenticated(self):
-        res = self.client.get('/api/v2/users/')
+        res = self.client.get('/api/users/')
         self.assertEqual(res.status_code, 401)
 
 
@@ -380,18 +380,18 @@ class StatsAPITest(TestCase):
         self.token = create_access_token(self.user.id)
 
     def test_get_stats(self):
-        res = self.client.get('/api/v2/stats/', HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        res = self.client.get('/api/stats/', HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertIn('total_books', data)
         self.assertIn('chart', data)
 
     def test_stats_unauthenticated(self):
-        res = self.client.get('/api/v2/stats/')
+        res = self.client.get('/api/stats/')
         self.assertEqual(res.status_code, 401)
 
     def test_dashboard(self):
-        res = self.client.get('/api/v2/dashboard/')
+        res = self.client.get('/api/dashboard/')
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertIn('total_books', data)
