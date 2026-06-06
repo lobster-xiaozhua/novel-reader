@@ -14,8 +14,8 @@ ENV/
 # Django
 *.log
 local_settings.py
-data/db.sqlite3
-data/db.sqlite3-journal
+data/
+!data/.gitkeep
 staticfiles/
 
 # IDE
@@ -36,11 +36,4 @@ dist/
 
 # Frontend
 frontend/node_modules/
-
-# Data
-data/books/*
-!data/books/.gitkeep
-data/logs/*
-!data/logs/.gitkeep
-data/cache/*
-!data/cache/.gitkeep
+frontend/.next/
