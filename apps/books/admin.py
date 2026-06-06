@@ -27,7 +27,7 @@ class BookAdmin(ModelAdmin):
     date_hierarchy = 'created_at'
     list_editable = ['author', 'category']
 
-    @display(description='章节数', header=True)
+    @display(description='章节数')
     def chapter_count_badge(self, obj):
         count = obj.chapters.count()
         return count
