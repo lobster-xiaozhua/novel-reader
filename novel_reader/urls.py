@@ -5,11 +5,9 @@ from django.db import connection
 from django.core.cache import cache
 from django.db.models.signals import post_migrate
 from django.dispatch import receiver
-from django.urls import path, include, re_path
+from django.urls import path, include
 from django.conf import settings
-from django.views.generic import TemplateView
-from apps.api.router import api
-from backend.api_v2.router import api_v2
+from backend.api.router import api_v2
 
 logger = logging.getLogger('novel_reader.startup')
 
@@ -66,7 +64,6 @@ def log_startup_info(sender, **kwargs):
 
 urlpatterns = [
     path('sys-admin/', admin.site.urls),
-    path('api/v1/', api.urls),
     path('api/v2/', api_v2.urls),
 ]
 

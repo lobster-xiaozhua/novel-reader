@@ -1,6 +1,5 @@
 import logging
 import time
-import json
 
 from django.core.cache import cache
 
@@ -98,27 +97,24 @@ class JWTAuthMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        # 只在用户未认证时尝试 JWT 认证，避免覆盖已认证用户
         if not getattr(request, 'user', None) or not request.user.is_authenticated:
             self._authenticate(request)
         return self.get_response(request)
 
-    # 公开 API 路径前缀，无需认证，无效 token 不记录 WARNING
     _PUBLIC_PREFIXES = (
-        '/api/v1/books/', '/api/v1/books/rankings/', '/api/v1/books/categories/',
-        '/api/v1/search/', '/api/v1/recommendations/', '/api/v1/auth/',
-        '/api/v1/health/', '/static/', '/admin/',
+        '/api/v2/books/', '/api/v2/books/rankings/', '/api/v2/books/categories/',
+        '/api/v2/search/', '/api/v2/recommendations/', '/api/v2/auth/',
+        '/api/v2/health/', '/static/', '/admin/',
     )
 
     def _authenticate(self, request):
-        from apps.api.auth import _extract_token, decode_token
+        from backend.api.auth.auth import _extract_token, decode_token
         token = _extract_token(request)
         if not token:
             return
 
         payload = decode_token(token)
         if not payload or payload.get('type') != 'access':
-            # 公开接口上的无效 token 降级为 DEBUG，避免刷屏
             path = request.path
             is_public = any(path.startswith(p) for p in self._PUBLIC_PREFIXES)
             log_fn = auth_logger.debug if is_public else auth_logger.warning
@@ -147,10 +143,8 @@ class JWTAuthMiddleware:
         auth_logger.debug(f'认证成功: user_id={user_id} ({user.username}) | path={request.path} | cache_hit={cache_hit} | IP={self._get_client_ip(request)}')
 
     def _get_client_ip(self, request):
-        """获取客户端真实 IP，支持 X-Forwarded-For"""
         xff = request.META.get('HTTP_X_FORWARDED_FOR')
         if xff:
-            # X-Forwarded-For 可能包含多个 IP，取第一个
             return xff.split(',')[0].strip()
         return request.META.get('REMOTE_ADDR', '?')
 
@@ -176,14 +170,22 @@ class RequestTimingMiddleware:
         status = response.status_code
         content_length = len(response.content) if hasattr(response, 'content') else 0
 
-        # 统一请求日志
+        # CSP 安全头
+        response['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "font-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none';"
+        )
+
         log_level = 'error' if status >= 500 else 'warning' if status >= 400 else 'info'
         if elapsed > self.SLOW_THRESHOLD:
             log_level = 'warning' if status < 400 else 'error'
 
-        msg_parts = [
-            f'{method} {path}',
-        ]
+        msg_parts = [f'{method} {path}']
         if qs:
             msg_parts.append(f'?{qs}')
         msg_parts.extend([
@@ -204,7 +206,6 @@ class RequestTimingMiddleware:
         return response
 
     def _get_client_ip(self, request):
-        """获取客户端真实 IP，支持 X-Forwarded-For"""
         xff = request.META.get('HTTP_X_FORWARDED_FOR')
         if xff:
             return xff.split(',')[0].strip()
@@ -220,8 +221,11 @@ class SuppressBadAuthLog(logging.Filter):
 
 
 class LoginRateLimitMiddleware:
-    """登录接口速率限制：每IP每分钟5次"""
-    PATH_PREFIX = '/api/v1/auth/login/'
+    """登录/注册接口速率限制：每IP每分钟5次"""
+    PROTECTED_PATHS = [
+        '/api/v2/auth/login',
+        '/api/v2/auth/register',
+    ]
     MAX_ATTEMPTS = 5
     WINDOW_SECONDS = 60
 
@@ -229,7 +233,7 @@ class LoginRateLimitMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        if request.path == self.PATH_PREFIX and request.method == 'POST':
+        if request.method == 'POST' and any(request.path.startswith(p) for p in self.PROTECTED_PATHS):
             ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '?')).split(',')[0].strip()
             cache_key = f'login_rate:{ip}'
             attempts = cache.get(cache_key, 0)
@@ -237,6 +241,6 @@ class LoginRateLimitMiddleware:
                 attempts = int(attempts)
             if attempts >= self.MAX_ATTEMPTS:
                 from django.http import JsonResponse
-                return JsonResponse({'error': '登录尝试过于频繁，请稍后重试'}, status=429)
+                return JsonResponse({'error': '操作过于频繁，请稍后重试'}, status=429)
             cache.set(cache_key, attempts + 1, self.WINDOW_SECONDS)
         return self.get_response(request)
