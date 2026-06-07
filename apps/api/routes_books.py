@@ -374,8 +374,26 @@ def scan_book_dir(request, path: str = '') -> dict:
             if not ch_files:
                 continue
             try:
+                # 读取 metadata.json
+                author = ''
+                category = ''
+                description = ''
+                meta_path = os.path.join(entry.path, 'metadata.json')
+                if os.path.exists(meta_path):
+                    try:
+                        with open(meta_path, 'r', encoding='utf-8') as mf:
+                            import json as _json
+                            meta = _json.load(mf)
+                        author = meta.get('author', '')
+                        category = meta.get('category', '')
+                        description = meta.get('description', '')
+                    except Exception:
+                        pass
                 book = BookModel.objects.create(
                     title=book_name,
+                    author=author,
+                    category=category,
+                    description=description,
                     folder_path=entry.path,
                     total_chapters=len(ch_files),
                 )

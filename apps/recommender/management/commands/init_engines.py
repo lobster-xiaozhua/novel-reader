@@ -123,6 +123,116 @@ class Command(BaseCommand):
         except Exception as e:
             self._print('⚠️', f'目录检查失败: {e}')
 
+        # ── 自动扫描导入书籍 ──
+        self._print('📚', '自动扫描书籍目录...')
+        try:
+            from apps.books.models import Book as BookModel
+            from apps.chapters.models import Chapter as ChapterModel
+            import os
+
+            config_path = os.path.join(str(settings.BASE_DIR), 'data', 'book_dirs.json')
+            import json as _json
+            config = {}
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config = _json.load(f)
+                except Exception:
+                    pass
+            scan_paths = [str(settings.BOOKS_DIR)] + config.get('extra_dirs', [])
+            imported = 0
+            scan_errors = []
+
+            for base in scan_paths:
+                if not os.path.isdir(base):
+                    continue
+                for entry in os.scandir(base):
+                    if not entry.is_dir():
+                        continue
+                    book_name = entry.name
+                    if BookModel.objects.filter(title=book_name).exists():
+                        continue
+                    ch_files = sorted(
+                        [f for f in os.scandir(entry.path) if f.is_file() and f.name.endswith('.txt')],
+                        key=lambda f: f.name,
+                    )
+                    if not ch_files:
+                        continue
+                    try:
+                        # 读取 metadata.json
+                        author = ''
+                        category = ''
+                        description = ''
+                        meta_path = os.path.join(entry.path, 'metadata.json')
+                        if os.path.exists(meta_path):
+                            try:
+                                with open(meta_path, 'r', encoding='utf-8') as mf:
+                                    meta = _json.load(mf)
+                                author = meta.get('author', '')
+                                category = meta.get('category', '')
+                                description = meta.get('description', '')
+                            except Exception:
+                                pass
+                        book = BookModel.objects.create(
+                            title=book_name,
+                            author=author,
+                            category=category,
+                            description=description,
+                            folder_path=entry.path,
+                            total_chapters=len(ch_files),
+                        )
+                        for idx, f in enumerate(ch_files, 1):
+                            ch_title = os.path.splitext(f.name)[0]
+                            rel_path = os.path.relpath(f.path, str(settings.BOOKS_DIR))
+                            if rel_path.startswith('..'):
+                                rel_path = f.path
+                            content = ''
+                            for enc in ('utf-8', 'gbk', 'gb2312'):
+                                try:
+                                    with open(f.path, 'r', encoding=enc) as fh:
+                                        content = fh.read()
+                                    break
+                                except (UnicodeDecodeError, Exception):
+                                    continue
+                            ChapterModel.objects.create(
+                                book=book, chapter_number=idx,
+                                title=ch_title, file_path=rel_path,
+                                word_count=len(content),
+                            )
+                        imported += 1
+                        self._print('📖', f'新书入库: {book_name} ({len(ch_files)}章)')
+                    except Exception as exc:
+                        scan_errors.append(f'{book_name}: {str(exc)[:100]}')
+
+            if imported > 0:
+                self._print('✅', f'自动扫描完成: {imported}本新书入库')
+                # 重建搜索和推荐索引
+                self._print('🔄', '重建搜索索引...')
+                try:
+                    from apps.recommender.search import build_index as build_search_index
+                    from apps.recommender.engine import get_engine as get_rec_engine
+                    build_search_index(force=True)
+                    get_rec_engine().build_index(force=True)
+                    self._print('✅', '搜索和推荐索引已更新')
+                except Exception as e:
+                    self._print('⚠️', f'索引重建失败: {e}')
+            else:
+                self._print('✅', f'无新书（已有 {BookModel.objects.count()} 本书）')
+            if scan_errors:
+                for err in scan_errors:
+                    self._print('⚠️', f'导入错误: {err}')
+        except Exception as e:
+            self._print('⚠️', f'自动扫描失败: {e}')
+
+        # ── 启动电子狗文件监控 ──
+        self._print('🐕', '启动电子狗文件监控...')
+        try:
+            from utils.watchfile import start_watcher
+            start_watcher(scan_interval=30)
+            self._print('✅', '电子狗已启动（每30秒扫描一次）🐕')
+        except Exception as e:
+            self._print('⚠️', f'电子狗启动失败: {e}')
+
         self.stdout.write('')
         self.stdout.write('=' * 50)
         self._print('✅', '系统引擎初始化完成')

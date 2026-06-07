@@ -251,6 +251,18 @@ def _to_pinyin_initial(text: str) -> str:
         '岸': 'a', '南': 'n', '派': 'p', '三': 's', '叔': 's', '天': 't', '下': 'x', '霸': 'b',
         '唱': 'c', '刘': 'l', '慈': 'c', '欣': 'x', '莫': 'm', '言': 'y', '余': 'y', '华': 'h',
         '路': 'l', '遥': 'y', '陈': 'c', '忠': 'z', '实': 's', '贾': 'j', '平': 'p', '凹': 'a',
+        # 补充常见小说书名用字
+        '斗': 'd', '破': 'p', '苍': 'c', '穹': 'q', '凡': 'f', '修': 'x', '仙': 'x', '传': 'c',
+        '完': 'w', '美': 'm', '世': 's', '界': 'j', '剑': 'j', '来': 'l', '诡': 'g', '秘': 'm',
+        '之': 'z', '主': 'z', '奉': 'f', '更': 'g', '庆': 'q', '雪': 'x', '悍': 'h', '行': 'x',
+        '职': 'z', '高': 'g', '手': 's', '盗': 'd', '墓': 'm', '笔': 'b', '记': 'j', '烽': 'f',
+        '戏': 'x', '诸': 'z', '侯': 'h', '贼': 'z', '卖': 'm', '报': 'b', '郎': 'l', '君': 'j',
+        '蝴': 'h', '蝶': 'd', '蓝': 'l', '乌': 'w', '洋': 'y', '穿': 'c', '越': 'y', '重': 'z',
+        '生': 's', '网': 'w', '游': 'y', '英': 'y', '雄': 'x', '隐': 'y', '藏': 'c', '军': 'j',
+        '系': 'x', '统': 't', '流': 'l', '王': 'w', '霸': 'b', '全': 'q', '龙': 'l', '凤': 'f',
+        '梦': 'm', '幻': 'h', '神': 's', '帝': 'd', '魔': 'm', '魂': 'h', '战': 'z', '武': 'w',
+        '侠': 'x', '江': 'j', '湖': 'h', '都': 'd', '市': 's', '科': 'k', '言': 'y', '情': 'q',
+        '灵': 'l', '异': 'y', '恐': 'k', '怖': 'b', '悬': 'x', '疑': 'y', '推': 't', '理': 'l',
     }
 
     result = []
@@ -440,9 +452,20 @@ class HybridSearchEngine:
                     book_score += 7
                     if book_matches[book_id]['match_reasons'] and '拼音匹配' not in book_matches[book_id]['match_reasons']:
                         book_matches[book_id]['match_reasons'].append('拼音匹配')
+                # 全拼匹配：去掉元音字母后匹配（如 doupo→dp, dp∈dpcq）
+                query_consonants = ''.join(c for c in query_pinyin if c not in 'aeiou')
+                if len(query_consonants) >= 2 and query_consonants in title_pinyin:
+                    book_score += 7
+                    if book_matches[book_id]['match_reasons'] and '拼音匹配' not in book_matches[book_id]['match_reasons']:
+                        book_matches[book_id]['match_reasons'].append('拼音匹配')
                 if query_pinyin in author_pinyin:
                     book_score += 6
                     if book_matches[book_id]['match_reasons'] and '拼音匹配' not in book_matches[book_id]['match_reasons']:
+                        book_matches[book_id]['match_reasons'].append('作者拼音匹配')
+                # 作者全拼匹配
+                if len(query_consonants) >= 2 and query_consonants in author_pinyin:
+                    book_score += 6
+                    if book_matches[book_id]['match_reasons'] and '作者拼音匹配' not in book_matches[book_id]['match_reasons']:
                         book_matches[book_id]['match_reasons'].append('作者拼音匹配')
 
             chapters = self._chapters_index.get(book_id, {})
