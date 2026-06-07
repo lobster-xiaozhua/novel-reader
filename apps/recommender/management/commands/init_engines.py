@@ -143,6 +143,37 @@ class Command(BaseCommand):
             imported = 0
             scan_errors = []
 
+            # ── JSON书籍自动转化 ──
+            self._print('📋', '检测JSON格式书籍...')
+            json_imported = 0
+            try:
+                from utils.json_book_importer import detect_json_files, import_json_book
+
+                for base in scan_paths:
+                    if not os.path.isdir(base):
+                        continue
+                    for entry in os.scandir(base):
+                        if not entry.is_dir():
+                            continue
+                        json_files = detect_json_files(entry.path)
+                        for json_path in json_files:
+                            try:
+                                result = import_json_book(json_path)
+                                if result.get('success'):
+                                    json_imported += 1
+                                    self._print('📖', f'JSON转化: {result.get("title")} ({result.get("chapters", 0)}章)')
+                                else:
+                                    self._print('⚠️', f'JSON转化失败: {json_path} - {result.get("error", "未知错误")}')
+                            except Exception as exc:
+                                self._print('⚠️', f'JSON转化异常: {json_path} - {str(exc)[:100]}')
+
+                if json_imported > 0:
+                    self._print('✅', f'JSON书籍转化完成: {json_imported}本')
+                else:
+                    self._print('✅', '无JSON书籍需要转化')
+            except Exception as e:
+                self._print('⚠️', f'JSON检测失败: {e}')
+
             for base in scan_paths:
                 if not os.path.isdir(base):
                     continue
@@ -206,18 +237,24 @@ class Command(BaseCommand):
 
             if imported > 0:
                 self._print('✅', f'自动扫描完成: {imported}本新书入库')
-                # 重建搜索和推荐索引
+            else:
+                self._print('✅', f'无新书（已有 {BookModel.objects.count()} 本书）')
+
+            # 基于哈希判断是否重建索引
+            from utils.file_hash import compute_dir_hash
+            current_books_hash = compute_dir_hash(str(settings.BOOKS_DIR))
+            cached_hash = cache.get('books:dir_hash')
+            if imported > 0 or json_imported > 0 or current_books_hash != cached_hash:
                 self._print('🔄', '重建搜索索引...')
                 try:
                     from apps.recommender.search import build_index as build_search_index
                     from apps.recommender.engine import get_engine as get_rec_engine
                     build_search_index(force=True)
                     get_rec_engine().build_index(force=True)
+                    cache.set('books:dir_hash', current_books_hash, 3600)
                     self._print('✅', '搜索和推荐索引已更新')
                 except Exception as e:
                     self._print('⚠️', f'索引重建失败: {e}')
-            else:
-                self._print('✅', f'无新书（已有 {BookModel.objects.count()} 本书）')
             if scan_errors:
                 for err in scan_errors:
                     self._print('⚠️', f'导入错误: {err}')
