@@ -357,7 +357,27 @@ def scan_book_dir(request, path: str = '') -> dict:
         scan_paths = [str(settings.BOOKS_DIR)] + config.get('extra_dirs', [])
 
     imported = 0
+    json_imported = 0
     errors = []
+    # ── JSON书籍自动转化 ──
+    from utils.json_book_importer import detect_json_files, import_json_book
+    for base in scan_paths:
+        if not os.path.isdir(base):
+            continue
+        for entry in os.scandir(base):
+            if not entry.is_dir():
+                continue
+            json_files = detect_json_files(entry.path)
+            for json_path in json_files:
+                try:
+                    result = import_json_book(json_path)
+                    if result.get('success'):
+                        json_imported += 1
+                        logger.info(f'[Scan] JSON转化: {result.get("title")}')
+                    else:
+                        errors.append(f'JSON({entry.name}): {result.get("error", "未知错误")}')
+                except Exception as exc:
+                    errors.append(f'JSON({entry.name}): {str(exc)[:100]}')
     for base in scan_paths:
         if not os.path.isdir(base):
             continue
@@ -420,14 +440,14 @@ def scan_book_dir(request, path: str = '') -> dict:
             except Exception as exc:
                 errors.append(f'{book_name}: {str(exc)[:100]}')
 
-    if imported > 0:
+    if imported > 0 or json_imported > 0:
         try:
             get_rec_engine().build_index(force=True)
             build_search_index(force=True)
         except Exception:
             pass
 
-    return {'success': True, 'imported': imported, 'errors': errors}
+    return {'success': True, 'imported': imported, 'json_imported': json_imported, 'errors': errors}
 
 
 @router.get('/books/{book_id}/', response=BookDetailSchema, auth=optional_jwt_auth)
