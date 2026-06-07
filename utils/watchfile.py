@@ -8,6 +8,8 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management import call_command
 
+from utils.file_hash import compute_dir_hash
+
 logger = logging.getLogger(__name__)
 
 
@@ -68,6 +70,20 @@ class BookWatcher:
                                 'category': meta.get('category', ''),
                                 'description': meta.get('description', ''),
                             }
+                        else:
+                            # 检查是否有待转化的JSON书籍文件
+                            json_files = [
+                                f for f in os.scandir(entry.path)
+                                if f.is_file() and f.name.endswith('.json') and f.name != 'metadata.json'
+                            ]
+                            if json_files:
+                                books[entry.name] = {
+                                    'path': entry.path,
+                                    'chapters': 0,
+                                    'mtime': entry.stat().st_mtime,
+                                    'json_files': [f.path for f in json_files],
+                                    'needs_conversion': True,
+                                }
                     elif entry.is_file() and entry.name.endswith('.txt'):
                         # 单文件书籍（散落txt）
                         name = os.path.splitext(entry.name)[0]
@@ -80,6 +96,11 @@ class BookWatcher:
                 logger.warning(f'[BookWatcher] 无权限扫描目录: {base}')
             except Exception as e:
                 logger.error(f'[BookWatcher] 扫描目录出错 {base}: {e}')
+
+        # 为每本书计算内容哈希
+        for name in books:
+            books[name]['content_hash'] = compute_dir_hash(books[name]['path'])
+
         return books
 
     def _diff_and_import(self, current_books):
@@ -97,7 +118,7 @@ class BookWatcher:
         for key in new_keys & old_keys:
             if current_books[key]['chapters'] != self._known_books[key]['chapters']:
                 modified.add(key)
-            elif current_books[key]['mtime'] > self._known_books[key].get('mtime', 0) + 1:
+            elif current_books[key]['content_hash'] != self._known_books[key].get('content_hash', ''):
                 modified.add(key)
 
         imported = 0
@@ -106,6 +127,15 @@ class BookWatcher:
         for book_name in added:
             try:
                 info = current_books[book_name]
+                if info.get('needs_conversion'):
+                    from utils.json_book_importer import import_json_book
+                    for json_path in info.get('json_files', []):
+                        result = import_json_book(json_path)
+                        if result.get('success'):
+                            logger.info(f'[BookWatcher] JSON书籍已转化: {result.get("title")}')
+                        else:
+                            errors.append(f'{book_name}: JSON转化失败 - {result.get("error")}')
+                    continue
                 self._import_book(book_name, info)
                 imported += 1
                 logger.info(f'[BookWatcher] 新书入库: {book_name} ({info["chapters"]}章)')
@@ -141,7 +171,7 @@ class BookWatcher:
                 logger.error(f'[BookWatcher] 索引重建失败: {e}')
 
         self._known_books = {
-            k: {'chapters': v['chapters'], 'mtime': v['mtime']}
+            k: {'chapters': v['chapters'], 'content_hash': v['content_hash']}
             for k, v in current_books.items()
         }
 
@@ -238,7 +268,7 @@ class BookWatcher:
         logger.info('[BookWatcher] 电子狗监控已启动，扫描间隔: %ds', self._scan_interval)
         # 初始化快照
         self._known_books = {
-            k: {'chapters': v['chapters'], 'mtime': v['mtime']}
+            k: {'chapters': v['chapters'], 'content_hash': v['content_hash']}
             for k, v in self._scan_books().items()
         }
         logger.info('[BookWatcher] 初始快照: %d本书', len(self._known_books))
