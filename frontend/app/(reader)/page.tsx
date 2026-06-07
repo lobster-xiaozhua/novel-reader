@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Fire, TrendingUp, Sparkles, ChevronRight, BookOpen } from 'lucide-react';
+import { Flame, TrendingUp, Sparkles, ChevronRight, BookOpen } from 'lucide-react';
 import { api } from '@/shared/lib/api';
 import { SkeletonHome } from '@/shared/components/Skeleton';
 import type { ApiResponse, DiscoverFeed, RankingBook } from '@/shared/types';
@@ -135,7 +135,7 @@ export default function DiscoverPage() {
         <section>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Fire size={18} className="text-red-500" />
+              <Flame size={18} className="text-red-500" />
               <h2 className="text-base font-semibold">今日热门</h2>
             </div>
           </div>
