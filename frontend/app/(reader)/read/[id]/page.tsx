@@ -13,7 +13,7 @@ const THEMES = {
   dark: { bg: '#1a1a1a', text: '#d4d4d4', label: '深色' },
   green: { bg: '#c7edcc', text: '#1a1a1a', label: '护眼绿' },
   night: { bg: '#0d0d0d', text: '#888888', label: '夜间' },
-};
+} as const;
 
 type ThemeName = keyof typeof THEMES;
 
@@ -122,16 +122,21 @@ export default function ReaderPage() {
 
   return (
     <div
+      data-reader-theme={theme}
       style={{
-        backgroundColor: currentTheme.bg,
-        color: currentTheme.text,
+        backgroundColor: 'var(--reader-bg)',
+        color: 'var(--reader-text)',
         minHeight: '100vh',
         transition: 'background-color 0.3s, color 0.3s',
       }}
     >
       {/* Navigation header */}
-      <div className="flex items-center justify-between mb-4 sticky top-0 z-10 py-2"
-        style={{ backgroundColor: currentTheme.bg + 'cc', backdropFilter: 'blur(8px)' }}
+      <div
+        className="flex items-center justify-between mb-4 sticky top-0 z-10 py-2"
+        style={{
+          backgroundColor: `${currentTheme.bg}cc`,
+          backdropFilter: 'blur(8px)',
+        }}
       >
         <button
           className="px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm transition-opacity"
@@ -155,7 +160,7 @@ export default function ReaderPage() {
           </button>
           <button
             className="p-2 rounded-lg transition-colors"
-            style={{ backgroundColor: currentTheme.text + '15' }}
+            style={{ backgroundColor: `${currentTheme.text}15` }}
             onClick={() => setShowSettings(!showSettings)}
           >
             {showSettings ? <X size={18} /> : <Settings size={18} />}
@@ -165,7 +170,7 @@ export default function ReaderPage() {
 
       {/* Settings Panel */}
       {showSettings && (
-        <div className="glass-card mb-4 p-4 space-y-4" style={{ backgroundColor: currentTheme.text + '10' }}>
+        <div className="glass-card mb-4 p-4 space-y-4" style={{ backgroundColor: `${currentTheme.text}10` }}>
           {/* Font Size */}
           <div className="flex items-center justify-between">
             <span className="text-sm flex items-center gap-2">
@@ -174,7 +179,7 @@ export default function ReaderPage() {
             <div className="flex items-center gap-3">
               <button
                 className="p-1.5 rounded-full transition-colors"
-                style={{ backgroundColor: currentTheme.text + '15' }}
+                style={{ backgroundColor: `${currentTheme.text}15` }}
                 onClick={() => setFontSize(Math.max(14, fontSize - 1))}
               >
                 <Minus size={16} />
@@ -182,7 +187,7 @@ export default function ReaderPage() {
               <span className="text-sm w-8 text-center">{fontSize}</span>
               <button
                 className="p-1.5 rounded-full transition-colors"
-                style={{ backgroundColor: currentTheme.text + '15' }}
+                style={{ backgroundColor: `${currentTheme.text}15` }}
                 onClick={() => setFontSize(Math.min(28, fontSize + 1))}
               >
                 <Plus size={16} />
@@ -196,7 +201,7 @@ export default function ReaderPage() {
               <Sun size={16} /> 阅读主题
             </span>
             <div className="flex gap-2">
-              {(Object.entries(THEMES) as [ThemeName, typeof THEMES[ThemeName]][]).map(([name, t]) => (
+              {(Object.entries(THEMES) as [ThemeName, (typeof THEMES)[ThemeName]][]).map(([name, t]) => (
                 <button
                   key={name}
                   className="w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center"
@@ -224,7 +229,7 @@ export default function ReaderPage() {
         <div
           ref={contentRef}
           className="rounded-xl p-6 md:p-8"
-          style={{ backgroundColor: currentTheme.text + '08' }}
+          style={{ backgroundColor: `${currentTheme.text}08` }}
         >
           <h2 className="text-xl font-semibold mb-6 text-center">{content.title}</h2>
           <div

@@ -14,17 +14,6 @@ const NAV = [
   { href: '/stats', icon: BarChart3, label: '统计' },
 ];
 
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 992);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-  return isMobile;
-}
-
 function RecentReadings() {
   const router = useRouter();
   const [progress, setProgress] = useState<ReadingProgress[]>([]);
@@ -41,7 +30,7 @@ function RecentReadings() {
         <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
           <Clock size={14} /> 最近阅读
         </h3>
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>暂无阅读记录</p>
+        <p className="text-xs text-[var(--text-muted)]">暂无阅读记录</p>
       </div>
     );
   }
@@ -59,7 +48,7 @@ function RecentReadings() {
             onClick={() => router.push(`/read/${p.book?.id}?chapter=${p.chapter?.id}`)}
           >
             <p className="text-sm font-medium truncate">{p.book?.title}</p>
-            <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
+            <p className="text-xs truncate text-[var(--text-muted)]">
               第{p.chapter?.chapter_number}章 · {p.chapter?.title}
             </p>
           </button>
@@ -71,50 +60,46 @@ function RecentReadings() {
 
 export function ReaderLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isMobile = useIsMobile();
-
-  const Sidebar = () => (
-    <nav className="reader-sidebar">
-      {NAV.map(({ href, icon: Icon, label }) => (
-        <Link
-          key={href}
-          href={href}
-          className={`sidebar-icon${pathname === href ? ' active' : ''}`}
-        >
-          <Icon size={18} />
-          <span>{label}</span>
-        </Link>
-      ))}
-    </nav>
-  );
-
-  const BottomNav = () => (
-    <nav className="bottom-nav">
-      {NAV.map(({ href, icon: Icon, label }) => (
-        <Link
-          key={href}
-          href={href}
-          className={pathname === href ? 'active' : ''}
-        >
-          <Icon size={20} />
-          <span>{label}</span>
-        </Link>
-      ))}
-    </nav>
-  );
 
   return (
-    <div className="reader-layout">
-      <Sidebar />
-      <main className="reader-main" style={isMobile ? { paddingBottom: '5rem' } : undefined}>
+    <div className="reader-layout" suppressHydrationWarning>
+      {/* Left Sidebar — visible on desktop (≥992px) */}
+      <nav className="reader-sidebar" suppressHydrationWarning>
+        {NAV.map(({ href, icon: Icon, label }) => (
+          <Link
+            key={href}
+            href={href}
+            className={`sidebar-icon${pathname === href ? ' active' : ''}`}
+          >
+            <Icon size={18} />
+            <span>{label}</span>
+          </Link>
+        ))}
+      </nav>
+
+      {/* Main Content */}
+      <main className="reader-main">
         {children}
       </main>
-      {!isMobile && (
-        <aside className="reader-right">
-          <RecentReadings />
-        </aside>
-      )}
-      {isMobile && <BottomNav />}
+
+      {/* Right Sidebar — visible on desktop (≥992px) */}
+      <aside className="reader-right">
+        <RecentReadings />
+      </aside>
+
+      {/* Bottom Nav — visible on mobile (<992px) */}
+      <nav className="bottom-nav" suppressHydrationWarning>
+        {NAV.map(({ href, icon: Icon, label }) => (
+          <Link
+            key={href}
+            href={href}
+            className={pathname === href ? 'active' : ''}
+          >
+            <Icon size={20} />
+            <span>{label}</span>
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }

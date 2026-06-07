@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { Heart, BookOpen, Clock, FileText } from 'lucide-react';
 import { api } from '@/shared/lib/api';
+import { SkeletonBookDetail } from '@/shared/components/Skeleton';
 import type { ApiResponse, BookDetail, ChapterItem, PaginatedData } from '@/shared/types';
 
 export default function BookDetailPage() {
@@ -35,20 +36,12 @@ export default function BookDetailPage() {
 
   const book = bookData?.data;
   const chapters = chaptersData?.data?.items || [];
-
   const isLoading = bookLoading || chaptersLoading;
 
-  if (isLoading) return (
-    <div className="flex items-center justify-center min-h-[50vh]">
-      <div className="text-center" style={{ color: 'var(--text-muted)' }}>
-        <BookOpen size={48} className="mx-auto mb-3 opacity-30 animate-pulse" />
-        <p>加载中...</p>
-      </div>
-    </div>
-  );
+  if (isLoading) return <SkeletonBookDetail />;
 
   if (!book) return (
-    <div className="text-center py-10" style={{ color: 'var(--danger)' }}>
+    <div className="text-center py-10 text-[var(--danger)]">
       <p>书籍未找到</p>
       <button className="btn-primary mt-4" onClick={() => router.push('/')}>
         返回首页
@@ -87,7 +80,7 @@ export default function BookDetailPage() {
 
         <div className="p-6">
           {/* Stats */}
-          <div className="flex gap-4 mb-4 text-sm" style={{ color: 'var(--text-muted)' }}>
+          <div className="flex gap-4 mb-4 text-sm text-[var(--text-muted)]">
             <span className="flex items-center gap-1">
               <FileText size={14} /> {book.total_chapters}章
             </span>
@@ -98,14 +91,14 @@ export default function BookDetailPage() {
             )}
           </div>
 
-          <p className="text-sm leading-relaxed mb-4" style={{ color: 'var(--text)' }}>
+          <p className="text-sm leading-relaxed mb-4 text-[var(--text)]">
             {book.description}
           </p>
 
           {book.tags && book.tags.length > 0 && (
             <div className="flex gap-2 mb-4 flex-wrap">
               {book.tags.map((t) => (
-                <span key={t.id} className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(99,102,241,0.12)', color: 'var(--accent)' }}>
+                <span key={t.id} className="tag">
                   {t.name}
                 </span>
               ))}
@@ -131,7 +124,7 @@ export default function BookDetailPage() {
             >
               <Heart
                 size={16}
-                style={{ color: book.is_favorited ? 'var(--danger)' : undefined }}
+                className={book.is_favorited ? 'text-[var(--danger)]' : ''}
                 fill={book.is_favorited ? 'var(--danger)' : 'none'}
               />
               {book.is_favorited ? '已收藏' : '收藏'}
@@ -144,7 +137,7 @@ export default function BookDetailPage() {
       <div className="glass-card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold">章节目录</h2>
-          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          <span className="text-xs text-[var(--text-muted)]">
             共 {chapters.length} 章
           </span>
         </div>
@@ -154,18 +147,17 @@ export default function BookDetailPage() {
             return (
               <button
                 key={ch.id}
-                className="text-left text-sm px-3 py-2.5 rounded-lg border cursor-pointer transition-all hover:shadow-sm"
-                style={{
-                  background: isReadProgress ? 'var(--accent)' : 'var(--surface)',
-                  borderColor: isReadProgress ? 'var(--accent)' : 'var(--border)',
-                  color: isReadProgress ? '#fff' : 'var(--text)',
-                }}
+                className={`text-left text-sm px-3 py-2.5 rounded-lg border cursor-pointer transition-all hover:shadow-sm ${
+                  isReadProgress
+                    ? 'bg-[var(--accent)] border-[var(--accent)] text-white'
+                    : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text)]'
+                }`}
                 onClick={() => router.push(`/read/${id}?chapter=${ch.id}`)}
               >
                 <span className="truncate block">
                   {ch.title}
                 </span>
-                <span className="text-xs mt-1 block" style={{ color: isReadProgress ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)' }}>
+                <span className={`text-xs mt-1 block ${isReadProgress ? 'text-white/70' : 'text-[var(--text-muted)]'}`}>
                   第{ch.chapter_number}章 · {ch.word_count}字
                 </span>
               </button>

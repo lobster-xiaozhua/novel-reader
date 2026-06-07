@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, BookOpen, Clock, X, TrendingUp } from 'lucide-react';
 import { api } from '@/shared/lib/api';
+import { SkeletonSearch } from '@/shared/components/Skeleton';
 import type { ApiResponse, Book, PaginatedData } from '@/shared/types';
 
 function useSearchHistory() {
@@ -114,7 +115,7 @@ export default function SearchPage() {
       {/* Search Input */}
       <div className="relative mb-6">
         <div className="flex items-center gap-2 glass-card p-2">
-          <Search size={20} style={{ color: 'var(--text-muted)' }} />
+          <Search size={20} className="text-[var(--text-muted)]" />
           <input
             ref={inputRef}
             type="text"
@@ -136,7 +137,7 @@ export default function SearchPage() {
                 inputRef.current?.focus();
               }}
             >
-              <X size={16} style={{ color: 'var(--text-muted)' }} />
+              <X size={16} className="text-[var(--text-muted)]" />
             </button>
           )}
           <button
@@ -153,7 +154,7 @@ export default function SearchPage() {
           <div className="absolute top-full left-0 right-0 mt-2 glass-card p-3 z-10">
             {suggestions.length > 0 && (
               <div className="mb-3">
-                <div className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>搜索建议</div>
+                <div className="text-xs mb-2 text-[var(--text-muted)]">搜索建议</div>
                 {suggestions.map((s, i) => (
                   <button
                     key={i}
@@ -163,7 +164,7 @@ export default function SearchPage() {
                       handleSearch(s);
                     }}
                   >
-                    <Clock size={14} style={{ color: 'var(--text-muted)' }} />
+                    <Clock size={14} className="text-[var(--text-muted)]" />
                     {s}
                   </button>
                 ))}
@@ -172,10 +173,9 @@ export default function SearchPage() {
             {history.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>搜索历史</span>
+                  <span className="text-xs text-[var(--text-muted)]">搜索历史</span>
                   <button
-                    className="text-xs hover:underline"
-                    style={{ color: 'var(--accent)' }}
+                    className="text-xs hover:underline text-[var(--accent)]"
                     onClick={clearHistory}
                   >
                     清空
@@ -199,7 +199,7 @@ export default function SearchPage() {
                       className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--bg-secondary)]"
                       onClick={() => removeHistory(h)}
                     >
-                      <X size={12} style={{ color: 'var(--text-muted)' }} />
+                      <X size={12} className="text-[var(--text-muted)]" />
                     </button>
                   </div>
                 ))}
@@ -207,7 +207,7 @@ export default function SearchPage() {
             )}
             {!query && history.length === 0 && (
               <div>
-                <div className="text-xs mb-2 flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
+                <div className="text-xs mb-2 flex items-center gap-1 text-[var(--text-muted)]">
                   <TrendingUp size={12} /> 热搜
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -234,11 +234,9 @@ export default function SearchPage() {
       {/* Search Results */}
       {query && (
         <div>
-          {isSearching && (
-            <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>搜索中...</div>
-          )}
+          {isSearching && <SkeletonSearch />}
           {!isSearching && books.length === 0 && (
-            <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
+            <div className="text-center py-10 text-[var(--text-muted)]">
               <BookOpen size={48} className="mx-auto mb-3 opacity-30" />
               未找到相关书籍
               <p className="text-sm mt-2">尝试其他关键词或拼音首字母搜索</p>
@@ -246,7 +244,7 @@ export default function SearchPage() {
           )}
           {books.length > 0 && (
             <div>
-              <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-sm mb-3 text-[var(--text-muted)]">
                 找到 {books.length} 本书
               </p>
               <div className="space-y-3">
@@ -266,16 +264,16 @@ export default function SearchPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium truncate">{book.title}</h3>
-                      <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                      <p className="text-sm mt-1 text-[var(--text-muted)]">
                         {book.author}
                       </p>
-                      <p className="text-xs mt-1 line-clamp-2" style={{ color: 'var(--text-muted)' }}>
+                      <p className="text-xs mt-1 line-clamp-2 text-[var(--text-muted)]">
                         {book.description}
                       </p>
                       {book.tags && book.tags.length > 0 && (
                         <div className="flex gap-1 mt-2 flex-wrap">
                           {book.tags.slice(0, 3).map(tag => (
-                            <span key={tag} className="tag" style={{ fontSize: '0.65rem' }}>
+                            <span key={tag} className="tag text-[0.65rem]">
                               {tag}
                             </span>
                           ))}
