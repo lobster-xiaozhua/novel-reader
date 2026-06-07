@@ -12,7 +12,7 @@ from apps.api.auth import (
 from django.contrib.auth.models import User
 from ninja.security import HttpBearer
 
-JWT_ACCESS_LIFETIME_MINUTES = 60
+JWT_ACCESS_LIFETIME_MINUTES = 30
 JWT_REFRESH_LIFETIME_DAYS = 7
 
 

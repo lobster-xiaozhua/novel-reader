@@ -1,6 +1,5 @@
 import logging
 import time
-import json
 
 from django.core.cache import cache
 
@@ -211,12 +210,64 @@ class RequestTimingMiddleware:
         return request.META.get('REMOTE_ADDR', '?')
 
 
+class CSPMiddleware:
+    """为所有 HTTP 响应添加 Content-Security-Policy 头"""
+    CSP_HEADER = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'"
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        response['Content-Security-Policy'] = self.CSP_HEADER
+        return response
+
+
 class SuppressBadAuthLog(logging.Filter):
     _PATTERNS = ('"AUTH"', 'Bad request syntax')
 
     def filter(self, record):
         msg = record.getMessage()
         return not any(p in msg for p in self._PATTERNS)
+
+
+class SensitiveDataFilter(logging.Filter):
+    """日志敏感信息脱敏：替换 Authorization/Cookie 头及密码字段"""
+    _SENSITIVE_HEADERS = (
+        ('HTTP_AUTHORIZATION', 'Authorization=[REDACTED]'),
+        ('HTTP_COOKIE', 'Cookie=[REDACTED]'),
+    )
+    _SENSITIVE_KEYWORDS = ('password', 'token', 'secret', 'refresh_token', 'access_token')
+
+    def filter(self, record):
+        msg = record.getMessage()
+        for header, replacement in self._SENSITIVE_HEADERS:
+            if header in msg:
+                # 替换 header 行中的敏感值
+                import re
+                msg = re.sub(
+                    rf'{header}\s*:\s*\S+',
+                    f'{header}: {replacement}',
+                    msg,
+                )
+        # 脱敏 JSON 或表单中的敏感字段
+        import re as _re
+        for kw in self._SENSITIVE_KEYWORDS:
+            msg = _re.sub(
+                rf'("{kw}"\s*:\s*")([^"]*?)(")',
+                r'\1[REDACTED]\3',
+                msg,
+                flags=_re.IGNORECASE,
+            )
+            msg = _re.sub(
+                rf'({kw}=)([^&\s]+)',
+                r'\1[REDACTED]',
+                msg,
+                flags=_re.IGNORECASE,
+            )
+        record.msg = msg
+        record.args = ()
+        return True
 
 
 class LoginRateLimitMiddleware:

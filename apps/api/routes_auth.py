@@ -3,6 +3,8 @@ from typing import Optional
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from ninja import Router
 from ninja.errors import HttpError
@@ -17,6 +19,7 @@ from .auth import (
     set_jwt_cookies,
 )
 from .schemas import AuthResponse, LoginIn, MessageSchema, RefreshIn, RegisterIn
+from utils.throttle import rate_limit_decorator
 
 logger = logging.getLogger('novel_reader.auth')
 router = Router()
@@ -34,6 +37,7 @@ def _build_auth_payload(user: User) -> dict:
 
 
 @router.post('/auth/login/', response=AuthResponse, auth=None)
+@rate_limit_decorator(max_requests=10, window_seconds=60)
 def auth_login(request, payload: LoginIn) -> JsonResponse:
     ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '?'))
     ua = request.META.get('HTTP_USER_AGENT', '')[:120]
@@ -47,11 +51,17 @@ def auth_login(request, payload: LoginIn) -> JsonResponse:
 
 
 @router.post('/auth/register/', response=AuthResponse, auth=None)
+@rate_limit_decorator(max_requests=5, window_seconds=600)
 def auth_register(request, payload: RegisterIn) -> JsonResponse:
     ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '?'))
     if User.objects.filter(username=payload.username).exists():
         logger.warning(f'注册失败-用户名冲突: username={payload.username} | IP={ip}')
         return JsonResponse({'success': False, 'error': '用户名已存在'})
+    try:
+        validate_password(payload.password)
+    except ValidationError as e:
+        logger.warning(f'注册失败-密码弱: username={payload.username} | IP={ip} | errors={e.messages}')
+        return JsonResponse({'success': False, 'error': '; '.join(e.messages)})
     user = User.objects.create_user(username=payload.username, password=payload.password, email=payload.email)
     logger.info(f'注册成功: user_id={user.id} username={user.username} email={payload.email} | IP={ip}')
     data = _build_auth_payload(user)

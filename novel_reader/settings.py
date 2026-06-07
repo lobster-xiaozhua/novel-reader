@@ -58,6 +58,9 @@ ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '0.
 if DEBUG:
     ALLOWED_HOSTS = ['*']
 
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'
 if not DEBUG:
     SECURE_SSL_REDIRECT = env('SECURE_SSL_REDIRECT')
     SESSION_COOKIE_SECURE = True
@@ -65,14 +68,7 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = env('SECURE_HSTS_SECONDS')
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
-    X_FRAME_OPTIONS = 'DENY'
-else:
-    # 开发环境也启用基本安全头
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_BROWSER_XSS_FILTER = True
-    X_FRAME_OPTIONS = 'DENY'
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -104,6 +100,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'novel_reader.middleware.CSPMiddleware',
     'novel_reader.middleware.APIMonitorMiddleware',
     'novel_reader.middleware.RequestTimingMiddleware',
     'novel_reader.middleware.JWTAuthMiddleware',
@@ -176,7 +173,7 @@ if DATABASES['default']['ENGINE'] == 'django.db.backends.sqlite3':
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 8}},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
@@ -308,6 +305,9 @@ LOGGING = {
         'suppress_bad_auth': {
             '()': 'novel_reader.middleware.SuppressBadAuthLog',
         },
+        'sensitive_data': {
+            '()': 'novel_reader.middleware.SensitiveDataFilter',
+        },
     },
     'formatters': {
         'simple': {'format': '[%(levelname)s] %(name)s: %(message)s'},
@@ -318,7 +318,7 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
             'level': 'DEBUG' if DEBUG else 'INFO',
-            'filters': ['suppress_bad_auth'],
+            'filters': ['suppress_bad_auth', 'sensitive_data'],
         },
         'file': {
             'class': 'logging.handlers.RotatingFileHandler',
@@ -327,6 +327,7 @@ LOGGING = {
             'backupCount': 10,
             'formatter': 'verbose',
             'level': 'INFO',
+            'filters': ['sensitive_data'],
         },
         'error_file': {
             'class': 'logging.handlers.RotatingFileHandler',
@@ -343,6 +344,7 @@ LOGGING = {
             'backupCount': 10,
             'formatter': 'verbose',
             'level': 'INFO',
+            'filters': ['sensitive_data'],
         },
         'auth_file': {
             'class': 'logging.handlers.RotatingFileHandler',
@@ -351,6 +353,7 @@ LOGGING = {
             'backupCount': 5,
             'formatter': 'verbose',
             'level': 'INFO',
+            'filters': ['sensitive_data'],
         },
         'crawler_file': {
             'class': 'logging.handlers.RotatingFileHandler',
@@ -450,7 +453,7 @@ NINJA_PAGINATION_PER_PAGE = 20
 NINJA_PAGINATION_MAX_LIMIT = 100
 
 JWT_SECRET = env('JWT_SECRET', default=SECRET_KEY)
-JWT_ACCESS_LIFETIME_MINUTES = env.int('JWT_ACCESS_LIFETIME_MINUTES', default=15)
+JWT_ACCESS_LIFETIME_MINUTES = env.int('JWT_ACCESS_LIFETIME_MINUTES', default=30)
 JWT_REFRESH_LIFETIME_DAYS = env.int('JWT_REFRESH_LIFETIME_DAYS', default=7)
 
 if DEBUG:
