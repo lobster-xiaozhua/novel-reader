@@ -7,16 +7,17 @@ import type { ApiResponse, ShelfItem, ShelfData } from '@/shared/types';
 
 function ShelfCard({ item, progress }: { item: ShelfItem; progress?: number }) {
   const pct = progress ?? 0;
+  const gradient = ['#7c3aed', '#a855f7'];
   return (
     <Link href={`/book/${item.book_id}`} className="glass-card block no-underline">
       <div
-        className="gradient-bar"
-        style={{ background: 'linear-gradient(90deg, var(--accent), var(--accent2))' }}
+        className="w-full h-2 rounded-t-lg mb-3"
+        style={{ background: `linear-gradient(90deg, ${gradient[0]}, ${gradient[1]})` }}
       />
       <h3 className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{item.title}</h3>
       <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{item.author}</p>
       {pct > 0 && (
-        <div className="mt-2">
+        <div className="mt-3">
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${pct}%` }} />
           </div>
